@@ -65,6 +65,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	DoFreq->Items->Assign(Freq->Items);
 	if( ParamCount() >= 1 ){
 		SetDirName(BgnDir, AnsiString(ParamStr(0)).c_str());	//ja7ude 1.0
+//		SetDirName(BgnDir, AnsiString(ParamStr(1)).c_str());	//correct?
 	}
 	else {
 		SetCurDir(BgnDir, sizeof(BgnDir));
@@ -4327,11 +4328,19 @@ void __fastcall TMainWnd::LoadDispatch(LPCSTR pName)
 		f = LoadAntFile(pName);
 		RecentAdd(pName, f);
 	}
+	#ifdef _WIN64
+	else if( !strcmpi(GetEXT(pName), "MAB64") ){
+	#else
 	else if( !strcmpi(GetEXT(pName), "MAB") ){
+	#endif
 		f = LoadResFile(pName);
 		if( !exeenv.RecentMAA ) RecentAdd(pName, f);
 	}
+	#ifdef _WIN64
+	else if( !strcmpi(GetEXT(pName), "MAO64") ){
+	#else
 	else if( !strcmpi(GetEXT(pName), "MAO") ){
+	#endif
 		f = LoadACalFile(pName);
 		if( !exeenv.RecentMAA ) RecentAdd(pName, f);
 	}
