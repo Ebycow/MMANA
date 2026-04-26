@@ -31,7 +31,7 @@
 #include <vcl\Buttons.hpp>
 #include <vcl\ExtCtrls.hpp>
 */
-#include "ComLIb.h"
+#include "ComLib.h"
 #include <System.Classes.hpp>
 #include <Vcl.Controls.hpp>
 #include <Vcl.ExtCtrls.hpp>

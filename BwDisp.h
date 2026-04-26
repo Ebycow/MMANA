@@ -51,7 +51,7 @@ typedef struct {
 }BWSLST;
 class TBwDispDlg : public TForm
 {
-__published:        
+__published:
 	TButton *OKBtn;
 	TPageControl *Page;
 	TTabSheet *TabZ;
@@ -116,14 +116,14 @@ __published:
 	void __fastcall PBPtnPaint(TObject *Sender);
 	void __fastcall RGPtnClick(TObject *Sender);
 	void __fastcall GridClick(TObject *Sender);
-	
+
 	void __fastcall ColorBtnClick(TObject *Sender);
 	void __fastcall HalfBtnClick(TObject *Sender);
 	void __fastcall UDMatchClick(TObject *Sender, TUDBtnType Button);
 	void __fastcall UDMatchChanging(TObject *Sender, bool &AllowChange);
 	void __fastcall MatchCenterClick(TObject *Sender);
 	void __fastcall LimitSWRChange(TObject *Sender);
-	
+
 	void __fastcall HalfAddCntChange(TObject *Sender);
 private:
 	TColor		*pColorTable;
@@ -179,5 +179,3 @@ public:
 //extern TBwDispDlg *BwDispDlg;
 //----------------------------------------------------------------------------
 #endif
-
-

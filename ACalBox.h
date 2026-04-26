@@ -34,7 +34,7 @@
 #include <vcl\Grids.hpp>
 #include <vcl\Menus.hpp>
 */
-#include "Comlib.h"
+#include "ComLib.h"
 #include <System.Classes.hpp>
 #include <Vcl.ComCtrls.hpp>
 #include <Vcl.Controls.hpp>

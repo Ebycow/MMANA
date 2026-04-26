@@ -103,6 +103,8 @@ void __fastcall TACalDlg::GridDrawCell(TObject *Sender, int Col, int Row,
 {
 	char	bf[64];
 
+	Grid->Canvas->Brush->Color = clWindow;
+	Grid->Canvas->Font->Color = clBlack;
 	Grid->Canvas->FillRect(Rect);
 	int X = Rect.Left + 1;
 	int Y = Rect.Top + 1;

@@ -34,7 +34,7 @@
 //----------------------------------------------------------------------------
 class TStackDlgBox : public TForm
 {
-__published:        
+__published:
 	TButton *OKBtn;
 	TButton *CancelBtn;
 	TBevel *Bevel1;
@@ -78,5 +78,4 @@ public:
 //----------------------------------------------------------------------------
 //extern TStackDlgBox *StackDlgBox;
 //----------------------------------------------------------------------------
-#endif    
-
+#endif

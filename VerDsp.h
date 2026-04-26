@@ -42,6 +42,7 @@ class TVerDspDlg : public TForm
 __published:
 	TButton *OKBtn;
 	TLabel *Version;
+    TLabel *Version2;
 	TImage *IconImage;
 private:
 public:

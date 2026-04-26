@@ -30,7 +30,7 @@
 #include <Buttons.hpp>
 #include <ExtCtrls.hpp>
 
-#include "ComLib.H"
+#include "ComLib.h"
 //----------------------------------------------------------------------------
 class TWireEditDlg : public TForm
 {

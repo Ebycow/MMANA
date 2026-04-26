@@ -23,7 +23,7 @@
 
 #include "BwDisp.h"
 #include "Main.h"
-#include "MiniNec3.h"
+#include "mininec3.h"
 //---------------------------------------------------------------------
 #pragma resource "*.dfm"
 #define MATCHINFO	"マッチング: %s"

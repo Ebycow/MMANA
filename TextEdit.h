@@ -19,6 +19,7 @@
 #ifndef TextEditH
 #define TextEditH
 #include <System.Classes.hpp>
+#include <System.UITypes.hpp>
 #include <Vcl.Controls.hpp>
 #include <Vcl.Dialogs.hpp>
 #include <Vcl.StdCtrls.hpp>

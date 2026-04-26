@@ -31,27 +31,27 @@ __fastcall TStackDlgBox::TStackDlgBox(TComponent* AOwner)
 
 	const BYTE VCTbl[]={1, 2, 4, 8, 0};
 
-    char	bf[32];
+	char	bf[32];
 	for( int i = 0; VCTbl[i]; i++ ){
 		sprintf(bf, "%d", VCTbl[i]);
 		VC->Items->Add(bf);
 	}
 	HC->Items->Assign(VC->Items);
-    CBSame->Checked = TRUE;
-    ChgEnb = 0;
+	CBSame->Checked = FALSE;
+	ChgEnb = 0;
 }
 //---------------------------------------------------------------------
 void __fastcall TStackDlgBox::UpdateView(void)
 {
 	if( RmdSel ){
-        LVW->Caption = "ƒÉ";
-        LHW->Caption = LVW->Caption;
-    }
-    else {
-        LVW->Caption = "‚";
-        LHW->Caption = LVW->Caption;
-    }
-    UpdateAntBtn();
+		LVW->Caption = "ƒÉ";
+		LHW->Caption = LVW->Caption;
+	}
+	else {
+		LVW->Caption = "‚";
+		LHW->Caption = LVW->Caption;
+	}
+	UpdateAntBtn();
 }
 //---------------------------------------------------------------------
 void __fastcall TStackDlgBox::UpdateAntBtn(void)
@@ -65,25 +65,29 @@ void __fastcall TStackDlgBox::UpdateAntBtn(void)
 //---------------------------------------------------------------------
 int __fastcall TStackDlgBox::Execute(ANTDEF *ap)
 {
+	int		vc, hc;
+
 	ChgEnb = 0;
 	pAnt = ap;
 	StackVW = ap->StackVW;
-    StackHW = ap->StackHW;
+	StackHW = ap->StackHW;
 	RMD = 299.8/ap->fq;
 	VC->Text = ap->StackV;
-    HC->Text = ap->StackH;
+	HC->Text = ap->StackH;
+	CalcU(vc, AnsiString(VC->Text).c_str());
+	CalcU(hc, AnsiString(HC->Text).c_str());
 	RmdSel = 1;
 	VW->Text = StrDbl(StackVW/RMD);
-    HW->Text = StrDbl(StackHW/RMD);
+	HW->Text = StrDbl(StackHW/RMD);
+	if ( (hc * vc != 1) && (StackVW == StackHW) ) CBSame->Checked = TRUE;
 	VT->ItemIndex = ap->StackVT;
 	UpdateView();
-    CBRmdSel->Checked = RmdSel;
+	CBRmdSel->Checked = RmdSel;
 	while(1){
 		ChgEnb = 1;
-        int r = ShowModal();
-	    if( r != IDCANCEL ){
-            int		vc, hc;
-            double	vvw, hhw;
+		int r = ShowModal();
+		if( r != IDCANCEL ){
+			double	vvw, hhw;
 			SetWireW(vvw, hhw);
 			if( CalcU(vc, AnsiString(VC->Text).c_str())==FALSE ) continue;
 			if( CalcU(hc, AnsiString(HC->Text).c_str())==FALSE ) continue;
@@ -217,4 +221,3 @@ void __fastcall TStackDlgBox::VCChange(TObject *Sender)
 	UpdateAntBtn();
 }
 //---------------------------------------------------------------------------
-

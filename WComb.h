@@ -31,7 +31,7 @@
 #include <ExtCtrls.hpp>
 #include <Grids.hpp>
 //----------------------------------------------------------------------------
-#include "Comlib.h"
+#include "ComLib.h"
 #include <Menus.hpp>
 class TWCombDlg : public TForm
 {

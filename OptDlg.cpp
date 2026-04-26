@@ -90,7 +90,7 @@ __fastcall TOptDlgBox::TOptDlgBox(TComponent* AOwner)
 	SMFreq = 14.05;
 	SMZi = 50;
 	for( int i = 0; CorePT[i]; i++ ){
-		CType->Items->Strings[i] = CoreTypeT[i];
+		CType->Items->Add(CoreTypeT[i]);
 	}
 }
 //---------------------------------------------------------------------

@@ -232,9 +232,15 @@ void __fastcall TResCmpDlg::LoadBtnClick(TObject *Sender)
 {
 	if( Cnt >= RESMAX ) return;
 	OpenDialog->Title = "ŒvŽZŒ‹‰Ê‚ð‘I‘ð";
+	#ifdef _WIN64
+	OpenDialog->Filter = "MMANA ŒvŽZŒ‹‰Ê(*.mab64)|*.mab64|";
+	OpenDialog->FileName = "";
+	OpenDialog->DefaultExt = "mab64";
+	#else
 	OpenDialog->Filter = "MMANA ŒvŽZŒ‹‰Ê(*.mab)|*.mab|";
 	OpenDialog->FileName = "";
 	OpenDialog->DefaultExt = "mab";
+	#endif
 	OpenDialog->InitialDir = ResDir;
 	if( OpenDialog->Execute() == TRUE ){
 		for( int i = 0; i < Cnt; i++ ){

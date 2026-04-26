@@ -240,30 +240,30 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall K7Click(TObject *Sender);
 	void __fastcall K9Click(TObject *Sender);
 	void __fastcall K4Click(TObject *Sender);
-	
+
 	void __fastcall K3Click(TObject *Sender);
 
 	void __fastcall K5Click(TObject *Sender);
 	void __fastcall K2Click(TObject *Sender);
-	
+
 	void __fastcall K10Click(TObject *Sender);
 
 	void __fastcall PBoxAntPaint(TObject *Sender);
 
-	
+
 	void __fastcall TBarDegChange(TObject *Sender);
 
-	
-	
-	
+
+
+
 	void __fastcall PBoxPtnPaint(TObject *Sender);
 	void __fastcall Grid1DrawCell(TObject *Sender, int Col, int Row, TRect &Rect,
 	TGridDrawState State);
-	
+
 
 	void __fastcall PageChange(TObject *Sender);
 	void __fastcall DspPlusClick(TObject *Sender);
-	
+
 	void __fastcall GndSetBtnClick(TObject *Sender);
 	void __fastcall K6Click(TObject *Sender);
 	void __fastcall FreqChange(TObject *Sender);
@@ -284,31 +284,31 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall KS1Click(TObject *Sender);
 	void __fastcall KS2Click(TObject *Sender);
 	void __fastcall KS3Click(TObject *Sender);
-	
-	
+
+
 	void __fastcall DoFreqChange(TObject *Sender);
 	void __fastcall AntNameChange(TObject *Sender);
 	void __fastcall EditDM2Change(TObject *Sender);
 	void __fastcall EditSCChange(TObject *Sender);
 	void __fastcall EnbLoadClick(TObject *Sender);
-	
+
 	void __fastcall K18Click(TObject *Sender);
 	void __fastcall ACalBtnClick(TObject *Sender);
-	
+
 	void __fastcall ACalResBtnClick(TObject *Sender);
-	
-	
+
+
 	void __fastcall K19Click(TObject *Sender);
 	void __fastcall K20Click(TObject *Sender);
 	void __fastcall K17Click(TObject *Sender);
 	void __fastcall K21Click(TObject *Sender);
-	
+
 	void __fastcall KXYClick(TObject *Sender);
 	void __fastcall KXZ1Click(TObject *Sender);
 	void __fastcall KYZ1Click(TObject *Sender);
-	
+
 	void __fastcall KS4Click(TObject *Sender);
-	
+
 	void __fastcall K24Click(TObject *Sender);
 	void __fastcall K25Click(TObject *Sender);
 	void __fastcall K26Click(TObject *Sender);
@@ -318,7 +318,7 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall PrintBtnClick(TObject *Sender);
 	void __fastcall K27Click(TObject *Sender);
 	void __fastcall PBoxAntDblClick(TObject *Sender);
-	
+
 	void __fastcall PBoxAntClick(TObject *Sender);
 	void __fastcall K28Click(TObject *Sender);
 	void __fastcall K29Click(TObject *Sender);
@@ -338,9 +338,9 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall K35Click(TObject *Sender);
 
 	void __fastcall FormPaint(TObject *Sender);
-	
+
 	void __fastcall EditECChange(TObject *Sender);
-	
+
 	void __fastcall K36Click(TObject *Sender);
 	void __fastcall K37Click(TObject *Sender);
 	void __fastcall K38Click(TObject *Sender);
@@ -355,8 +355,8 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall AppendTxt1Click(TObject *Sender);
 	void __fastcall K45Click(TObject *Sender);
 	void __fastcall K47Click(TObject *Sender);
-	
-	
+
+
 	void __fastcall KMMANAWebW1Click(TObject *Sender);
 	void __fastcall K49Click(TObject *Sender);
 private:	// ユーザー宣言
@@ -477,4 +477,3 @@ public:		// ユーザー宣言
 extern TMainWnd *MainWnd;
 //---------------------------------------------------------------------------
 #endif
-

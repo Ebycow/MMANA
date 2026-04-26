@@ -142,7 +142,7 @@ void __fastcall TACalInfoBox::UDSWRClick(TObject *Sender, TUDBtnType Button)
 //---------------------------------------------------------------------------
 void __fastcall TACalInfoBox::UDSWRChanging(TObject *Sender, bool &AllowChange)
 {
-	UDSWR->Position = 50;
+//	UDSWR->Position = 50;
 }
 //---------------------------------------------------------------------------
 void __fastcall TACalInfoBox::MatchSelClick(TObject *Sender)
@@ -168,4 +168,3 @@ void __fastcall TACalInfoBox::AutoJXClick(TObject *Sender)
     }
 }
 //---------------------------------------------------------------------------
-

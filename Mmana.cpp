@@ -236,7 +236,7 @@ static LONG WINAPI MmanaVectoredExceptionHandler(EXCEPTION_POINTERS *ExceptionIn
 	return EXCEPTION_CONTINUE_SEARCH;
 }
 
-WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
+int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 {
 	InitCrashDumpSupport();
 	WriteStartupLog("winmain-enter");
