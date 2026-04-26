@@ -67,6 +67,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	EntryAlignControl();
 	pACal = NULL;
 	pCalAnt = &ant;
+	QuadMode = false;
+	InitQuadLayout();
 	Application->OnIdle = OnIdle;
 
 	for( int i = 0; FreqTbl[i] != NULL; i++ ){
@@ -2748,15 +2750,199 @@ void __fastcall TMainWnd::FormCloseQuery(TObject *Sender, bool &CanClose)
 	}
 }
 //---------------------------------------------------------------------------
-// アプリケーションのサイズ変更イベント
-void __fastcall TMainWnd::FormResize(TObject *Sender)
+// Initialize quad-split layout panels
+void __fastcall TMainWnd::InitQuadLayout(void)
 {
+	QuadContainer = new TPanel(this);
+	QuadContainer->Parent = this;
+	QuadContainer->BevelOuter = bvNone;
+	QuadContainer->Align = alNone;
+	QuadContainer->Color = clBtnFace;
+	QuadContainer->Visible = false;
+
+	PanelTop = new TPanel(QuadContainer);
+	PanelTop->Parent = QuadContainer;
+	PanelTop->BevelOuter = bvNone;
+	PanelTop->Align = alTop;
+	PanelTop->Height = 300;
+
+	SplitterH = new TSplitter(QuadContainer);
+	SplitterH->Parent = QuadContainer;
+	SplitterH->Align = alTop;
+	SplitterH->Height = 4;
+	SplitterH->ResizeStyle = rsUpdate;
+
+	PanelBottom = new TPanel(QuadContainer);
+	PanelBottom->Parent = QuadContainer;
+	PanelBottom->BevelOuter = bvNone;
+	PanelBottom->Align = alClient;
+
+	PanelTopLeft = new TPanel(PanelTop);
+	PanelTopLeft->Parent = PanelTop;
+	PanelTopLeft->BevelOuter = bvLowered;
+	PanelTopLeft->Align = alLeft;
+	PanelTopLeft->Width = 300;
+	PanelTopLeft->Caption = "";
+
+	SplitterVTop = new TSplitter(PanelTop);
+	SplitterVTop->Parent = PanelTop;
+	SplitterVTop->Align = alLeft;
+	SplitterVTop->Width = 4;
+	SplitterVTop->ResizeStyle = rsUpdate;
+
+	PanelTopRight = new TPanel(PanelTop);
+	PanelTopRight->Parent = PanelTop;
+	PanelTopRight->BevelOuter = bvLowered;
+	PanelTopRight->Align = alClient;
+	PanelTopRight->Caption = "";
+
+	PanelBottomLeft = new TPanel(PanelBottom);
+	PanelBottomLeft->Parent = PanelBottom;
+	PanelBottomLeft->BevelOuter = bvLowered;
+	PanelBottomLeft->Align = alLeft;
+	PanelBottomLeft->Width = 300;
+	PanelBottomLeft->Caption = "";
+
+	SplitterVBot = new TSplitter(PanelBottom);
+	SplitterVBot->Parent = PanelBottom;
+	SplitterVBot->Align = alLeft;
+	SplitterVBot->Width = 4;
+	SplitterVBot->ResizeStyle = rsUpdate;
+
+	PanelBottomRight = new TPanel(PanelBottom);
+	PanelBottomRight->Parent = PanelBottom;
+	PanelBottomRight->BevelOuter = bvLowered;
+	PanelBottomRight->Align = alClient;
+	PanelBottomRight->Caption = "";
+
+	TMenuItem *KQ1 = new TMenuItem(MainMenu);
+	KQ1->Caption = "Quad View(&Q)";
+	KQ1->OnClick = QuadViewToggle;
+	KQ1->ShortCut = Vcl::Menus::ShortCut('Q', TShiftState() << ssCtrl);
+	KV1->Insert(0, KQ1);
+	TMenuItem *NQ = new TMenuItem(MainMenu);
+	NQ->Caption = "-";
+	KV1->Insert(1, NQ);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::LayoutQuadAntPanel(void)
+{
+	int controlTop = Label7->Top;
+	if( Label8->Top < controlTop ) controlTop = Label8->Top;
+	if( Label13->Top < controlTop ) controlTop = Label13->Top;
+	if( Label17->Top < controlTop ) controlTop = Label17->Top;
+	if( Ant3D->Top < controlTop ) controlTop = Ant3D->Top;
+
+	int h = controlTop - PBoxAnt->Top - 8;
+	if( h < 32 ) h = PanelTopRight->ClientHeight - PBoxAnt->Top;
+	if( h < 32 ) h = 32;
+
+	PBoxAnt->Align = alNone;
+	PBoxAnt->SetBounds(0, PBoxAnt->Top, PanelTopRight->ClientWidth, h);
+}
+//---------------------------------------------------------------------------
+// Switch to quad-split view
+void __fastcall TMainWnd::SwitchToQuadMode(void)
+{
+	if( QuadMode ) return;
+	QuadMode = true;
+
+	const int PANE_W = 792;
+	const int PANE_H = 545;
+	const int SPLIT  = 4;
+	ClientWidth  = PANE_W * 2 + SPLIT;
+	ClientHeight = PANE_H * 2 + SPLIT;
+	PanelTop->Height       = PANE_H;
+	PanelTopLeft->Width    = PANE_W;
+	PanelBottomLeft->Width = PANE_W;
+
+	while( TabSheet1->ControlCount > 0 )
+		TabSheet1->Controls[0]->Parent = PanelTopLeft;
+
+	while( TabSheet2->ControlCount > 0 )
+		TabSheet2->Controls[0]->Parent = PanelTopRight;
+	LayoutQuadAntPanel();
+
+	while( TabSheet3->ControlCount > 0 )
+		TabSheet3->Controls[0]->Parent = PanelBottomLeft;
+
+	while( TabSheet5->ControlCount > 0 )
+		TabSheet5->Controls[0]->Parent = PanelBottomRight;
+	PBoxPtn->Align = alClient;
+
+	Page->Align = alNone;
+	Page->Visible = false;
+	QuadContainer->SetBounds(0, 0, ClientWidth, ClientHeight);
+	QuadContainer->Align = alClient;
+	QuadContainer->Visible = true;
+	LayoutQuadAntPanel();
+
+	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width/2-2, PBoxPtn->Height);
+	DrawPtnV.SetRect(PBoxPtn->Canvas, PBoxPtn->Width/2+2, 0, PBoxPtn->Width, PBoxPtn->Height);
+	PBoxAnt->Invalidate();
+	PBoxPtn->Invalidate();
+}
+//---------------------------------------------------------------------------
+// Switch back to tab view
+void __fastcall TMainWnd::SwitchToTabMode(void)
+{
+	if( !QuadMode ) return;
+	QuadMode = false;
+
+	PBoxAnt->Align = alNone;
+	PBoxPtn->Align = alNone;
+
+	while( PanelBottomRight->ControlCount > 0 )
+		PanelBottomRight->Controls[0]->Parent = TabSheet5;
+
+	while( PanelBottomLeft->ControlCount > 0 )
+		PanelBottomLeft->Controls[0]->Parent = TabSheet3;
+
+	while( PanelTopRight->ControlCount > 0 )
+		PanelTopRight->Controls[0]->Parent = TabSheet2;
+
+	while( PanelTopLeft->ControlCount > 0 )
+		PanelTopLeft->Controls[0]->Parent = TabSheet1;
+
+	QuadContainer->Align = alNone;
+	QuadContainer->Visible = false;
+	Page->Align = alClient;
+	Page->Visible = true;
+
 	AlignList.NewAlign(Page->ActivePage);
 	AlignGrid[0].NewAlign(Grid1);
 	AlignGrid[1].NewAlign(Grid2);
 	AlignGrid[2].NewAlign(Grid3);
 	AlignGrid[3].NewAlign(Grid4);
-
+	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width/2-2, PBoxPtn->Height);
+	DrawPtnV.SetRect(PBoxPtn->Canvas, PBoxPtn->Width/2+2, 0, PBoxPtn->Width, PBoxPtn->Height);
+	UpdateAllViews();
+}
+//---------------------------------------------------------------------------
+// Toggle between quad-split and tab view
+void __fastcall TMainWnd::QuadViewToggle(TObject *Sender)
+{
+	if( QuadMode )
+		SwitchToTabMode();
+	else
+		SwitchToQuadMode();
+}
+//---------------------------------------------------------------------------
+// Application resize event
+void __fastcall TMainWnd::FormResize(TObject *Sender)
+{
+	if( !QuadMode ){
+		AlignList.NewAlign(Page->ActivePage);
+		AlignGrid[0].NewAlign(Grid1);
+		AlignGrid[1].NewAlign(Grid2);
+		AlignGrid[2].NewAlign(Grid3);
+		AlignGrid[3].NewAlign(Grid4);
+	} else {
+		PanelTop->Height       = ClientHeight / 2;
+		PanelTopLeft->Width    = ClientWidth  / 2;
+		PanelBottomLeft->Width = ClientWidth  / 2;
+		LayoutQuadAntPanel();
+	}
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width / 2 - 2, PBoxPtn->Height);
 	DrawPtnV.SetRect(PBoxPtn->Canvas, (PBoxPtn->Width/2) + 2, 0, PBoxPtn->Width, PBoxPtn->Height);
 	UpdateAllViews();

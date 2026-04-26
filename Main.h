@@ -437,6 +437,23 @@ private:	// ユーザー宣言
     CRecentMenu	RecentMenu;
     CWebRef		WebRef;
 
+	bool            QuadMode;
+	TPanel          *QuadContainer;
+	TPanel          *PanelTop;
+	TPanel          *PanelBottom;
+	TPanel          *PanelTopLeft;
+	TPanel          *PanelTopRight;
+	TPanel          *PanelBottomLeft;
+	TPanel          *PanelBottomRight;
+	TSplitter       *SplitterH;
+	TSplitter       *SplitterVTop;
+	TSplitter       *SplitterVBot;
+	void __fastcall InitQuadLayout(void);
+	void __fastcall LayoutQuadAntPanel(void);
+	void __fastcall SwitchToQuadMode(void);
+	void __fastcall SwitchToTabMode(void);
+	void __fastcall QuadViewToggle(TObject *Sender);
+
 public:		// ユーザー宣言
 	__fastcall TMainWnd(TComponent* Owner);
 	__fastcall ~TMainWnd();
