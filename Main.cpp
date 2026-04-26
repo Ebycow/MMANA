@@ -4736,4 +4736,4 @@ void __fastcall TMainWnd::KMMANAWebW1Click(TObject *Sender)
 	WebRef.ShowHTML("http://je3hht.g1.xrea.com/mmana/index.html");
 }
 //---------------------------------------------------------------------------
-
+
