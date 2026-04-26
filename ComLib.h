@@ -203,6 +203,7 @@ typedef struct {		// 実行環境の定義
 
 	int		RmdSel;			// エレメント編集の波長表記
 	double	rmd;			// 設計周波数の波長
+	int		MmSel;			// normal length unit 0-m, 1-mm
 
 	int		IntPos;			// 0-間隔表記，1-位置表記
 	int		Wave;			// 表示偏波
@@ -289,6 +290,7 @@ double GetRmdVal(double d);
 double SetRmdVal(double d);
 double GetRmdValD(double d);
 double SetRmdValD(double d);
+LPCSTR GetLenUnitText(void);
 
 int Calc(double &d, LPCSTR p);
 int CalcI(int &d, LPCSTR p);

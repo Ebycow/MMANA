@@ -112,6 +112,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	exeenv.CalcDisp = 1;
 	exeenv.rmd = 1.0;
 	exeenv.Wave = 3;
+	exeenv.MmSel = 1;
 	exeenv.BwMatch = 0;
 	exeenv.IntPos = 1;
 	exeenv.Ant3D = 1;
@@ -121,6 +122,11 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	exeenv.RecentMAA = 1;
 	WaveSel->ItemIndex = exeenv.Wave;
 	exeenv.WindowState = wsNormal;
+	KMmUnit = new TMenuItem(this);
+	KMmUnit->Caption = "通常単位をmmで表示";
+	KMmUnit->Checked = exeenv.MmSel;
+	KMmUnit->OnClick = MmUnitClick;
+	KV1->Add(KMmUnit);
 
 	ResColors[0] = clBlack;	//	黒色
 	ResColors[1] = clMaroon;	//	栗色
@@ -138,6 +144,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 //clAqua	空色
 
 	ReadRegister();
+	UpdateLengthUnitUI();
 
 	if( int(WindowState) != exeenv.WindowState ) WindowState = TWindowState(exeenv.WindowState);
 	env.pmax = InitNEC(env.pmax);
@@ -441,6 +448,7 @@ void __fastcall TMainWnd::ReadRegister(void)
 // 表示
 	exeenv.Ant3D = pIniFile->ReadInteger("Job", "Ant3D", exeenv.Ant3D);
 	exeenv.IntPos = pIniFile->ReadInteger("Job", "IntPos", exeenv.IntPos);
+	exeenv.MmSel = pIniFile->ReadInteger("Job", "LengthUnitMM", exeenv.MmSel);
 	exeenv.CurDir = pIniFile->ReadInteger("Job", "CurDir", exeenv.CurDir);
 	exeenv.FixFreeAngle = pIniFile->ReadInteger("Job", "FixFreeAngle", exeenv.FixFreeAngle);
 	exeenv.WindowState = pIniFile->ReadInteger("Job", "WindowState", exeenv.WindowState);
@@ -491,6 +499,7 @@ void __fastcall TMainWnd::WriteRegister(void)
 // 表示
 	pIniFile->WriteInteger("Job", "Ant3D", exeenv.Ant3D);
 	pIniFile->WriteInteger("Job", "IntPos", exeenv.IntPos);
+	pIniFile->WriteInteger("Job", "LengthUnitMM", exeenv.MmSel);
 	pIniFile->WriteInteger("Job", "CurDir", exeenv.CurDir);
 	pIniFile->WriteInteger("Job", "FixFreeAngle", exeenv.FixFreeAngle);
 	pIniFile->WriteInteger("Job", "WindowState", WindowState);
@@ -547,6 +556,16 @@ void __fastcall TMainWnd::UpdateAntPreview(void)
 
 	exeenv.CalcLog = 1;
 	SetStackAnt();
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+// Update length unit UI.
+void __fastcall TMainWnd::UpdateLengthUnitUI(void)
+{
+	if( KMmUnit != NULL ){
+		KMmUnit->Checked = exeenv.MmSel;
+	}
+	Grid2->Invalidate();
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
@@ -1009,15 +1028,22 @@ void __fastcall TMainWnd::Grid2DrawCell(TObject *Sender, int Col,     //JA7UDE 1
 		Grid2GetText(bf, Col, Row);
 		Grid2->Canvas->TextOut(X, Y, bf);
 	}
-	else {		// タイトル
-		LPCSTR	_tt1[]={
-			"No.","X1(m)","Y1(m)","Z1(m)","X2(m)","Y2(m)","Z2(m)","R(mm)","Seg."
-		};
-		LPCSTR	_tt2[]={
-			"No.","X1(λ)","Y1(λ)","Z1(λ)","X2(λ)","Y2(λ)","Z2(λ)","R(λ)","Seg."
-		};
+	else {		// title
+		if( Col == 0 ){
+			strcpy(bf, "No.");
+		}
+		else if( Col == 8 ){
+			strcpy(bf, "Seg.");
+		}
+		else if( Col == 7 ){
+			sprintf(bf, "R(%s)", exeenv.RmdSel ? "λ" : "mm");
+		}
+		else {
+			LPCSTR p[]={"","X1","Y1","Z1","X2","Y2","Z2"};
+			sprintf(bf, "%s(%s)", p[Col], GetLenUnitText());
+		}
 		X += 8;
-		Grid2->Canvas->TextOut(X, Y, exeenv.RmdSel ? _tt2[Col] : _tt1[Col]);
+		Grid2->Canvas->TextOut(X, Y, bf);
 	}
 }
 //---------------------------------------------------------------------------
@@ -3995,7 +4021,14 @@ void __fastcall TMainWnd::K34Click(TObject *Sender)
 void __fastcall TMainWnd::ChkRmdClick(TObject *Sender)
 {
 	exeenv.RmdSel = ChkRmd->Checked;
-	Grid2->Invalidate();
+	UpdateLengthUnitUI();
+}
+//---------------------------------------------------------------------------
+// Toggle normal length unit between mm and m.
+void __fastcall TMainWnd::MmUnitClick(TObject *Sender)
+{
+	exeenv.MmSel = !exeenv.MmSel;
+	UpdateLengthUnitUI();
 }
 //---------------------------------------------------------------------------
 // 偏波選択

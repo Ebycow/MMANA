@@ -1569,6 +1569,9 @@ double GetRmdVal(double d)
 	if( exeenv.RmdSel ){
 		d = d / exeenv.rmd;
 	}
+	else if( exeenv.MmSel ){
+		d = d * 1000.0;
+	}
 	return d;
 }
 //---------------------------------------------------------------------------
@@ -1577,6 +1580,9 @@ double SetRmdVal(double d)
 {
 	if( exeenv.RmdSel ){
 		d = d * exeenv.rmd;
+	}
+	else if( exeenv.MmSel ){
+		d = d / 1000.0;
 	}
 	return d;
 }
@@ -1597,6 +1603,14 @@ double SetRmdValD(double d)
 		d = d * 1000.0 * exeenv.rmd;
 	}
 	return d;
+}
+
+//---------------------------------------------------------------------------
+// Get the current length unit label.
+LPCSTR GetLenUnitText(void)
+{
+	if( exeenv.RmdSel ) return "ƒÉ";
+	return exeenv.MmSel ? "mm" : "m";
 }
 
 ///----------------------------------------------------------------
@@ -2077,23 +2091,23 @@ void DrawWirePara(TPaintBox *tp, WDEF *wp, int w)
 
 	sprintf(bf, "Wire No.%d", w + 1);
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
-	sprintf(bf, "X1   : %s m", StrDbl(wp->X1));
+	sprintf(bf, "X1   : %s %s", StrDbl(GetRmdVal(wp->X1)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
-	sprintf(bf, "Y1   : %s m", StrDbl(wp->Y1));
+	sprintf(bf, "Y1   : %s %s", StrDbl(GetRmdVal(wp->Y1)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
-	sprintf(bf, "Z1   : %s m", StrDbl(wp->Z1));
+	sprintf(bf, "Z1   : %s %s", StrDbl(GetRmdVal(wp->Z1)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
-	sprintf(bf, "X2   : %s m", StrDbl(wp->X2));
+	sprintf(bf, "X2   : %s %s", StrDbl(GetRmdVal(wp->X2)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
-	sprintf(bf, "Y2   : %s m", StrDbl(wp->Y2));
+	sprintf(bf, "Y2   : %s %s", StrDbl(GetRmdVal(wp->Y2)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
-	sprintf(bf, "Z2   : %s m", StrDbl(wp->Z2));
+	sprintf(bf, "Z2   : %s %s", StrDbl(GetRmdVal(wp->Z2)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
 	strcpy(bf2, wp->R < 0 ? "(‘g‡‚¹)" : wp->R ? "mm" : "(â‰)");
 	sprintf(bf, "R    : %s %s", StrDbl(wp->R*1000.0), bf2);
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
 
-	sprintf(bf, "’·‚³ : %s m", StrDbl(WL));
+	sprintf(bf, "’·‚³ : %s %s", StrDbl(GetRmdVal(WL)), GetLenUnitText());
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "“®Œa : %s ‹", StrDbl(XYD));
 	tp->Canvas->TextOut(X, Y, bf); Y+=FH;

@@ -15,9 +15,7 @@ __fastcall TTriEditDlg::TTriEditDlg(TComponent* AOwner)
 //---------------------------------------------------------------------------
 int __fastcall TTriEditDlg::Execute(ANTDEF *p, int n)
 {
-	if( exeenv.RmdSel ){
-		Label3->Caption = "ƒÉ";
-	}
+	Label3->Caption = GetLenUnitText();
 	ap = p;
 	Index = n;
 	memcpy(&NowW, &ap->wdef[n], sizeof(WDEF));

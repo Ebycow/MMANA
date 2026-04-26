@@ -63,37 +63,44 @@ void __fastcall TWCombDspDlg::GridDrawCell(TObject *Sender, int Col, int Row,
 				sprintf( bf, "%d", Row+1 );
 				break;
 			case 1:
-				strcpy(bf, StrDbl(wp->X1));
+				strcpy(bf, StrDbl(GetRmdVal(wp->X1)));
 				break;
 			case 2:
-				strcpy(bf, StrDbl(wp->Y1));
+				strcpy(bf, StrDbl(GetRmdVal(wp->Y1)));
 				break;
 			case 3:
-				strcpy(bf, StrDbl(wp->Z1));
+				strcpy(bf, StrDbl(GetRmdVal(wp->Z1)));
 				break;
 			case 4:
-				strcpy(bf, StrDbl(wp->X2));
+				strcpy(bf, StrDbl(GetRmdVal(wp->X2)));
 				break;
 			case 5:
-				strcpy(bf, StrDbl(wp->Y2));
+				strcpy(bf, StrDbl(GetRmdVal(wp->Y2)));
 				break;
 			case 6:
-				strcpy(bf, StrDbl(wp->Z2));
+				strcpy(bf, StrDbl(GetRmdVal(wp->Z2)));
 				break;
 			case 7:
 				strcpy(bf, StrDbl(wp->R*1000.0));
 				break;
 			case 8:
-				strcpy(bf, StrDbl(Len[Row]));
+				strcpy(bf, StrDbl(GetRmdVal(Len[Row])));
 				break;
 		}
 		Grid->Canvas->TextOut(X, Y, bf);
 	}
-	else {		// ƒ^ƒCƒgƒ‹
-		LPCSTR	_tt[]={
-			"No.","X1(m)","Y1(m)","Z1(m)","X2(m)","Y2(m)","Z2(m)","R(mm)","L(m)",
-		};
-		Grid->Canvas->TextOut(X, Y, _tt[Col]);
+	else {		// title
+		if( Col == 0 ){
+			strcpy(bf, "No.");
+		}
+		else if( Col == 7 ){
+			strcpy(bf, "R(mm)");
+		}
+		else {
+			LPCSTR p[]={"","X1","Y1","Z1","X2","Y2","Z2","","L"};
+			sprintf(bf, "%s(%s)", p[Col], GetLenUnitText());
+		}
+		Grid->Canvas->TextOut(X, Y, bf);
 	}
 }
 //---------------------------------------------------------------------------

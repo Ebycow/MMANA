@@ -371,17 +371,35 @@ void __fastcall TGrpWireDlg::GridGetText(LPSTR t, long Col, long Row)
 //---------------------------------------------------------------------
 void __fastcall TGrpWireDlg::GridTitleText(LPSTR t, long Col, long Row)
 {
-	LPCSTR	_tt1[]={
-		"No.","å`éÆ",NULL,"â°ïù(m)","ècïù(m)",NULL,"R(mm)","Seg.","‹≤‘êî"
-	};
-	LPCSTR	_tt2[]={
-		"No.","å`éÆ",NULL,"â°ïù(É…)","ècïù(É…)",NULL,"R(É…)","Seg.","‹≤‘êî"
-	};
-	_tt1[2] = exeenv.IntPos  ? "ä‘äu(m)":"à íu(m)";
-	_tt2[2] = exeenv.IntPos  ? "ä‘äu(É…)":"à íu(É…)";
-	_tt1[5] = WList.List[Row-1].EnbXw() ? "Çwïù(m)":"ëSé¸(m)";
-	_tt2[5] = WList.List[Row-1].EnbXw() ? "Çwïù(É…)":"ëSé¸(É…)";
-	strcpy(t, ChkRmd->Checked == TRUE ? _tt2[Col] : _tt1[Col]);
+	switch(Col){
+		case 0:
+			strcpy(t, "No.");
+			break;
+		case 1:
+			strcpy(t, "å`éÆ");
+			break;
+		case 2:
+			sprintf(t, "%s(%s)", exeenv.IntPos ? "ä‘äu":"à íu", GetLenUnitText());
+			break;
+		case 3:
+			sprintf(t, "â°ïù(%s)", GetLenUnitText());
+			break;
+		case 4:
+			sprintf(t, "ècïù(%s)", GetLenUnitText());
+			break;
+		case 5:
+			sprintf(t, "%s(%s)", WList.List[Row-1].EnbXw() ? "Çwïù":"ëSé¸", GetLenUnitText());
+			break;
+		case 6:
+			sprintf(t, "R(%s)", ChkRmd->Checked == TRUE ? "É…" : "mm");
+			break;
+		case 7:
+			strcpy(t, "Seg.");
+			break;
+		case 8:
+			strcpy(t, "‹≤‘êî");
+			break;
+	}
 }
 //---------------------------------------------------------------------
 void __fastcall TGrpWireDlg::GridDrawCell(TObject *Sender, int Col, int Row,

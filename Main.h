@@ -361,6 +361,7 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall K49Click(TObject *Sender);
 private:	// ユーザー宣言
 	void __fastcall OnIdle(TObject *Sender, bool &Done);
+	void __fastcall MmUnitClick(TObject *Sender);
 
     int			FirstInit;
 	CDrawPtnH	DrawPtnH;
@@ -377,6 +378,7 @@ private:	// ユーザー宣言
 	void __fastcall UpdateAllViews(void);
 	void __fastcall UpdateAntPreview(void);
 	void __fastcall UpdateCount(void);
+	void __fastcall UpdateLengthUnitUI(void);
 
 	void __fastcall InitAntDef(void);
 	void __fastcall SetAntDef(void);
@@ -437,6 +439,7 @@ private:	// ユーザー宣言
 
     CRecentMenu	RecentMenu;
     CWebRef		WebRef;
+	TMenuItem		*KMmUnit;
 
 	bool            QuadMode;
 	TPanel          *QuadContainer;

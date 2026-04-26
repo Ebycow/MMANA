@@ -54,7 +54,7 @@ void __fastcall TWireEditDlg::DispItem(int n)
 //---------------------------------------------------------------------
 void __fastcall TWireEditDlg::UpdateView(void)
 {
-	LPCSTR lp = exeenv.RmdSel ? "ƒÉ":"‚";
+	LPCSTR lp = GetLenUnitText();
 	Label7->Caption = lp;
 	Label8->Caption = lp;
 	Label9->Caption = lp;
@@ -254,7 +254,7 @@ void __fastcall TWireEditDlg::EditRChange(TObject *Sender)
 	if( !EnbCalc ) return;
 	double	d;
 	if( Calc(d, AnsiString(EditR->Text).c_str()) == TRUE ){
-		d = SetRmdVal(d) / 1000.0;
+		d = SetRmdValD(d) / 1000.0;
 		if( d != NewW.R ){
 			NewW.R = d;
 			DispItem(6);

@@ -75,7 +75,7 @@ void __fastcall TWCombDlg::GridGetText(LPSTR t, long Col, long Row)
             }
             else {
 				Col /= 2;
-                if( pp->L[Col] ) strcpy(t, StrDbl(pp->L[Col]));
+                if( pp->L[Col] ) strcpy(t, StrDbl(GetRmdVal(pp->L[Col])));
             }
           	break;
 	}
@@ -107,7 +107,7 @@ void __fastcall TWCombDlg::GridDrawCell(TObject *Sender, int Col,
 	            sprintf(bf, "R%d(mm)", Col/2);
             }
             else {
-	            sprintf(bf, "L%d(m)", Col/2);
+	            sprintf(bf, "L%d(%s)", Col/2, GetLenUnitText());
             }
 			Grid->Canvas->TextOut(X, Y, bf);
         }
@@ -189,7 +189,7 @@ void __fastcall TWCombDlg::GridSetEditText(TObject *Sender, int ACol,
 					ACol/=2;
 					if( Calc(d, AnsiString(Value).c_str()) == TRUE ){
 						if( d >= 0 ){
-							pp->L[ACol] = ABS(d);
+							pp->L[ACol] = ABS(SetRmdVal(d));
 							Grid->Invalidate();
 						}
 					}

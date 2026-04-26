@@ -45,7 +45,7 @@ int __fastcall TMoveDlgBox::Execute(ANTDEF *ap, int Row, int Col)
 {
 	double d;
 
-	if( exeenv.RmdSel ) Label2->Caption = "ƒÉ";
+	Label2->Caption = GetLenUnitText();
 	Row--;
 	WDEF *wp = &ap->wdef[Row];
 	WDEF OldW;
