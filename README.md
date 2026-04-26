@@ -9,7 +9,7 @@ jl3oxr OM版をベースに、以下の変更を加えています。
 
 ### 新機能
 
-- **クワッドビューモード（Quad View）**: アンテナの4方向同時表示ビューを追加。ワイヤ配置の把握が容易になります。
+- **クワッドビューモード（Quad View）**: アンテナの4方向同時表示ビューを追加。ワイヤ配置の把握が容易になります。四タブ分をそのままのサイズで並べるため、HDサイズのディスプレイでは問題が発生する可能性があります。
 - **ミリメートル長表示の設定化**: 素子長などをmm単位で表示するかどうかを設定から変更できるようにしました。
 
 ### 改善
@@ -26,20 +26,86 @@ jl3oxr OM版をベースに、以下の変更を加えています。
 
 ## ビルド方法
 
-### 必要環境
-
 **RAD Studio 12.1 Athens Community Edition**（無償）でビルドできることを確認しています。  
 Community Editionは個人開発者・学生・スタートアップが無償で利用できます。
 
 - ダウンロード: https://www.embarcadero.com/jp/products/cbuilder/starter
 
-### 手順
+### コマンドラインビルド
 
-1. `Mmana.cbproj` をRAD StudioまたはC++ Builder IDEで開く
-2. ターゲットプラットフォーム（Win32 / Win64）を選択
-3. ビルドを実行
+RAD Studio / C++ Builder は MSBuild をビルドエンジンとして使用します。  
+コマンドラインからビルドするには、まず `rsvars.bat` で環境変数を設定してから `msbuild` を呼び出します。
 
-> **注意**: Win32版とWin64版では最適化・計算結果の保存ファイル形式が異なります（バイナリ非互換）。
+#### 1. 環境変数の設定
+
+`rsvars.bat` は RAD Studio インストール先の `bin` フォルダにあります。  
+RAD Studio 12.x Athens の場合、通常は以下のパスです。
+
+```cmd
+call "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin\rsvars.bat"
+```
+
+インストール先や正確なバージョン番号は環境によって異なります。以下のコマンドで確認できます。
+
+```cmd
+dir "C:\Program Files (x86)\Embarcadero\Studio\"
+dir "C:\Program Files\Embarcadero\Studio\"
+```
+
+表示された最新のバージョン番号フォルダ内の `bin\rsvars.bat` を `call` してください。
+
+#### 2. ビルドコマンドの基本形
+
+```cmd
+msbuild Mmana.cbproj /p:Config=<構成> /p:Platform=<プラットフォーム>
+```
+
+**Config（ビルド構成）**
+
+| 値 | 説明 |
+|---|---|
+| `Release` | 最適化あり・配布用 |
+| `Debug` | デバッグ情報あり・開発用 |
+
+**Platform（プラットフォーム）**
+
+| 値 | 説明 |
+|---|---|
+| `Win32` | 32ビット版 |
+| `Win64` | 64ビット版 |
+
+#### 3. 実行例
+
+```cmd
+:: 環境変数の設定（毎回必要）
+call "C:\Program Files (x86)\Embarcadero\Studio\23.0\bin\rsvars.bat"
+
+:: Win32 Release ビルド
+msbuild Mmana.cbproj /p:Config=Release /p:Platform=Win32
+
+:: Win64 Release ビルド
+msbuild Mmana.cbproj /p:Config=Release /p:Platform=Win64
+
+:: Win32 Debug ビルド
+msbuild Mmana.cbproj /p:Config=Debug /p:Platform=Win32
+
+:: クリーンビルド（中間ファイルを削除してから再ビルド）
+msbuild Mmana.cbproj /t:Clean;Build /p:Config=Release /p:Platform=Win32
+
+:: 並列ビルド（コア数を指定して高速化）
+msbuild Mmana.cbproj /p:Config=Release /p:Platform=Win32 /m:4
+```
+
+#### 4. 出力先
+
+ビルド成功後、実行ファイルはプロジェクトルートに出力されます。
+
+| 構成 | 中間ファイル格納先 | 実行ファイル |
+|---|---|---|
+| `Release` | `Release_Build\` | `Mmana.exe`（プロジェクトルート） |
+| `Debug` | `Debug_Build\` | `Mmana.exe`（プロジェクトルート） |
+
+> **注意**: Win32版とWin64版では最適化・計算結果の保存ファイル形式が異なります（バイナリ非互換）。同一環境でWin32とWin64を切り替える場合は、それぞれのファイルを別途保管してください。
 
 ---
 
