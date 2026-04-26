@@ -340,7 +340,7 @@ public:
 		Wp = Bp;
 	};
 	inline ~StrText(){
-		delete Bp;
+		delete[] Bp;
 	};
 	inline char *Printf(char *ct, ...){
 		va_list	pp;
@@ -394,7 +394,7 @@ public:
 		LoadBuf();
 	};
 	inline ~CTextFile(){
-		delete Bf;
+		delete[] Bf;
 	}
 	inline int LoadText(LPSTR tp, int len){
 		char c;
@@ -478,7 +478,7 @@ public:
 		Line = 0;
 	};
 	inline ~CTextFifo(){
-		delete bp;
+		delete[] bp;
 	};
 	inline void WriteChar(char c){
 		if( Cnt < Max ){
@@ -967,7 +967,7 @@ public:
 	};
 	inline ~CAlignGrid(){
 		if( bp != NULL ){
-			delete bp;
+			delete[] bp;
 		}
 	};
 	void InitGrid(TStringGrid *p);

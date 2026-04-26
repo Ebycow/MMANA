@@ -1403,7 +1403,7 @@ int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 		fread(bp, 1, len, fp);
 		bp[len] = 0;
 		rem = bp;
-		delete bp;
+		delete[] bp;
 	}
 	return ferror(fp) ? FALSE : TRUE;
 }
@@ -2993,7 +2993,7 @@ CAlignList::~CAlignList(){
 		for( int i = 0; i < Cnt; i++ ){
 			delete AlignList[i];
 		}
-		delete AlignList;
+		delete[] AlignList;
 		AlignList = NULL;
 	}
 }
@@ -3002,12 +3002,12 @@ void CAlignList::Alloc(void)
 {
 	if( Cnt >= Max ){
 		Max = Max ? Max * 2 : 16;
-		CAlign **np = (CAlign **)new BYTE[sizeof(CAlign*) * Max];
+		CAlign **np = new CAlign*[Max];
 		if( AlignList != NULL ){
 			for( int i = 0; i < Cnt; i++ ){
 				np[i] = AlignList[i];
 			}
-			delete AlignList;
+			delete[] AlignList;
 		}
 		AlignList = np;
 	}
@@ -3091,7 +3091,7 @@ void CWGroup::Clear(void)
 void CWGroup::Delete(void)
 {
 	if( pB != NULL ){
-		delete pB;
+		delete[] pB;
 		pB = NULL;
 	}
 	bmax = bcnt = 0;
@@ -3107,7 +3107,7 @@ void CWGroup::Alloc(void)
 		WREF *np = new WREF[bmax];
 		if( pB != NULL ){
 			memcpy(np, pB, sizeof(WREF)*bcnt);
-			delete pB;
+			delete[] pB;
 		}
 		pB = np;
 	}
@@ -3365,8 +3365,8 @@ void CWGroup::AnaType(void)
 		XwF = 1;
 		Type = cwNULL;
 	}
-	delete lp;
-	delete ip;
+	delete[] lp;
+	delete[] ip;
 }
 
 // ƒƒCƒ„Œ`Ž®‚ð’²‚×‚é

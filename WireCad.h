@@ -68,7 +68,7 @@ public:
         memcpy(sp, wp, sizeof(wdef));
         memcpy(wp, wdef, sizeof(wdef));
         memcpy(wdef, sp, sizeof(wdef));
-        delete sp;
+        delete[] sp;
     };
 };
 //----------------------------------------------------------------------------

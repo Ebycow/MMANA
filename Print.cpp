@@ -54,15 +54,15 @@ void __fastcall TPrintDlgBox::Delete(void)
 	int i;
 
 	for( i = 0; i < mColCount; i++ ){
-		delete mTitle[i];
+		delete[] mTitle[i];
     }
     mColCount = 0;
 	if( mbp != NULL ){
 		for( i = 0; i < mRowCount*mColCount; i++ ){
-			delete mbp[i];
+			delete[] mbp[i];
         }
         mRowCount = mColCount = 0;
-	    delete mbp;
+	    delete[] mbp;
 	    mbp = NULL;
     }
 }
@@ -76,7 +76,7 @@ void __fastcall TPrintDlgBox::AllocRow(int row)
         memset(np, 0, mMaxRow*mColCount*sizeof(LPCSTR));
         if( mbp != NULL ){
 			memcpy(np, mbp, mRowCount*mColCount*sizeof(LPCSTR));
-            delete mbp;
+            delete[] mbp;
         }
         mbp = np;
     }

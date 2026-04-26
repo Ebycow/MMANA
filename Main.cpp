@@ -69,6 +69,9 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	pCalAnt = &ant;
 	QuadMode = false;
 	InitQuadLayout();
+	Grid2->Options = Grid2->Options << goAlwaysShowEditor;
+	Grid3->Options = Grid3->Options << goAlwaysShowEditor;
+	Grid4->Options = Grid4->Options << goAlwaysShowEditor;
 	Application->OnIdle = OnIdle;
 
 	for( int i = 0; FreqTbl[i] != NULL; i++ ){
@@ -144,6 +147,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	antFname = "";
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width / 2 - 2, PBoxPtn->Height);
 	DrawPtnV.SetRect(PBoxPtn->Canvas, (PBoxPtn->Width/2) + 2, 0, PBoxPtn->Width, PBoxPtn->Height);
+	SwitchToQuadMode();
 }
 
 //---------------------------------------------------------------------------
@@ -348,7 +352,7 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 		Grid2->Invalidate();
 	}
 	if( exeenv.pCurFile != NULL ){
-		delete exeenv.pCurFile;
+		delete[] exeenv.pCurFile;
 		exeenv.pCurFile = NULL;
 	}
 	if( (exeenv.pNearFile != NULL) && (exeenv.pNearFile->fp!=NULL) ){
@@ -533,6 +537,17 @@ void __fastcall TMainWnd::UpdateAllViews(void)
 	Grid4->Invalidate();
 	PBoxAnt->Invalidate();
 	PBoxPtn->Invalidate();
+}
+//---------------------------------------------------------------------------
+// 表示中のアンテナ形状だけを、編集中でも即時更新する
+void __fastcall TMainWnd::UpdateAntPreview(void)
+{
+	if( exeenv.CalcF ) return;
+	if( !QuadMode && (Page->ActivePage != TabSheet2) ) return;
+
+	exeenv.CalcLog = 1;
+	SetStackAnt();
+	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
 // アンテナデータを初期化する
@@ -1110,10 +1125,14 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 	double	d;
 	int		di;
 	WDEF	OldW;
+	int		OldWmax;
+	char	bf[64];
 
-	if( Grid2->EditorMode == TRUE ) return;
 	if( ARow ){
+		Grid2GetText(bf, ACol, ARow);
+		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
 		ARow--;
+		OldWmax = ant.wmax;
 		memcpy(&OldW, &ant.wdef[ARow], sizeof(WDEF));
 		switch(ACol){
 			case 1:		// X1(m)
@@ -1183,6 +1202,9 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 				}
 				break;
 		}
+		if( (OldWmax != ant.wmax) || memcmp(&OldW, &ant.wdef[ARow], sizeof(WDEF)) ){
+			UpdateAntPreview();
+		}
 	}
 }
 //---------------------------------------------------------------------------
@@ -1228,9 +1250,11 @@ void __fastcall TMainWnd::Grid3SetEditText(TObject *Sender, int ACol,   //ja7ude
 	int ARow, const UnicodeString Value)
 {
 	double	d;
+	char	bf[64];
 
-	if( Grid3->EditorMode == TRUE ) return;
 	if( ARow ){
+		Grid3GetText(bf, ACol, ARow);
+		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
 		ARow--;
 		switch(ACol){
 			case 1:		// PLUS
@@ -1343,9 +1367,11 @@ void __fastcall TMainWnd::Grid4SetEditText(TObject *Sender, int ACol,
 	int ARow, const UnicodeString Value)
 {
 	double	d, dw;
+	char	bf[64];
 
-	if( Grid4->EditorMode == TRUE ) return;
 	if( ARow ){
+		Grid4GetText(bf, ACol, ARow);
+		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
 		ARow--;
 		switch(ACol){
 			case 1:		// パルス
@@ -2073,7 +2099,7 @@ void __fastcall TMainWnd::CalTrgBtnClick(TObject *Sender)
 			AntName4->Caption = ant.Name;
 			DrawPtnH.SetMaxDB(res.MaxG);
 			DrawPtnV.SetMaxDB(res.MaxG);
-			Grid1->Invalidate();
+			UpdateAllViews();
 		}
 	}
 }
@@ -2519,6 +2545,8 @@ int __fastcall TMainWnd::DrawPtn(void)
 // パターンの表示イベント
 void __fastcall TMainWnd::PBoxPtnPaint(TObject *Sender)
 {
+	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width/2-2, PBoxPtn->Height);
+	DrawPtnV.SetRect(PBoxPtn->Canvas, PBoxPtn->Width/2+2, 0, PBoxPtn->Width, PBoxPtn->Height);
 	if( DrawPtn() == TRUE ){
 		int X, Y;
 		DrawPtnV.GetBottomPosition(X, Y);
@@ -3218,7 +3246,7 @@ void __fastcall TMainWnd::ACalBtnClick(TObject *Sender)
 void __fastcall TMainWnd::DrawPtnACalInfo(void)
 {
 	if( pACal == NULL ) return;
-	if( Page->ActivePage == TabSheet5 ){	// パターン図表示中
+	if( QuadMode || (Page->ActivePage == TabSheet5) ){	// パターン図表示中
 		int SaveSize = PBoxPtn->Canvas->Font->Size;
 		PBoxPtn->Canvas->Font->Size = SaveSize*2/3;
 		int X = PBoxPtn->Width - PBoxPtn->Canvas->TextWidth(pACal->Info);
@@ -3420,7 +3448,16 @@ int __fastcall TMainWnd::ACalExecute(void)
 			DrawPtnH.SetMaxDB(res.MaxG);
 			DrawPtnV.SetMaxDB(res.MaxG);
 			res.CalcF = 1;
-			if( Page->ActivePage == TabSheet1 ){		// ワイヤ定義
+			if( QuadMode ){
+				Grid2->Invalidate();
+				Grid4->Invalidate();
+				PBoxAnt->Invalidate();
+				Grid1->Invalidate();
+				DoFreq->Text = StrDbl(ant.cfq);
+				AntHeight->Text = StrDbl(env.antheight);
+				PBoxPtn->Invalidate();
+			}
+			else if( Page->ActivePage == TabSheet1 ){		// ワイヤ定義
 				Grid2->Invalidate();
 				Grid4->Invalidate();
 			}
@@ -3967,7 +4004,7 @@ void __fastcall TMainWnd::WaveSelClick(TObject *Sender)
 	if( exeenv.Wave != WaveSel->ItemIndex ){
 		exeenv.Wave = WaveSel->ItemIndex;
 		if( res.PtnF ){
-			DrawPtn();
+			PBoxPtn->Invalidate();
 		}
 	}
 }
@@ -3993,7 +4030,7 @@ void __fastcall TMainWnd::KC2Click(TObject *Sender)
 		SetWaitCursor();
 		FILE *fp = fopen(AnsiString(SaveDialog->FileName).c_str(), "wt");
 		if( fp != NULL ){
-			exeenv.pCurFile = (CURFILE *)new BYTE[sizeof(CURFILE)*env.pmax];
+			exeenv.pCurFile = new CURFILE[env.pmax];
 			memset(exeenv.pCurFile, 0, sizeof(CURFILE)*env.pmax);
 			exeenv.CalcLog = 0;		// ログ表示ＯＦＦ
 			SaveCurrent();
@@ -4012,7 +4049,7 @@ void __fastcall TMainWnd::KC2Click(TObject *Sender)
 				}
 			}
 			fclose(fp);
-			delete exeenv.pCurFile;
+			delete[] exeenv.pCurFile;
 			exeenv.pCurFile = NULL;
 		}
 		else {

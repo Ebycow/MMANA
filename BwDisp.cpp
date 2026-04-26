@@ -18,6 +18,7 @@
 //---------------------------------------------------------------------
 #include <vcl.h>
 #include <Printers.hpp>
+#include <string.h>
 #pragma hdrstop
 
 #include "BwDisp.h"
@@ -27,10 +28,43 @@
 #pragma resource "*.dfm"
 #define MATCHINFO	"マッチング: %s"
 //TBwDispDlg *BwDispDlg;
+static void __fastcall BwTrace(const char *text)
+{
+	char exePath[MAX_PATH];
+	GetModuleFileNameA(NULL, exePath, sizeof(exePath));
+	char *slash = strrchr(exePath, '\\');
+	if( slash != NULL ){
+		*slash = '\0';
+	}
+	else {
+		strcpy(exePath, ".");
+	}
+	char dumpDir[MAX_PATH];
+	sprintf(dumpDir, "%s\\CrashDumps", exePath);
+	CreateDirectoryA(dumpDir, NULL);
+	char logPath[MAX_PATH];
+	sprintf(logPath, "%s\\bw_trace.log", dumpDir);
+	HANDLE file = CreateFileA(logPath, GENERIC_WRITE, FILE_SHARE_READ, NULL,
+		OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if( file == INVALID_HANDLE_VALUE ) return;
+	SetFilePointer(file, 0, NULL, FILE_END);
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	char line[512];
+	sprintf(line, "%04u/%02u/%02u %02u:%02u:%02u pid=%lu %s\r\n",
+		st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond,
+		GetCurrentProcessId(), text);
+	DWORD written = 0;
+	WriteFile(file, line, lstrlenA(line), &written, NULL);
+	CloseHandle(file);
+}
+static int BwResettingUDFreq = 0;
+static int BwResettingUDMatch = 0;
 //---------------------------------------------------------------------
 __fastcall TBwDispDlg::TBwDispDlg(TComponent* AOwner)
 	: TForm(AOwner)
 {
+	BwTrace("ctor-enter");
 	pColorTable = NULL;
 	CalcF = FALSE;
 	AntL = AntC = AntQ = AntW = AntF = 0.0;
@@ -45,6 +79,7 @@ __fastcall TBwDispDlg::TBwDispDlg(TComponent* AOwner)
 	FirstUD = FirstUDM = 0;
 	DrawPtnH.SetRect(PBPtn->Canvas, 0, 0, PBPtn->Width / 2 - 2, PBPtn->Height);
 	DrawPtnV.SetRect(PBPtn->Canvas, (PBPtn->Width/2) + 2, 0, PBPtn->Width, PBPtn->Height);
+	BwTrace("ctor-leave");
 }
 //---------------------------------------------------------------------------
 void __fastcall TBwDispDlg::UpdateView(int bwflag)
@@ -173,6 +208,7 @@ int __fastcall TBwDispDlg::CalcSim(void)
 	double xb = bwct.bw[nn].JX;
 	double gb = bwct.bw[nn].GA;
 	double fbb = bwct.bw[nn].FB;
+	if( fb == fa ) return FALSE;
 	double L = ((fa * xa) - (fb * xb))/((fa*fa - fb*fb)*2*PAI);
 	double x = (2*PAI*fa*L - xa);
 	if( x == 0.0 ) x = NULLV;
@@ -210,25 +246,42 @@ int __fastcall TBwDispDlg::CalcSim(void)
 //---------------------------------------------------------------------------
 int __fastcall TBwDispDlg::Execute(ANTDEF *p, TColor *pc)
 {
+	BwTrace("execute-enter");
 	pColorTable = pc;
+	BwTrace("execute-after-color");
 	LimitSWRChange(NULL);
-	UDFreq->Associate = EditCenter;
-	UDMatch->Associate = MatchFreq;
+	BwTrace("execute-after-limit");
 	SaveRes.SetRes(&res);
+	BwTrace("execute-after-saveres");
 	ap = p;
+	BwTrace("execute-after-ap");
 	SaveFQ = ap->cfq;
+	BwTrace("execute-after-savefq");
 	SelMatch->ItemIndex = exeenv.BwMatch;
-	UDFreq->Associate = NULL;
+	BwTrace("execute-after-selmatch");
+	BwResettingUDFreq = 1;
 	UDFreq->Position = 50;
+	BwResettingUDFreq = 0;
+	BwTrace("execute-after-udfreq-pos");
 	EditCenter->Text = StrDbl(res.Bwc.fo);
-	UDMatch->Associate = NULL;
+	BwTrace("execute-after-editcenter");
+	BwResettingUDMatch = 1;
 	UDMatch->Position = 50;
+	BwResettingUDMatch = 0;
+	BwTrace("execute-after-udmatch-pos");
 	MatchFreq->Text = StrDbl(res.Bwc.MatchData.FQ);
+	BwTrace("execute-after-matchfreq");
 	MatchCenter->Checked = res.Bwc.MatchCenter;
+	BwTrace("execute-after-matchcenter");
 	HalfAddCnt->Text = res.Bwc.bwsdim;
+	BwTrace("execute-after-halfaddcnt");
+	BwTrace("execute-before-calcsim");
 	CalcSim();
+	BwTrace("execute-before-updateview");
 	UpdateView(TRUE);
+	BwTrace("execute-before-showmodal");
 	ShowModal();
+	BwTrace("execute-after-showmodal");
 	double fq;
 	Calc(fq, AnsiString(MatchFreq->Text).c_str());
 	if( res.Bwc.MatchData.FQ != fq ){
@@ -244,6 +297,7 @@ int __fastcall TBwDispDlg::Execute(ANTDEF *p, TColor *pc)
 			MainWnd->Grid1->Invalidate();
 		}
 	}
+	BwTrace("execute-leave");
 	return CalcF;
 }
 //---------------------------------------------------------------------
@@ -276,6 +330,7 @@ void __fastcall TBwDispDlg::TryBtnClick(TObject *Sender)
 	else {										// キャパシティブの時
 		N = res.Bwc.bo + 1;
 	}
+	if( (N < 0) || (N >= BWMAX) ) return;
 	ap->cfq = res.Bwc.bw[N].FQ;
 	if( MainWnd->SetStackAnt() == TRUE ){
 		res.IncResP();
@@ -957,7 +1012,10 @@ void __fastcall TBwDispDlg::UDFreqClick(TObject *Sender, TUDBtnType Button)
 //---------------------------------------------------------------------------
 void __fastcall TBwDispDlg::UDFreqChanging(TObject *Sender, bool &AllowChange)
 {
+	if( BwResettingUDFreq ) return;
+	BwResettingUDFreq = 1;
 	UDFreq->Position = 50;
+	BwResettingUDFreq = 0;
 }
 //---------------------------------------------------------------------------
 void __fastcall TBwDispDlg::UDMatchClick(TObject *Sender, TUDBtnType Button)
@@ -985,7 +1043,10 @@ void __fastcall TBwDispDlg::UDMatchClick(TObject *Sender, TUDBtnType Button)
 //---------------------------------------------------------------------------
 void __fastcall TBwDispDlg::UDMatchChanging(TObject *Sender, bool &AllowChange)
 {
+	if( BwResettingUDMatch ) return;
+	BwResettingUDMatch = 1;
 	UDMatch->Position = 50;
+	BwResettingUDMatch = 0;
 }
 //---------------------------------------------------------------------------
 // 共振周波数を計算
@@ -1070,6 +1131,8 @@ void __fastcall TBwDispDlg::GridDrawCell(TObject *Sender, int Col, int Row,
 // パターン図の表示
 void __fastcall TBwDispDlg::PBPtnPaint(TObject *Sender)
 {
+	DrawPtnH.SetRect(PBPtn->Canvas, 0, 0, PBPtn->Width / 2 - 2, PBPtn->Height);
+	DrawPtnV.SetRect(PBPtn->Canvas, (PBPtn->Width/2) + 2, 0, PBPtn->Width, PBPtn->Height);
 	DrawPtnH.DrawAngle(2);
 	DrawPtnV.DrawAngle(2);
 	if( !res.Bwc.bcnt ) return;

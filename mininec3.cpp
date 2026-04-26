@@ -2461,22 +2461,22 @@ void ClearNEC(void)
 
 void DeleteNEC(void)
 {
-	delete aX;
-	delete aY;
-	delete aZ;
+	delete[] aX;
+	delete[] aY;
+	delete[] aZ;
 
-	delete aCi;
-	delete aCI;
-	delete aCR;
-	delete aPi;
-	delete aWi;
-	delete aZR;
-	delete aZI;
+	delete[] aCi;
+	delete[] aCI;
+	delete[] aCR;
+	delete[] aPi;
+	delete[] aWi;
+	delete[] aZR;
+	delete[] aZI;
 
-	delete aEi;
-	delete aEf;
-	delete aL;
-	delete aM;
+	delete[] aEi;
+	delete[] aEf;
+	delete[] aL;
+	delete[] aM;
 	ClearNEC();
 }
 

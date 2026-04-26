@@ -375,6 +375,7 @@ private:	// ƒ†[ƒU[éŒ¾
 	void __fastcall WriteRegister(void);
 
 	void __fastcall UpdateAllViews(void);
+	void __fastcall UpdateAntPreview(void);
 	void __fastcall UpdateCount(void);
 
 	void __fastcall InitAntDef(void);
