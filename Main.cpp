@@ -145,6 +145,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntWireSelectionCount = 0;
 	PBoxAntClickCtrl = FALSE;
 	memset(AntWireSelected, 0, sizeof(AntWireSelected));
+	AntGizmoShowSnapVertices = FALSE;
 	CreateAntDrawControls();
 	EntryAlignControl();
 	pACal = NULL;
@@ -2432,6 +2433,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	}
 	PBoxAnt->Canvas->Pen->Width = 1;
 	PaintAntEditGizmo();
+	PaintAntSnapVertices();
 	PaintAntDrawPreview();
 	double	cx, cy, cz;
 	if( pCalAnt->wmax && DspPlus->Checked ){		// セグメント分割の表示
@@ -2737,6 +2739,7 @@ void __fastcall TMainWnd::RedoAntEdit(void)
 void __fastcall TMainWnd::ClearAntWireSelection(void)
 {
 	memset(AntWireSelected, 0, sizeof(AntWireSelected));
+	AntGizmoShowSnapVertices = FALSE;
 	AntWireSelectionCount = 0;
 }
 //---------------------------------------------------------------------------
@@ -3234,6 +3237,94 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::PaintAntSnapVertices(void)
+{
+	if( !AntGizmoShowSnapVertices ) return;
+	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
+	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
+	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
+	PBoxAnt->Canvas->Pen->Color = clFuchsia;
+	PBoxAnt->Canvas->Brush->Color = clFuchsia;
+	PBoxAnt->Canvas->Brush->Style = bsSolid;
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( IsAntWireSelected(i) ) continue;
+		int x, y;
+		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, x, y);
+		PBoxAnt->Canvas->Ellipse(x-3, y-3, x+4, y+4);
+		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, x, y);
+		PBoxAnt->Canvas->Ellipse(x-3, y-3, x+4, y+4);
+	}
+	PBoxAnt->Canvas->Pen->Color = oldColor;
+	PBoxAnt->Canvas->Brush->Color = oldBrush;
+	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ)
+{
+	int found = FALSE;
+	int best = (12 * 12) + 1;
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( IsAntWireSelected(i) ) continue;
+		int sx, sy;
+		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, sx, sy);
+		int dx = sx - X;
+		int dy = sy - Y;
+		int d = (dx * dx) + (dy * dy);
+		if( d < best ){
+			best = d;
+			WX = ant.wdef[i].X1;
+			WY = ant.wdef[i].Y1;
+			WZ = ant.wdef[i].Z1;
+			found = TRUE;
+		}
+		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, sx, sy);
+		dx = sx - X;
+		dy = sy - Y;
+		d = (dx * dx) + (dy * dy);
+		if( d < best ){
+			best = d;
+			WX = ant.wdef[i].X2;
+			WY = ant.wdef[i].Y2;
+			WZ = ant.wdef[i].Z2;
+			found = TRUE;
+		}
+	}
+	return found;
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::FindAntSnapEdge(int X, int Y, double &WX, double &WY, double &WZ)
+{
+	int found = FALSE;
+	double best = (12.0 * 12.0) + 1.0;
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( IsAntWireSelected(i) ) continue;
+		int x1, y1, x2, y2;
+		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, x1, y1);
+		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, x2, y2);
+		double vx = double(x2 - x1);
+		double vy = double(y2 - y1);
+		double len2 = (vx * vx) + (vy * vy);
+		double t = 0.0;
+		if( len2 > 0.0 ){
+			t = ((double(X - x1) * vx) + (double(Y - y1) * vy)) / len2;
+			if( t < 0.0 ) t = 0.0;
+			else if( t > 1.0 ) t = 1.0;
+		}
+		double px = double(x1) + (vx * t);
+		double py = double(y1) + (vy * t);
+		double dx = px - double(X);
+		double dy = py - double(Y);
+		double d = (dx * dx) + (dy * dy);
+		if( d < best ){
+			best = d;
+			WX = ant.wdef[i].X1 + ((ant.wdef[i].X2 - ant.wdef[i].X1) * t);
+			WY = ant.wdef[i].Y1 + ((ant.wdef[i].Y2 - ant.wdef[i].Y1) * t);
+			WZ = ant.wdef[i].Z1 + ((ant.wdef[i].Z2 - ant.wdef[i].Z1) * t);
+			found = TRUE;
+		}
+	}
+	return found;
+}//---------------------------------------------------------------------------
 int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 {
 	if( AntDrawMode || !exeenv.Ant3D ) return FALSE;
@@ -3327,16 +3418,73 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 	return TRUE;
 }
 //---------------------------------------------------------------------------
-void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y)
+void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y, TShiftState Shift)
 {
 	if( !AntGizmoDrag ) return;
 	if( (AntGizmoWire < 0) || (AntGizmoWire >= ant.wmax) ) return;
 	double len2 = (AntGizmoAxisDX * AntGizmoAxisDX) + (AntGizmoAxisDY * AntGizmoAxisDY);
 	if( len2 <= 0.0 ) return;
 
-	double d = (double(X - AntGizmoMouseX) * AntGizmoAxisDX +
-		double(Y - AntGizmoMouseY) * AntGizmoAxisDY) / len2;
+	double mx = double(X - AntGizmoMouseX);
+	double my = double(Y - AntGizmoMouseY);
+	bool ctrl = Shift.Contains(ssCtrl);
+	bool shift = Shift.Contains(ssShift);
+	AntGizmoShowSnapVertices = shift && !ctrl;
+	if( ctrl && shift ){
+		if( ABS(mx) >= ABS(my) ) my = 0.0;
+		else mx = 0.0;
+	}
+	double d = ((mx * AntGizmoAxisDX) + (my * AntGizmoAxisDY)) / len2;
 	WDEF *wp = &ant.wdef[AntGizmoWire];
+	double sx = AntGizmoOldW.X1;
+	double sy = AntGizmoOldW.Y1;
+	double sz = AntGizmoOldW.Z1;
+	if( AntGizmoEndpoint == 1 ){
+		sx = AntGizmoOldW.X2;
+		sy = AntGizmoOldW.Y2;
+		sz = AntGizmoOldW.Z2;
+	}
+	else if( AntGizmoEndpoint == 2 ){
+		sx = (AntGizmoOldW.X1 + AntGizmoOldW.X2) / 2.0;
+		sy = (AntGizmoOldW.Y1 + AntGizmoOldW.Y2) / 2.0;
+		sz = (AntGizmoOldW.Z1 + AntGizmoOldW.Z2) / 2.0;
+	}
+	else if( AntGizmoEndpoint == 3 ){
+		sx = sy = sz = 0.0;
+		int cnt = 0;
+		for( int i = 0; i < ant.wmax; i++ ){
+			if( !IsAntWireSelected(i) ) continue;
+			sx += (AntGizmoOldSelected[i].X1 + AntGizmoOldSelected[i].X2) / 2.0;
+			sy += (AntGizmoOldSelected[i].Y1 + AntGizmoOldSelected[i].Y2) / 2.0;
+			sz += (AntGizmoOldSelected[i].Z1 + AntGizmoOldSelected[i].Z2) / 2.0;
+			cnt++;
+		}
+		if( cnt > 0 ){
+			sx /= double(cnt);
+			sy /= double(cnt);
+			sz /= double(cnt);
+		}
+	}
+	double ax = (AntGizmoAxis == ANT_GIZMO_AXIS_X) ? 1.0 : 0.0;
+	double ay = (AntGizmoAxis == ANT_GIZMO_AXIS_Y) ? 1.0 : 0.0;
+	double az = (AntGizmoAxis == ANT_GIZMO_AXIS_Z) ? 1.0 : 0.0;
+	int rx, ry;
+	AntWorldToScreen(sx + (ax * d), sy + (ay * d), sz + (az * d), rx, ry);
+	double tx, ty, tz;
+	if( shift && !ctrl && (FindAntSnapVertex(rx, ry, tx, ty, tz) == TRUE) ){
+		switch( AntGizmoAxis ){
+			case ANT_GIZMO_AXIS_X: d = tx - sx; break;
+			case ANT_GIZMO_AXIS_Y: d = ty - sy; break;
+			case ANT_GIZMO_AXIS_Z: d = tz - sz; break;
+		}
+	}
+	else if( ctrl && !shift && (FindAntSnapEdge(rx, ry, tx, ty, tz) == TRUE) ){
+		switch( AntGizmoAxis ){
+			case ANT_GIZMO_AXIS_X: d = tx - sx; break;
+			case ANT_GIZMO_AXIS_Y: d = ty - sy; break;
+			case ANT_GIZMO_AXIS_Z: d = tz - sz; break;
+		}
+	}
 	if( AntGizmoEndpoint == 0 ){
 		wp->X1 = AntGizmoOldW.X1;
 		wp->Y1 = AntGizmoOldW.Y1;
@@ -3387,6 +3535,7 @@ void __fastcall TMainWnd::EndAntGizmoDrag(void)
 	int w = AntGizmoWire;
 	AntGizmoDrag = FALSE;
 	AntGizmoWire = -1;
+	AntGizmoShowSnapVertices = FALSE;
 	PBoxAnt->Cursor = AntDrawMode ? crCross : crDefault;
 	if( (w >= 0) && (w < ant.wmax) ){
 		if( AntGizmoEndpoint == 3 ){
@@ -3527,7 +3676,7 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y)
 {
 	if( AntGizmoDrag ){
-		UpdateAntGizmoDrag(X, Y);
+		UpdateAntGizmoDrag(X, Y, Shift);
 		return;
 	}
 	if( AntDrawMode ){

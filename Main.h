@@ -460,9 +460,12 @@ private:	// ユーザー宣言
 	int __fastcall GetAntGizmoAxisScreen(double WX, double WY, double WZ, int Axis, int Len,
 		int &X1, int &Y1, int &X2, int &Y2, double &DX, double &DY);
 	void __fastcall PaintAntEditGizmo(void);
+	void __fastcall PaintAntSnapVertices(void);
+	int __fastcall FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ);
+	int __fastcall FindAntSnapEdge(int X, int Y, double &WX, double &WY, double &WZ);
 	int __fastcall HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis);
 	int __fastcall BeginAntGizmoDrag(int X, int Y);
-	void __fastcall UpdateAntGizmoDrag(int X, int Y);
+	void __fastcall UpdateAntGizmoDrag(int X, int Y, TShiftState Shift);
 	void __fastcall EndAntGizmoDrag(void);
 	void __fastcall PaintAntDrawPreview(void);
 	void __fastcall AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2);
@@ -508,6 +511,7 @@ private:	// ユーザー宣言
 	int	AntWireSelectionCount;
 	int	PBoxAntClickCtrl;
 	WDEF	AntGizmoOldSelected[WMAX];
+	int	AntGizmoShowSnapVertices;
 	TMenuItem	*KMirrorSelectedX;
 	TMenuItem	*KMirrorSelectedY;
 	TMenuItem	*KMirrorSelectedZ;
