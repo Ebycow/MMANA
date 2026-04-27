@@ -436,6 +436,13 @@ private:	// ユーザー宣言
 	void __fastcall RedoAntEdit(void);
 	void __fastcall CopyAntWires(void);
 	void __fastcall PasteAntWires(void);
+	void __fastcall ClearAntWireSelection(void);
+	void __fastcall SelectOnlyAntWire(int Wire);
+	void __fastcall ToggleAntWireSelection(int Wire);
+	void __fastcall SelectAllAntWires(void);
+	int __fastcall GetAntSelectionCount(void);
+	int __fastcall IsAntWireSelected(int Wire);
+	int __fastcall GetAntSelectionCenter(double &X, double &Y, double &Z);
 	void __fastcall CreateAntDrawControls(void);
 	void __fastcall LayoutAntDrawControls(void);
 	void __fastcall UpdateAntDrawControls(void);
@@ -493,6 +500,10 @@ private:	// ユーザー宣言
 	TStringList	*AntRedoList;
 	WDEF	AntWireClipboard[WMAX];
 	int	AntWireClipboardCount;
+	int	AntWireSelected[WMAX];
+	int	AntWireSelectionCount;
+	int	PBoxAntClickCtrl;
+	WDEF	AntGizmoOldSelected[WMAX];
 
 	int __fastcall DrawPtn(void);
 

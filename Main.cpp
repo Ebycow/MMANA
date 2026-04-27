@@ -139,6 +139,9 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntUndoList = new TStringList;
 	AntRedoList = new TStringList;
 	AntWireClipboardCount = 0;
+	AntWireSelectionCount = 0;
+	PBoxAntClickCtrl = FALSE;
+	memset(AntWireSelected, 0, sizeof(AntWireSelected));
 	CreateAntDrawControls();
 	EntryAlignControl();
 	pACal = NULL;
@@ -219,7 +222,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	KMmUnit->Checked = exeenv.MmSel;
 	KMmUnit->OnClick = MmUnitClick;
 	KV1->Add(KMmUnit);
-	K17->ShortCut = Vcl::Menus::ShortCut(VK_F, TShiftState());
+	K17->ShortCut = Vcl::Menus::ShortCut('F', TShiftState());
 
 	ResColors[0] = clBlack;	//	黒色
 	ResColors[1] = clMaroon;	//	栗色
@@ -505,7 +508,12 @@ void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
 			Handled = TRUE;
 			return;
 		}
-		if( Msg.wParam == VK_F ){
+		if( ctrl && (Msg.wParam == 'A') ){
+			SelectAllAntWires();
+			Handled = TRUE;
+			return;
+		}
+		if( Msg.wParam == 'F' ){
 			K17Click(NULL);
 			Handled = TRUE;
 			return;
@@ -2366,12 +2374,12 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 
 	// ワイヤの表示
 	PBoxAnt->Canvas->Pen->Color = clBlack;
-	int sel = Grid2->Row - 1;
 	int i;
 	WDEF *wp = pCalAnt->wdef;
 	for( i = 0; i < pCalAnt->wmax; i++, wp++ ){
 		PBoxAnt->Canvas->Pen->Color = wp->R ? clBlack : clGray;
-		PBoxAnt->Canvas->Pen->Width = ((i == sel) ? 2 : 1);
+		int sw = ant.wmax ? (i % ant.wmax) : i;
+		PBoxAnt->Canvas->Pen->Width = IsAntWireSelected(sw) ? 2 : 1;
 		CalcAntViewXY(x, y, deg, zdeg, wp->X1, wp->Y1, wp->Z1);
 		X = int((x * sc)) + Xc;
 		Y = Yc - int((y * sc));
@@ -2565,7 +2573,8 @@ int __fastcall TMainWnd::SelectWire(int X, int Y)
 	}
 	if( mw != 9 ){
 		if( mi >= ant.wmax ) mi %= ant.wmax;
-		Grid2->Row = mi + 1;
+		if( PBoxAntClickCtrl ) ToggleAntWireSelection(mi);
+		else SelectOnlyAntWire(mi);
 		r = TRUE;
 	}
 	return r;
@@ -2705,6 +2714,87 @@ void __fastcall TMainWnd::UndoAntEdit(void)
 void __fastcall TMainWnd::RedoAntEdit(void)
 {
 	if( RestoreAntSnapshot(AntRedoList, AntUndoList) != TRUE ) ::MessageBeep(MB_ICONEXCLAMATION);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::ClearAntWireSelection(void)
+{
+	memset(AntWireSelected, 0, sizeof(AntWireSelected));
+	AntWireSelectionCount = 0;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::SelectOnlyAntWire(int Wire)
+{
+	ClearAntWireSelection();
+	if( (Wire >= 0) && (Wire < ant.wmax) ){
+		AntWireSelected[Wire] = TRUE;
+		AntWireSelectionCount = 1;
+		Grid2->Row = Wire + 1;
+	}
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::ToggleAntWireSelection(int Wire)
+{
+	if( (Wire < 0) || (Wire >= ant.wmax) ) return;
+	if( AntWireSelectionCount == 0 ){
+		int cur = Grid2->Row - 1;
+		if( (cur >= 0) && (cur < ant.wmax) && (cur != Wire) ){
+			AntWireSelected[cur] = TRUE;
+			AntWireSelectionCount = 1;
+		}
+	}
+	if( AntWireSelected[Wire] ){
+		AntWireSelected[Wire] = FALSE;
+		if( AntWireSelectionCount > 0 ) AntWireSelectionCount--;
+	}
+	else {
+		AntWireSelected[Wire] = TRUE;
+		AntWireSelectionCount++;
+		Grid2->Row = Wire + 1;
+	}
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::SelectAllAntWires(void)
+{
+	if( ant.wmax <= 0 ) return;
+	for( int i = 0; i < ant.wmax; i++ ) AntWireSelected[i] = TRUE;
+	AntWireSelectionCount = ant.wmax;
+	Grid2->Row = 1;
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::GetAntSelectionCount(void)
+{
+	if( AntWireSelectionCount > 0 ) return AntWireSelectionCount;
+	int w = Grid2->Row - 1;
+	return ((w >= 0) && (w < ant.wmax)) ? 1 : 0;
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::IsAntWireSelected(int Wire)
+{
+	if( (Wire < 0) || (Wire >= ant.wmax) ) return FALSE;
+	if( AntWireSelectionCount > 0 ) return AntWireSelected[Wire];
+	return (Wire == (Grid2->Row - 1));
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::GetAntSelectionCenter(double &X, double &Y, double &Z)
+{
+	int cnt = 0;
+	X = Y = Z = 0.0;
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( !IsAntWireSelected(i) ) continue;
+		WDEF *wp = &ant.wdef[i];
+		X += (wp->X1 + wp->X2) / 2.0;
+		Y += (wp->Y1 + wp->Y2) / 2.0;
+		Z += (wp->Z1 + wp->Z2) / 2.0;
+		cnt++;
+	}
+	if( cnt <= 0 ) return FALSE;
+	X /= double(cnt);
+	Y /= double(cnt);
+	Z /= double(cnt);
+	return TRUE;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::CopyAntWires(void)
@@ -3005,6 +3095,36 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
 	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
 
+	if( GetAntSelectionCount() > 1 ){
+		double wx, wy, wz;
+		if( GetAntSelectionCenter(wx, wy, wz) != TRUE ) return;
+		int sx, sy;
+		AntWorldToScreen(wx, wy, wz, sx, sy);
+		PBoxAnt->Canvas->Pen->Color = clBlack;
+		PBoxAnt->Canvas->Pen->Style = psSolid;
+		PBoxAnt->Canvas->Pen->Width = 1;
+		PBoxAnt->Canvas->Brush->Style = bsClear;
+		PBoxAnt->Canvas->Rectangle(sx-5, sy-5, sx+6, sy+6);
+		for( int axis = 0; axis < 3; axis++ ){
+			int x1, y1, x2, y2;
+			double dx, dy;
+			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 46, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
+			switch( axis ){
+				case ANT_GIZMO_AXIS_X: PBoxAnt->Canvas->Pen->Color = clRed; break;
+				case ANT_GIZMO_AXIS_Y: PBoxAnt->Canvas->Pen->Color = clGreen; break;
+				case ANT_GIZMO_AXIS_Z: PBoxAnt->Canvas->Pen->Color = clBlue; break;
+			}
+			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoEndpoint == 3) && (AntGizmoAxis == axis)) ? 3 : 2;
+			DrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
+		}
+		PBoxAnt->Canvas->Pen->Color = oldColor;
+		PBoxAnt->Canvas->Pen->Style = oldStyle;
+		PBoxAnt->Canvas->Pen->Width = oldWidth;
+		PBoxAnt->Canvas->Brush->Color = oldBrush;
+		PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+		return;
+	}
+
 	WDEF *wp = &ant.wdef[w];
 	for( int endp = 0; endp < 3; endp++ ){
 		double wx = endp ? wp->X2 : wp->X1;
@@ -3051,9 +3171,28 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 	int w = Grid2->Row - 1;
 	if( (w < 0) || (w >= ant.wmax) ) return FALSE;
 
-	WDEF *wp = &ant.wdef[w];
 	double best = (8.0 * 8.0) + 1.0;
 	int found = FALSE;
+	if( GetAntSelectionCount() > 1 ){
+		double wx, wy, wz;
+		if( GetAntSelectionCenter(wx, wy, wz) == TRUE ){
+			for( int axis = 0; axis < 3; axis++ ){
+				int x1, y1, x2, y2;
+				double dx, dy;
+				if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 46, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
+				double d = SqDistPointToSegment(X, Y, x1, y1, x2, y2);
+				if( d < best ){
+					best = d;
+					Endpoint = 3;
+					Axis = axis;
+					found = TRUE;
+				}
+			}
+		}
+		return found;
+	}
+
+	WDEF *wp = &ant.wdef[w];
 	for( int endp = 0; endp < 3; endp++ ){
 		double wx = endp ? wp->X2 : wp->X1;
 		double wy = endp ? wp->Y2 : wp->Y1;
@@ -3091,7 +3230,10 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 	double wx = endpoint ? wp->X2 : wp->X1;
 	double wy = endpoint ? wp->Y2 : wp->Y1;
 	double wz = endpoint ? wp->Z2 : wp->Z1;
-	if( endpoint == 2 ){
+	if( endpoint == 3 ){
+		GetAntSelectionCenter(wx, wy, wz);
+	}
+	else if( endpoint == 2 ){
 		wx = (wp->X1 + wp->X2) / 2.0;
 		wy = (wp->Y1 + wp->Y2) / 2.0;
 		wz = (wp->Z1 + wp->Z2) / 2.0;
@@ -3109,6 +3251,7 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 	AntGizmoAxisDX = dx;
 	AntGizmoAxisDY = dy;
 	memcpy(&AntGizmoOldW, wp, sizeof(WDEF));
+	memcpy(AntGizmoOldSelected, ant.wdef, sizeof(AntGizmoOldSelected));
 	PBoxAntIgnoreClick = TRUE;
 	PBoxAnt->Cursor = crSizeAll;
 	PBoxAnt->Invalidate();
@@ -3145,12 +3288,23 @@ void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y)
 			case ANT_GIZMO_AXIS_Z: wp->Z2 += d; break;
 		}
 	}
-	else {
+	else if( AntGizmoEndpoint == 2 ){
 		memcpy(wp, &AntGizmoOldW, sizeof(WDEF));
 		switch( AntGizmoAxis ){
 			case ANT_GIZMO_AXIS_X: wp->X1 += d; wp->X2 += d; break;
 			case ANT_GIZMO_AXIS_Y: wp->Y1 += d; wp->Y2 += d; break;
 			case ANT_GIZMO_AXIS_Z: wp->Z1 += d; wp->Z2 += d; break;
+		}
+	}
+	else {
+		for( int i = 0; i < ant.wmax; i++ ){
+			if( !IsAntWireSelected(i) ) continue;
+			memcpy(&ant.wdef[i], &AntGizmoOldSelected[i], sizeof(WDEF));
+			switch( AntGizmoAxis ){
+				case ANT_GIZMO_AXIS_X: ant.wdef[i].X1 += d; ant.wdef[i].X2 += d; break;
+				case ANT_GIZMO_AXIS_Y: ant.wdef[i].Y1 += d; ant.wdef[i].Y2 += d; break;
+				case ANT_GIZMO_AXIS_Z: ant.wdef[i].Z1 += d; ant.wdef[i].Z2 += d; break;
+			}
 		}
 	}
 	ant.Edit = ant.Flag = 1;
@@ -3166,6 +3320,10 @@ void __fastcall TMainWnd::EndAntGizmoDrag(void)
 	AntGizmoWire = -1;
 	PBoxAnt->Cursor = AntDrawMode ? crCross : crDefault;
 	if( (w >= 0) && (w < ant.wmax) ){
+		if( AntGizmoEndpoint == 3 ){
+			UpdateAntData();
+			return;
+		}
 		if( ChkWith->Checked == TRUE ){
 			AdjWireChen(ant.wdef, ant.wmax, &ant.wdef[w], &AntGizmoOldW);
 		}
@@ -3250,6 +3408,7 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 {
 	PBoxAntMX = X;
 	PBoxAntMY = Y;
+	PBoxAntClickCtrl = Shift.Contains(ssCtrl) ? TRUE : FALSE;
 	if( (Button == mbLeft) && BeginAntGizmoDrag(X, Y) == TRUE ){
 		PBoxAntDragButton = -1;
 		PBoxAntDragAction = ANT_MOUSE_NONE;
