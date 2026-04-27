@@ -2117,7 +2117,7 @@ void DrawWirePara(TPaintBox *tp, WDEF *wp, int w)
 
 void DrawWirePara(TPaintBox *tp, ANTDEF *ap, int w)
 {
-	if( w < ap->wmax ){
+	if( (w >= 0) && (w < ap->wmax) ){
 		DrawWirePara(tp, &ap->wdef[w], w);
     }
 }

@@ -155,6 +155,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	QuadSavedClientWidth = QuadSavedClientHeight = 0;
 	InitQuadLayout();
 	Grid2->Options = Grid2->Options << goAlwaysShowEditor;
+	Grid2->OnSelectCell = Grid2SelectCell;
 	Grid3->Options = Grid3->Options << goAlwaysShowEditor;
 	Grid4->Options = Grid4->Options << goAlwaysShowEditor;
 	Application->OnIdle = OnIdle;
@@ -364,7 +365,7 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 		}
 #endif
 	}
-	if( (f == TRUE) && (ActiveControl == Grid2) && (Grid2->Row <= ant.wmax) ){
+	if( (f == TRUE) && (ActiveControl == Grid2) && (GetAntSelectionCount() > 0) && (Grid2->Row > 0) && (Grid2->Row <= ant.wmax) ){
 		K27->Enabled = TRUE;		// 検索と置換
 		KR1->Enabled = TRUE;		// 検索と置換
 		K35->Enabled = TRUE;		// 始点と終点の入れ替え
@@ -380,7 +381,8 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 	K14->Enabled = f;
 	f = FALSE;
 	if( (Page->ActivePage == TabSheet1)||(Page->ActivePage == TabSheet2) ){
-		if( Grid2->Row <= ant.wmax ) f = TRUE;
+		int w = Grid2->Row - 1;
+		if( (GetAntSelectionCount() > 0) && (w >= 0) && (w < ant.wmax) ) f = TRUE;
 	}
 	KT1->Enabled = f;		// 三角編集
 	KT2->Enabled = f;		// 三角編集
@@ -1224,6 +1226,16 @@ void __fastcall TMainWnd::Grid2DrawCell(TObject *Sender, int Col,     //JA7UDE 1
 	}
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::Grid2SelectCell(TObject *Sender, int Col, int Row,
+	bool &CanSelect)
+{
+	CanSelect = TRUE;
+	if( (Row > 0) && (Row <= ant.wmax) && (AntWireSelectionCount < 0) ){
+		AntWireSelectionCount = 0;
+		PBoxAnt->Invalidate();
+	}
+}
+//---------------------------------------------------------------------------
 // 給電点定義 グリッド表示
 void __fastcall TMainWnd::Grid3DrawCell(TObject *Sender, int Col, int Row,
 	TRect &Rect, TGridDrawState State)
@@ -1331,6 +1343,7 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 	int		OldWmax;
 	char	bf[64];
 
+	if( (ARow > 0) && (AntWireSelectionCount < 0) ) AntWireSelectionCount = 0;
 	if( ARow ){
 		Grid2GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
@@ -2545,7 +2558,10 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 			}
 		}
 	}
-	DrawWirePara(PBoxAnt, &ant, Grid2->Row - 1);
+	int SelWire = Grid2->Row - 1;
+	if( (GetAntSelectionCount() > 0) && (SelWire >= 0) && (SelWire < ant.wmax) ){
+		DrawWirePara(PBoxAnt, &ant, SelWire);
+	}
 	if( (ant.StackH > 1)||(ant.StackV > 1) ){
 		char bf[32];
 		sprintf(bf, "%u×%u スタック", ant.StackH, ant.StackV);
@@ -2749,6 +2765,12 @@ void __fastcall TMainWnd::ClearAntWireSelection(void)
 	AntWireSelectionCount = 0;
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::DeselectAntWireSelection(void)
+{
+	ClearAntWireSelection();
+	AntWireSelectionCount = -1;
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::SelectOnlyAntWire(int Wire)
 {
 	ClearAntWireSelection();
@@ -2763,7 +2785,10 @@ void __fastcall TMainWnd::SelectOnlyAntWire(int Wire)
 void __fastcall TMainWnd::ToggleAntWireSelection(int Wire)
 {
 	if( (Wire < 0) || (Wire >= ant.wmax) ) return;
-	if( AntWireSelectionCount == 0 ){
+	if( AntWireSelectionCount < 0 ){
+		AntWireSelectionCount = 0;
+	}
+	else if( AntWireSelectionCount == 0 ){
 		int cur = Grid2->Row - 1;
 		if( (cur >= 0) && (cur < ant.wmax) && (cur != Wire) ){
 			AntWireSelected[cur] = TRUE;
@@ -2794,6 +2819,7 @@ void __fastcall TMainWnd::SelectAllAntWires(void)
 int __fastcall TMainWnd::GetAntSelectionCount(void)
 {
 	if( AntWireSelectionCount > 0 ) return AntWireSelectionCount;
+	if( AntWireSelectionCount < 0 ) return 0;
 	int w = Grid2->Row - 1;
 	return ((w >= 0) && (w < ant.wmax)) ? 1 : 0;
 }
@@ -2802,6 +2828,7 @@ int __fastcall TMainWnd::IsAntWireSelected(int Wire)
 {
 	if( (Wire < 0) || (Wire >= ant.wmax) ) return FALSE;
 	if( AntWireSelectionCount > 0 ) return AntWireSelected[Wire];
+	if( AntWireSelectionCount < 0 ) return FALSE;
 	return (Wire == (Grid2->Row - 1));
 }
 //---------------------------------------------------------------------------
@@ -3165,8 +3192,8 @@ int __fastcall TMainWnd::GetAntGizmoAxisScreen(double WX, double WY, double WZ, 
 void __fastcall TMainWnd::PaintAntEditGizmo(void)
 {
 	if( AntDrawMode || !exeenv.Ant3D ) return;
-	int w = Grid2->Row - 1;
-	if( (w < 0) || (w >= ant.wmax) ) return;
+	int SelCount = GetAntSelectionCount();
+	if( SelCount <= 0 ) return;
 
 	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
 	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
@@ -3174,7 +3201,7 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
 	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
 
-	if( GetAntSelectionCount() > 1 ){
+	if( SelCount > 1 ){
 		double wx, wy, wz;
 		if( GetAntSelectionCenter(wx, wy, wz) != TRUE ) return;
 		int sx, sy;
@@ -3204,6 +3231,8 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 		return;
 	}
 
+	int w = Grid2->Row - 1;
+	if( (w < 0) || (w >= ant.wmax) ) return;
 	WDEF *wp = &ant.wdef[w];
 	for( int endp = 0; endp < 3; endp++ ){
 		double wx = endp ? wp->X2 : wp->X1;
@@ -3336,12 +3365,12 @@ int __fastcall TMainWnd::FindAntSnapEdge(int X, int Y, double &WX, double &WY, d
 int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 {
 	if( AntDrawMode || !exeenv.Ant3D ) return FALSE;
-	int w = Grid2->Row - 1;
-	if( (w < 0) || (w >= ant.wmax) ) return FALSE;
+	int SelCount = GetAntSelectionCount();
+	if( SelCount <= 0 ) return FALSE;
 
 	double best = (8.0 * 8.0) + 1.0;
 	int found = FALSE;
-	if( GetAntSelectionCount() > 1 ){
+	if( SelCount > 1 ){
 		double wx, wy, wz;
 		if( GetAntSelectionCenter(wx, wy, wz) == TRUE ){
 			int sx, sy;
@@ -3369,6 +3398,8 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 		return found;
 	}
 
+	int w = Grid2->Row - 1;
+	if( (w < 0) || (w >= ant.wmax) ) return FALSE;
 	WDEF *wp = &ant.wdef[w];
 	for( int endp = 0; endp < 3; endp++ ){
 		double wx = endp ? wp->X2 : wp->X1;
@@ -3880,8 +3911,8 @@ void __fastcall TMainWnd::PBoxAntClick(TObject *Sender)
 		PBoxAnt->Invalidate();
 	}
 	else {
-		ClearAntWireSelection();
-		if( Grid2->Row != 0 ) Grid2->Row = 0;
+		DeselectAntWireSelection();
+		Grid2->EditorMode = FALSE;
 		Grid2->Invalidate();
 		PBoxAnt->Invalidate();
 	}
@@ -3891,7 +3922,8 @@ void __fastcall TMainWnd::PBoxAntClick(TObject *Sender)
 void __fastcall TMainWnd::PBoxAntDblClick(TObject *Sender)
 {
 	if( AntDrawMode ) return;
-	if( !exeenv.CalcF && (Grid2->Row <= ant.wmax) && (KT1->Enabled == TRUE) ){
+	int w = Grid2->Row - 1;
+	if( !exeenv.CalcF && (GetAntSelectionCount() > 0) && (w >= 0) && (w < ant.wmax) && (KT1->Enabled == TRUE) ){
 		KT1Click(NULL);
 	}
 }
@@ -5401,8 +5433,13 @@ void __fastcall TMainWnd::KT1Click(TObject *Sender)
 #if 1
 	TWireEditDlg *Box = new TWireEditDlg(this);
 
+	int w = Grid2->Row - 1;
+	if( (GetAntSelectionCount() <= 0) || (w < 0) || (w >= ant.wmax) ){
+		delete Box;
+		return;
+	}
 	PushAntUndo();
-	if( Box->Execute(ant.wdef, Grid2->Row-1, ant.wmax) == TRUE ){
+	if( Box->Execute(ant.wdef, w, ant.wmax) == TRUE ){
 		UpdateAntData();
 	}
 	delete Box;
@@ -5758,12 +5795,12 @@ void __fastcall TMainWnd::KCADClick(TObject *Sender)
 	TWireCadDlg *Box = new TWireCadDlg(this);
 
 	PushAntUndo();
-	int Sel = Grid2->Row - 1;
+	int Sel = (GetAntSelectionCount() > 0) ? (Grid2->Row - 1) : -1;
 	if( Box->Execute(&ant, Sel) == TRUE ){
 		UpdateAntData();
 	}
 	delete Box;
-	if( Sel < (Grid2->RowCount - 1) ){
+	if( (Sel >= 0) && (Sel < (Grid2->RowCount - 1)) ){
 		Grid2->Row = Sel + 1;
 	}
 }
@@ -5786,9 +5823,10 @@ void __fastcall TMainWnd::UpdateAntData(void)
 // 始点と終点の入れ替え
 void __fastcall TMainWnd::K35Click(TObject *Sender)
 {
-	if( ant.wmax && Grid2->Row ){
-		PushAntUndo();
+	if( ant.wmax && (GetAntSelectionCount() > 0) && Grid2->Row ){
 		int n = Grid2->Row - 1;
+		if( (n < 0) || (n >= ant.wmax) ) return;
+		PushAntUndo();
 		double X = ant.wdef[n].X1;
 		double Y = ant.wdef[n].Y1;
 		double Z = ant.wdef[n].Z1;
@@ -6063,6 +6101,7 @@ void __fastcall TMainWnd::DelCdef(int w)
 void __fastcall TMainWnd::AddCdefClick(char c)
 {
 	int w = Grid2->Row - 1;
+	if( (GetAntSelectionCount() <= 0) || (w < 0) || (w >= ant.wmax) ) return;
 	int n = CheckCdef(NULL, w);
 	if( n != -1 ){
 		DelCdef(n+1);
@@ -6081,6 +6120,7 @@ void __fastcall TMainWnd::AddCdefClick(char c)
 void __fastcall TMainWnd::K41Click(TObject *Sender)
 {
 	int w = Grid2->Row - 1;
+	if( (GetAntSelectionCount() <= 0) || (w < 0) || (w >= ant.wmax) ) return;
 	int n = CheckCdef(NULL, w);
 	if( n != -1 ){
 		DelCdef(n+1);
@@ -6107,26 +6147,28 @@ void __fastcall TMainWnd::PopupAntPopup(TObject *Sender)
 {
 	int f1 = FALSE;		// 削除
 	int f2 = FALSE;
-	if( Grid2->Row ){
+	if( (GetAntSelectionCount() > 0) && Grid2->Row ){
 		int w = Grid2->Row - 1;
-		char c;
-		int n = CheckCdef(&c, w);
-		K42->Checked = FALSE;
-		K43->Checked = FALSE;
-		K44->Checked = FALSE;
-		if( (ant.cmax < CMAX) && ant.wdef[w].R ) f2 = TRUE;
-		if( n != -1 ){
-			f1 = TRUE;
-			switch(c){
-				case 'C':
-					K42->Checked = TRUE;
-					break;
-				case 'B':
-					K43->Checked = TRUE;
-					break;
-				case 'E':
-					K44->Checked = TRUE;
-					break;
+		if( (w >= 0) && (w < ant.wmax) ){
+			char c;
+			int n = CheckCdef(&c, w);
+			K42->Checked = FALSE;
+			K43->Checked = FALSE;
+			K44->Checked = FALSE;
+			if( (ant.cmax < CMAX) && ant.wdef[w].R ) f2 = TRUE;
+			if( n != -1 ){
+				f1 = TRUE;
+				switch(c){
+					case 'C':
+						K42->Checked = TRUE;
+						break;
+					case 'B':
+						K43->Checked = TRUE;
+						break;
+					case 'E':
+						K44->Checked = TRUE;
+						break;
+				}
 			}
 		}
 	}
@@ -6149,7 +6191,12 @@ void __fastcall TMainWnd::K47Click(TObject *Sender)
 {
 	TWCombDspDlg *Box = new TWCombDspDlg(this);
 
-	WDEF *wp = &ant.wdef[Grid2->Row-1];
+	int w = Grid2->Row - 1;
+	if( (GetAntSelectionCount() <= 0) || (w < 0) || (w >= ant.wmax) ){
+		delete Box;
+		return;
+	}
+	WDEF *wp = &ant.wdef[w];
 	PDEF *pp = FindPP(&ant, wp->R);
 	Box->Execute(&ant, pp, wp, Grid2->Row);
 	delete Box;

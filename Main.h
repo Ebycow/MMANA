@@ -217,6 +217,8 @@ __published:	// IDE 管理のコンポーネント
 	TMenuItem *K49;
 	void __fastcall Grid2DrawCell(TObject *Sender, int  Col, int Row,
 	TRect &Rect, TGridDrawState State);
+	void __fastcall Grid2SelectCell(TObject *Sender, int Col, int Row,
+	bool &CanSelect);
 	void __fastcall Grid3DrawCell(TObject *Sender, int Col, int Row, TRect &Rect,
 	TGridDrawState State);
 	void __fastcall Grid4DrawCell(TObject *Sender, int Col, int Row, TRect &Rect,
@@ -437,6 +439,7 @@ private:	// ユーザー宣言
 	void __fastcall CopyAntWires(void);
 	void __fastcall PasteAntWires(void);
 	void __fastcall ClearAntWireSelection(void);
+	void __fastcall DeselectAntWireSelection(void);
 	void __fastcall SelectOnlyAntWire(int Wire);
 	void __fastcall ToggleAntWireSelection(int Wire);
 	void __fastcall SelectAllAntWires(void);
