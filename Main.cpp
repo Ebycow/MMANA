@@ -226,7 +226,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	KMmUnit->Checked = exeenv.MmSel;
 	KMmUnit->OnClick = MmUnitClick;
 	KV1->Add(KMmUnit);
-	K17->ShortCut = Vcl::Menus::ShortCut('F', TShiftState());
+	K8->ShortCut = Vcl::Menus::ShortCut('F', TShiftState());
 	TMenuItem *NMirrorSelected = new TMenuItem(this);
 	NMirrorSelected->Caption = "-";
 	KE1->Add(NMirrorSelected);
@@ -533,7 +533,7 @@ void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
 			return;
 		}
 		if( Msg.wParam == 'F' ){
-			K17Click(NULL);
+			CalTrgBtnClick(NULL);
 			Handled = TRUE;
 			return;
 		}
@@ -2717,11 +2717,17 @@ int __fastcall TMainWnd::RestoreAntSnapshot(TStringList *From, TStringList *To)
 	AnsiString snap = From->Strings[n];
 	From->Delete(n);
 	LoadAntStrings(snap);
+	Grid2->EditorMode = FALSE;
+	Grid3->EditorMode = FALSE;
+	Grid4->EditorMode = FALSE;
 	SetAntDef();
 	ant.Edit = ant.Flag = 1;
 	exeenv.CalcLog = 1;
 	SetStackAnt();
 	res.ClearBWC();
+	Grid2->Invalidate();
+	Grid3->Invalidate();
+	Grid4->Invalidate();
 	UpdateAllViews();
 	return TRUE;
 }
@@ -2899,7 +2905,8 @@ void __fastcall TMainWnd::MirrorSelectedYClick(TObject *Sender)
 void __fastcall TMainWnd::MirrorSelectedZClick(TObject *Sender)
 {
 	MirrorSelectedWires(ANT_GIZMO_AXIS_Z);
-}//---------------------------------------------------------------------------
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::CreateAntDrawControls(void)
 {
 	if( AntDrawBtn != NULL ) return;
@@ -3324,7 +3331,8 @@ int __fastcall TMainWnd::FindAntSnapEdge(int X, int Y, double &WX, double &WY, d
 		}
 	}
 	return found;
-}//---------------------------------------------------------------------------
+}
+//---------------------------------------------------------------------------
 int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 {
 	if( AntDrawMode || !exeenv.Ant3D ) return FALSE;
@@ -3336,6 +3344,15 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 	if( GetAntSelectionCount() > 1 ){
 		double wx, wy, wz;
 		if( GetAntSelectionCenter(wx, wy, wz) == TRUE ){
+			int sx, sy;
+			AntWorldToScreen(wx, wy, wz, sx, sy);
+			int mdx = sx - X;
+			int mdy = sy - Y;
+			if( ((mdx * mdx) + (mdy * mdy)) <= (7 * 7) ){
+				Endpoint = 3;
+				Axis = -1;
+				return TRUE;
+			}
 			for( int axis = 0; axis < 3; axis++ ){
 				int x1, y1, x2, y2;
 				double dx, dy;
@@ -3361,6 +3378,15 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 			wx = (wp->X1 + wp->X2) / 2.0;
 			wy = (wp->Y1 + wp->Y2) / 2.0;
 			wz = (wp->Z1 + wp->Z2) / 2.0;
+			int sx, sy;
+			AntWorldToScreen(wx, wy, wz, sx, sy);
+			int mdx = sx - X;
+			int mdy = sy - Y;
+			if( ((mdx * mdx) + (mdy * mdy)) <= (7 * 7) ){
+				Endpoint = endp;
+				Axis = -1;
+				return TRUE;
+			}
 		}
 		for( int axis = 0; axis < 3; axis++ ){
 			int x1, y1, x2, y2;
@@ -3399,8 +3425,11 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 		wz = (wp->Z1 + wp->Z2) / 2.0;
 	}
 	int x1, y1, x2, y2;
-	double dx, dy;
-	if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) return FALSE;
+	double dx = 0.0;
+	double dy = 0.0;
+	if( axis >= 0 ){
+		if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) return FALSE;
+	}
 
 	AntGizmoDrag = TRUE;
 	AntGizmoEndpoint = endpoint;
@@ -3418,10 +3447,85 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 	return TRUE;
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::GetAntGizmoFreeDelta(int X, int Y, double &DX, double &DY, double &DZ)
+{
+	DX = DY = DZ = 0.0;
+	double sx = AntGizmoOldW.X1;
+	double sy = AntGizmoOldW.Y1;
+	double sz = AntGizmoOldW.Z1;
+	if( AntGizmoEndpoint == 2 ){
+		sx = (AntGizmoOldW.X1 + AntGizmoOldW.X2) / 2.0;
+		sy = (AntGizmoOldW.Y1 + AntGizmoOldW.Y2) / 2.0;
+		sz = (AntGizmoOldW.Z1 + AntGizmoOldW.Z2) / 2.0;
+	}
+	else if( AntGizmoEndpoint == 3 ){
+		sx = sy = sz = 0.0;
+		int cnt = 0;
+		for( int i = 0; i < ant.wmax; i++ ){
+			if( !IsAntWireSelected(i) ) continue;
+			sx += (AntGizmoOldSelected[i].X1 + AntGizmoOldSelected[i].X2) / 2.0;
+			sy += (AntGizmoOldSelected[i].Y1 + AntGizmoOldSelected[i].Y2) / 2.0;
+			sz += (AntGizmoOldSelected[i].Z1 + AntGizmoOldSelected[i].Z2) / 2.0;
+			cnt++;
+		}
+		if( cnt > 0 ){
+			sx /= double(cnt);
+			sy /= double(cnt);
+			sz /= double(cnt);
+		}
+	}
+
+	int x0, y0, xx, yx, xy, yy, xz, yz;
+	AntWorldToScreen(sx, sy, sz, x0, y0);
+	AntWorldToScreen(sx + 1.0, sy, sz, xx, yx);
+	AntWorldToScreen(sx, sy + 1.0, sz, xy, yy);
+	AntWorldToScreen(sx, sy, sz + 1.0, xz, yz);
+	double bx0 = double(xx - x0);
+	double by0 = double(yx - y0);
+	double bx1 = double(xy - x0);
+	double by1 = double(yy - y0);
+	double bx2 = double(xz - x0);
+	double by2 = double(yz - y0);
+	double mx = double(X - AntGizmoMouseX);
+	double my = double(Y - AntGizmoMouseY);
+	double a = (bx0 * bx0) + (bx1 * bx1) + (bx2 * bx2);
+	double b = (bx0 * by0) + (bx1 * by1) + (bx2 * by2);
+	double c = (by0 * by0) + (by1 * by1) + (by2 * by2);
+	double det = (a * c) - (b * b);
+	if( ABS(det) < 1.0e-9 ) return;
+	double px = ((c * mx) - (b * my)) / det;
+	double py = ((a * my) - (b * mx)) / det;
+	DX = (bx0 * px) + (by0 * py);
+	DY = (bx1 * px) + (by1 * py);
+	DZ = (bx2 * px) + (by2 * py);
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y, TShiftState Shift)
 {
 	if( !AntGizmoDrag ) return;
 	if( (AntGizmoWire < 0) || (AntGizmoWire >= ant.wmax) ) return;
+	WDEF *wp = &ant.wdef[AntGizmoWire];
+	if( AntGizmoAxis < 0 ){
+		double dx, dy, dz;
+		GetAntGizmoFreeDelta(X, Y, dx, dy, dz);
+		if( AntGizmoEndpoint == 2 ){
+			memcpy(wp, &AntGizmoOldW, sizeof(WDEF));
+			wp->X1 += dx; wp->Y1 += dy; wp->Z1 += dz;
+			wp->X2 += dx; wp->Y2 += dy; wp->Z2 += dz;
+		}
+		else if( AntGizmoEndpoint == 3 ){
+			for( int i = 0; i < ant.wmax; i++ ){
+				if( !IsAntWireSelected(i) ) continue;
+				memcpy(&ant.wdef[i], &AntGizmoOldSelected[i], sizeof(WDEF));
+				ant.wdef[i].X1 += dx; ant.wdef[i].Y1 += dy; ant.wdef[i].Z1 += dz;
+				ant.wdef[i].X2 += dx; ant.wdef[i].Y2 += dy; ant.wdef[i].Z2 += dz;
+			}
+		}
+		ant.Edit = ant.Flag = 1;
+		Grid2->Invalidate();
+		PBoxAnt->Invalidate();
+		return;
+	}
 	double len2 = (AntGizmoAxisDX * AntGizmoAxisDX) + (AntGizmoAxisDY * AntGizmoAxisDY);
 	if( len2 <= 0.0 ) return;
 
@@ -3435,7 +3539,6 @@ void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y, TShiftState Shift)
 		else mx = 0.0;
 	}
 	double d = ((mx * AntGizmoAxisDX) + (my * AntGizmoAxisDY)) / len2;
-	WDEF *wp = &ant.wdef[AntGizmoWire];
 	double sx = AntGizmoOldW.X1;
 	double sy = AntGizmoOldW.Y1;
 	double sz = AntGizmoOldW.Z1;
