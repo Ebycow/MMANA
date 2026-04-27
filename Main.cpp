@@ -3879,6 +3879,12 @@ void __fastcall TMainWnd::PBoxAntClick(TObject *Sender)
 	if( SelectWire(PBoxAntMX, PBoxAntMY) == TRUE ){
 		PBoxAnt->Invalidate();
 	}
+	else {
+		ClearAntWireSelection();
+		if( Grid2->Row != 0 ) Grid2->Row = 0;
+		Grid2->Invalidate();
+		PBoxAnt->Invalidate();
+	}
 }
 //---------------------------------------------------------------------------
 // アンテナ形状表示のダブルクリック
