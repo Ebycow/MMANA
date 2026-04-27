@@ -52,6 +52,54 @@ enum {
 	ANT_DRAW_PLANE_YZ
 };
 
+enum {
+	ANT_GIZMO_AXIS_X = 0,
+	ANT_GIZMO_AXIS_Y,
+	ANT_GIZMO_AXIS_Z
+};
+
+//---------------------------------------------------------------------------
+static double SqDistPointToSegment(int PX, int PY, int X1, int Y1, int X2, int Y2)
+{
+	double vx = double(X2 - X1);
+	double vy = double(Y2 - Y1);
+	double wx = double(PX - X1);
+	double wy = double(PY - Y1);
+	double len2 = (vx * vx) + (vy * vy);
+	double t = 0.0;
+	if( len2 > 0.0 ){
+		t = ((wx * vx) + (wy * vy)) / len2;
+		if( t < 0.0 ) t = 0.0;
+		else if( t > 1.0 ) t = 1.0;
+	}
+	double dx = double(X1) + (vx * t) - double(PX);
+	double dy = double(Y1) + (vy * t) - double(PY);
+	return (dx * dx) + (dy * dy);
+}
+
+//---------------------------------------------------------------------------
+static void DrawScreenArrow(TCanvas *Canvas, int X1, int Y1, int X2, int Y2)
+{
+	Canvas->MoveTo(X1, Y1);
+	Canvas->LineTo(X2, Y2);
+	double dx = double(X2 - X1);
+	double dy = double(Y2 - Y1);
+	double len = sqrt((dx * dx) + (dy * dy));
+	if( len < 1.0 ) return;
+	dx /= len;
+	dy /= len;
+	double px = -dy;
+	double py = dx;
+	int ax1 = int(double(X2) - (dx * 8.0) + (px * 4.0));
+	int ay1 = int(double(Y2) - (dy * 8.0) + (py * 4.0));
+	int ax2 = int(double(X2) - (dx * 8.0) - (px * 4.0));
+	int ay2 = int(double(Y2) - (dy * 8.0) - (py * 4.0));
+	Canvas->MoveTo(X2, Y2);
+	Canvas->LineTo(ax1, ay1);
+	Canvas->MoveTo(X2, Y2);
+	Canvas->LineTo(ax2, ay2);
+}
+
 //---------------------------------------------------------------------------
 static void LogPrint(char *ct, ...)
 {
@@ -81,6 +129,13 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntDrawPlane = ANT_DRAW_PLANE_XY;
 	AntDrawX1 = AntDrawY1 = AntDrawZ1 = 0.0;
 	AntDrawX2 = AntDrawY2 = AntDrawZ2 = 0.0;
+	AntGizmoDrag = FALSE;
+	AntGizmoEndpoint = 0;
+	AntGizmoAxis = ANT_GIZMO_AXIS_X;
+	AntGizmoWire = -1;
+	AntGizmoMouseX = AntGizmoMouseY = 0;
+	AntGizmoAxisDX = AntGizmoAxisDY = 0.0;
+	memset(&AntGizmoOldW, 0, sizeof(WDEF));
 	CreateAntDrawControls();
 	EntryAlignControl();
 	pACal = NULL;
@@ -2312,6 +2367,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 		}
 	}
 	PBoxAnt->Canvas->Pen->Width = 1;
+	PaintAntEditGizmo();
 	PaintAntDrawPreview();
 	double	cx, cy, cz;
 	if( pCalAnt->wmax && DspPlus->Checked ){		// セグメント分割の表示
@@ -2798,6 +2854,189 @@ int __fastcall TMainWnd::SnapAntDrawPoint(int X, int Y, double &WX, double &WY, 
 	return found;
 }
 //---------------------------------------------------------------------------
+int __fastcall TMainWnd::GetAntGizmoAxisScreen(double WX, double WY, double WZ, int Axis, int Len,
+	int &X1, int &Y1, int &X2, int &Y2, double &DX, double &DY)
+{
+	double ex = WX;
+	double ey = WY;
+	double ez = WZ;
+	switch( Axis ){
+		case ANT_GIZMO_AXIS_X: ex += 1.0; break;
+		case ANT_GIZMO_AXIS_Y: ey += 1.0; break;
+		case ANT_GIZMO_AXIS_Z: ez += 1.0; break;
+		default: return FALSE;
+	}
+	int AX, AY;
+	AntWorldToScreen(WX, WY, WZ, X1, Y1);
+	AntWorldToScreen(ex, ey, ez, AX, AY);
+	DX = double(AX - X1);
+	DY = double(AY - Y1);
+	double d = sqrt((DX * DX) + (DY * DY));
+	if( d < 0.1 ) return FALSE;
+	X2 = X1 + int((DX / d) * double(Len));
+	Y2 = Y1 + int((DY / d) * double(Len));
+	return TRUE;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PaintAntEditGizmo(void)
+{
+	if( AntDrawMode || !exeenv.Ant3D ) return;
+	int w = Grid2->Row - 1;
+	if( (w < 0) || (w >= ant.wmax) ) return;
+
+	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
+	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
+	int oldWidth = PBoxAnt->Canvas->Pen->Width;
+	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
+	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
+
+	WDEF *wp = &ant.wdef[w];
+	for( int endp = 0; endp < 2; endp++ ){
+		double wx = endp ? wp->X2 : wp->X1;
+		double wy = endp ? wp->Y2 : wp->Y1;
+		double wz = endp ? wp->Z2 : wp->Z1;
+		int sx, sy;
+		AntWorldToScreen(wx, wy, wz, sx, sy);
+		PBoxAnt->Canvas->Pen->Color = clBlack;
+		PBoxAnt->Canvas->Pen->Style = psSolid;
+		PBoxAnt->Canvas->Pen->Width = 1;
+		PBoxAnt->Canvas->Brush->Style = bsClear;
+		PBoxAnt->Canvas->Ellipse(sx-4, sy-4, sx+5, sy+5);
+
+		for( int axis = 0; axis < 3; axis++ ){
+			int x1, y1, x2, y2;
+			double dx, dy;
+			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
+			switch( axis ){
+				case ANT_GIZMO_AXIS_X: PBoxAnt->Canvas->Pen->Color = clRed; break;
+				case ANT_GIZMO_AXIS_Y: PBoxAnt->Canvas->Pen->Color = clGreen; break;
+				case ANT_GIZMO_AXIS_Z: PBoxAnt->Canvas->Pen->Color = clBlue; break;
+			}
+			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoWire == w) &&
+				(AntGizmoEndpoint == endp) && (AntGizmoAxis == axis)) ? 3 : 2;
+			DrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
+		}
+	}
+
+	PBoxAnt->Canvas->Pen->Color = oldColor;
+	PBoxAnt->Canvas->Pen->Style = oldStyle;
+	PBoxAnt->Canvas->Pen->Width = oldWidth;
+	PBoxAnt->Canvas->Brush->Color = oldBrush;
+	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
+{
+	if( AntDrawMode || !exeenv.Ant3D ) return FALSE;
+	int w = Grid2->Row - 1;
+	if( (w < 0) || (w >= ant.wmax) ) return FALSE;
+
+	WDEF *wp = &ant.wdef[w];
+	double best = (8.0 * 8.0) + 1.0;
+	int found = FALSE;
+	for( int endp = 0; endp < 2; endp++ ){
+		double wx = endp ? wp->X2 : wp->X1;
+		double wy = endp ? wp->Y2 : wp->Y1;
+		double wz = endp ? wp->Z2 : wp->Z1;
+		for( int axis = 0; axis < 3; axis++ ){
+			int x1, y1, x2, y2;
+			double dx, dy;
+			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
+			double d = SqDistPointToSegment(X, Y, x1, y1, x2, y2);
+			if( d < best ){
+				best = d;
+				Endpoint = endp;
+				Axis = axis;
+				found = TRUE;
+			}
+		}
+	}
+	return found;
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
+{
+	int endpoint, axis;
+	if( HitAntEditGizmo(X, Y, endpoint, axis) != TRUE ) return FALSE;
+	int w = Grid2->Row - 1;
+	if( (w < 0) || (w >= ant.wmax) ) return FALSE;
+
+	WDEF *wp = &ant.wdef[w];
+	double wx = endpoint ? wp->X2 : wp->X1;
+	double wy = endpoint ? wp->Y2 : wp->Y1;
+	double wz = endpoint ? wp->Z2 : wp->Z1;
+	int x1, y1, x2, y2;
+	double dx, dy;
+	if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) return FALSE;
+
+	AntGizmoDrag = TRUE;
+	AntGizmoEndpoint = endpoint;
+	AntGizmoAxis = axis;
+	AntGizmoWire = w;
+	AntGizmoMouseX = X;
+	AntGizmoMouseY = Y;
+	AntGizmoAxisDX = dx;
+	AntGizmoAxisDY = dy;
+	memcpy(&AntGizmoOldW, wp, sizeof(WDEF));
+	PBoxAntIgnoreClick = TRUE;
+	PBoxAnt->Cursor = crSizeAll;
+	PBoxAnt->Invalidate();
+	return TRUE;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y)
+{
+	if( !AntGizmoDrag ) return;
+	if( (AntGizmoWire < 0) || (AntGizmoWire >= ant.wmax) ) return;
+	double len2 = (AntGizmoAxisDX * AntGizmoAxisDX) + (AntGizmoAxisDY * AntGizmoAxisDY);
+	if( len2 <= 0.0 ) return;
+
+	double d = (double(X - AntGizmoMouseX) * AntGizmoAxisDX +
+		double(Y - AntGizmoMouseY) * AntGizmoAxisDY) / len2;
+	WDEF *wp = &ant.wdef[AntGizmoWire];
+	if( AntGizmoEndpoint == 0 ){
+		wp->X1 = AntGizmoOldW.X1;
+		wp->Y1 = AntGizmoOldW.Y1;
+		wp->Z1 = AntGizmoOldW.Z1;
+		switch( AntGizmoAxis ){
+			case ANT_GIZMO_AXIS_X: wp->X1 += d; break;
+			case ANT_GIZMO_AXIS_Y: wp->Y1 += d; break;
+			case ANT_GIZMO_AXIS_Z: wp->Z1 += d; break;
+		}
+	}
+	else {
+		wp->X2 = AntGizmoOldW.X2;
+		wp->Y2 = AntGizmoOldW.Y2;
+		wp->Z2 = AntGizmoOldW.Z2;
+		switch( AntGizmoAxis ){
+			case ANT_GIZMO_AXIS_X: wp->X2 += d; break;
+			case ANT_GIZMO_AXIS_Y: wp->Y2 += d; break;
+			case ANT_GIZMO_AXIS_Z: wp->Z2 += d; break;
+		}
+	}
+	ant.Edit = ant.Flag = 1;
+	Grid2->Invalidate();
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::EndAntGizmoDrag(void)
+{
+	if( !AntGizmoDrag ) return;
+	int w = AntGizmoWire;
+	AntGizmoDrag = FALSE;
+	AntGizmoWire = -1;
+	PBoxAnt->Cursor = AntDrawMode ? crCross : crDefault;
+	if( (w >= 0) && (w < ant.wmax) ){
+		if( ChkWith->Checked == TRUE ){
+			AdjWireChen(ant.wdef, ant.wmax, &ant.wdef[w], &AntGizmoOldW);
+		}
+		UpdateAntData();
+	}
+	else {
+		PBoxAnt->Invalidate();
+	}
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntDrawPreview(void)
 {
 	if( !AntDrawMode || !AntDrawActive ) return;
@@ -2871,6 +3110,11 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 {
 	PBoxAntMX = X;
 	PBoxAntMY = Y;
+	if( (Button == mbLeft) && BeginAntGizmoDrag(X, Y) == TRUE ){
+		PBoxAntDragButton = -1;
+		PBoxAntDragAction = ANT_MOUSE_NONE;
+		return;
+	}
 	if( AntDrawMode ){
 		PBoxAntIgnoreClick = TRUE;
 		PBoxAntDragButton = -1;
@@ -2914,6 +3158,10 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y)
 {
+	if( AntGizmoDrag ){
+		UpdateAntGizmoDrag(X, Y);
+		return;
+	}
 	if( AntDrawMode ){
 		if( AntDrawActive ){
 			double wx, wy, wz;
@@ -2951,6 +3199,10 @@ void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, i
 void __fastcall TMainWnd::PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 	TShiftState Shift, int X, int Y)
 {
+	if( AntGizmoDrag ){
+		EndAntGizmoDrag();
+		return;
+	}
 	if( AntDrawMode ){
 		PBoxAntDragButton = -1;
 		PBoxAntDragAction = ANT_MOUSE_NONE;
