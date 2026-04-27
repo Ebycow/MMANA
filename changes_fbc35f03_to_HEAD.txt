@@ -1,0 +1,92 @@
+fbc35f03d6e87995f6529469c769e6f813cf83a7 から HEAD までの変更点
+============================================================
+
+対象範囲:
+fbc35f03d6e87995f6529469c769e6f813cf83a7..HEAD
+
+概要
+----
+- アンテナ形状ビューの操作性を強化。
+- 3Dビュー上での描画、選択、ギズモ移動、コピー/ペースト、スナップ、反転を追加。
+- Undo/Redo と Fキー計算ショートカットを追加。
+- クワッドビューと3D表示操作まわりを改善。
+
+変更点
+------
+
+697fee2 Refactor Ant view calculations to improve clarity and maintainability
+- アンテナ形状ビューの座標変換や表示スケール計算を整理。
+- 以降の3D編集機能を追加しやすい構造へ改善。
+
+8eeba16 Implement wrapped trackbar position handling and enhance Ant view rotation logic
+- 3Dビュー回転時の角度トラックバー処理を改善。
+- 水平方向の回転が自然に循環するように調整。
+
+bf6cfd4 Add QuadSwitching state management and saved dimensions for Quad mode
+- クワッドビュー切り替え時の状態管理を追加。
+- 通常表示へ戻すための元ウィンドウサイズ保存を追加。
+
+9ea8226 Add Ant drawing functionality with control buttons and plane selection
+- 3Dアンテナ形状ビュー上で辺を追加できる描画モードを追加。
+- XY/XZ/YZ の描画平面切り替えボタンを追加。
+- 描画中のプレビューと頂点スナップを追加。
+
+c45acbb Add Ant gizmo functionality for axis manipulation and dragging
+- 選択中の辺の端点に3軸ギズモを表示。
+- ギズモの矢印ドラッグで端点を X/Y/Z 軸方向に移動可能にした。
+
+a50daa3 Add antenna edit undo and redo shortcuts
+- アンテナ編集用の Undo/Redo 履歴を追加。
+- Ctrl+Z で Undo、Ctrl+Y で Redo。
+- グリッド編集、3D描画、ギズモ編集、ワイヤ編集/CAD編集を履歴対象にした。
+- Fキーの計算ショートカットを追加。
+
+fb140f1 Add midpoint gizmo for whole wire moves
+- 辺の中央にもギズモを表示。
+- 中央ギズモの矢印ドラッグで辺全体を X/Y/Z 軸方向に移動可能にした。
+
+94634c6 Add wire copy and paste shortcuts
+- 選択中の辺を Ctrl+C でコピー。
+- Ctrl+V でペーストし、追加された辺を選択する処理を追加。
+
+ac907cf Add multi wire selection and group gizmo moves
+- Ctrl+クリックで複数の辺を選択可能にした。
+- Ctrl+A で全ての辺を選択可能にした。
+- 複数選択時は選択辺の重心にギズモを表示。
+- 重心ギズモで選択辺を一括移動できるようにした。
+
+6f466f1 Support copying and pasting multiple wires
+- 複数選択中の辺をまとめて Ctrl+C でコピー可能にした。
+- Ctrl+V で複数の辺をまとめてペーストし、追加された辺を選択状態にするよう変更。
+
+f906561 Add selected wire axis flip menu actions
+- 編集メニューに選択辺の X/Y/Z 軸反転機能を追加。
+- 選択辺の重心を基準に反転する。
+
+3b61d2d Add modifier snapping while dragging wires
+- ギズモドラッグ時の修飾キー操作を追加。
+- Shift: 近い別頂点へスナップし、スナップ候補頂点を点で表示。
+- Ctrl: 近い辺へスナップ。
+- Ctrl+Shift: 画面上の水平/垂直方向にスナップ。
+
+4b15f02 Fix calculate shortcut undo refresh and center drag
+- Fキーを電卓ではなく計算ボタン相当の処理に修正。
+- Undo/Redo 後に表入力画面の表示が更新されない問題を修正。
+- 中央ギズモの丸い部分を自由移動ハンドルとして扱うよう修正。
+- 矢印部分は軸方向移動、丸い部分は自由移動に分離。
+
+b54bd65 Make endpoint gizmos free movable and improve snapping
+- 端点ギズモの丸い部分も自由移動可能にした。
+- 矢印部分は従来通り軸方向移動。
+- 自由移動時のスナップを、掴んでいる点が近い頂点/辺に合う挙動へ改善。
+- Ctrl+Shift の水平/垂直スナップも自由移動側で効くよう整理。
+
+223ec5e Clear antenna selection when clicking empty view
+- アンテナ線の範囲外をクリックしたときに選択を解除する機能を追加。
+- 選択解除によりギズモ表示を消して、アンテナ形状を見やすくした。
+
+ビルド確認
+----------
+- Win32 Debug では Main.cpp のコンパイルは通過。
+- Mmana.exe が実行中またはロック中の場合、リンク段階で .\Mmana.exe を開けず失敗することがある。
+- exe を閉じた状態ではビルド成功を確認済み。
