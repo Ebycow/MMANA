@@ -138,6 +138,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	memset(&AntGizmoOldW, 0, sizeof(WDEF));
 	AntUndoList = new TStringList;
 	AntRedoList = new TStringList;
+	AntWireClipboardCount = 0;
 	CreateAntDrawControls();
 	EntryAlignControl();
 	pACal = NULL;
@@ -491,6 +492,16 @@ void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
 		}
 		if( ctrl && (Msg.wParam == 'Y') ){
 			RedoAntEdit();
+			Handled = TRUE;
+			return;
+		}
+		if( ctrl && (Msg.wParam == 'C') ){
+			CopyAntWires();
+			Handled = TRUE;
+			return;
+		}
+		if( ctrl && (Msg.wParam == 'V') ){
+			PasteAntWires();
 			Handled = TRUE;
 			return;
 		}
@@ -2694,6 +2705,37 @@ void __fastcall TMainWnd::UndoAntEdit(void)
 void __fastcall TMainWnd::RedoAntEdit(void)
 {
 	if( RestoreAntSnapshot(AntRedoList, AntUndoList) != TRUE ) ::MessageBeep(MB_ICONEXCLAMATION);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::CopyAntWires(void)
+{
+	int w = Grid2->Row - 1;
+	if( (w < 0) || (w >= ant.wmax) ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+	memcpy(&AntWireClipboard[0], &ant.wdef[w], sizeof(WDEF));
+	AntWireClipboardCount = 1;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PasteAntWires(void)
+{
+	if( AntWireClipboardCount <= 0 ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+	if( ant.wmax >= WMAX ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+	PushAntUndo();
+	int n = ant.wmax;
+	memcpy(&ant.wdef[n], &AntWireClipboard[0], sizeof(WDEF));
+	ant.wmax++;
+	Grid2->RowCount = ant.wmax + 2;
+	Grid2->Row = n + 1;
+	UpdateAntData();
+	Grid2->Row = n + 1;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::CreateAntDrawControls(void)

@@ -434,6 +434,8 @@ private:	// ユーザー宣言
 	int __fastcall RestoreAntSnapshot(TStringList *From, TStringList *To);
 	void __fastcall UndoAntEdit(void);
 	void __fastcall RedoAntEdit(void);
+	void __fastcall CopyAntWires(void);
+	void __fastcall PasteAntWires(void);
 	void __fastcall CreateAntDrawControls(void);
 	void __fastcall LayoutAntDrawControls(void);
 	void __fastcall UpdateAntDrawControls(void);
@@ -489,6 +491,8 @@ private:	// ユーザー宣言
 	WDEF	AntGizmoOldW;
 	TStringList	*AntUndoList;
 	TStringList	*AntRedoList;
+	WDEF	AntWireClipboard[WMAX];
+	int	AntWireClipboardCount;
 
 	int __fastcall DrawPtn(void);
 
