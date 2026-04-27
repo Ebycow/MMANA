@@ -3378,15 +3378,15 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 			wx = (wp->X1 + wp->X2) / 2.0;
 			wy = (wp->Y1 + wp->Y2) / 2.0;
 			wz = (wp->Z1 + wp->Z2) / 2.0;
-			int sx, sy;
-			AntWorldToScreen(wx, wy, wz, sx, sy);
-			int mdx = sx - X;
-			int mdy = sy - Y;
-			if( ((mdx * mdx) + (mdy * mdy)) <= (7 * 7) ){
-				Endpoint = endp;
-				Axis = -1;
-				return TRUE;
-			}
+		}
+		int sx, sy;
+		AntWorldToScreen(wx, wy, wz, sx, sy);
+		int mdx = sx - X;
+		int mdy = sy - Y;
+		if( ((mdx * mdx) + (mdy * mdy)) <= (7 * 7) ){
+			Endpoint = endp;
+			Axis = -1;
+			return TRUE;
 		}
 		for( int axis = 0; axis < 3; axis++ ){
 			int x1, y1, x2, y2;
@@ -3447,33 +3447,44 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 	return TRUE;
 }
 //---------------------------------------------------------------------------
-void __fastcall TMainWnd::GetAntGizmoFreeDelta(int X, int Y, double &DX, double &DY, double &DZ)
+void __fastcall TMainWnd::GetAntGizmoAnchor(double &X, double &Y, double &Z)
 {
-	DX = DY = DZ = 0.0;
-	double sx = AntGizmoOldW.X1;
-	double sy = AntGizmoOldW.Y1;
-	double sz = AntGizmoOldW.Z1;
-	if( AntGizmoEndpoint == 2 ){
-		sx = (AntGizmoOldW.X1 + AntGizmoOldW.X2) / 2.0;
-		sy = (AntGizmoOldW.Y1 + AntGizmoOldW.Y2) / 2.0;
-		sz = (AntGizmoOldW.Z1 + AntGizmoOldW.Z2) / 2.0;
+	X = AntGizmoOldW.X1;
+	Y = AntGizmoOldW.Y1;
+	Z = AntGizmoOldW.Z1;
+	if( AntGizmoEndpoint == 1 ){
+		X = AntGizmoOldW.X2;
+		Y = AntGizmoOldW.Y2;
+		Z = AntGizmoOldW.Z2;
+	}
+	else if( AntGizmoEndpoint == 2 ){
+		X = (AntGizmoOldW.X1 + AntGizmoOldW.X2) / 2.0;
+		Y = (AntGizmoOldW.Y1 + AntGizmoOldW.Y2) / 2.0;
+		Z = (AntGizmoOldW.Z1 + AntGizmoOldW.Z2) / 2.0;
 	}
 	else if( AntGizmoEndpoint == 3 ){
-		sx = sy = sz = 0.0;
+		X = Y = Z = 0.0;
 		int cnt = 0;
 		for( int i = 0; i < ant.wmax; i++ ){
 			if( !IsAntWireSelected(i) ) continue;
-			sx += (AntGizmoOldSelected[i].X1 + AntGizmoOldSelected[i].X2) / 2.0;
-			sy += (AntGizmoOldSelected[i].Y1 + AntGizmoOldSelected[i].Y2) / 2.0;
-			sz += (AntGizmoOldSelected[i].Z1 + AntGizmoOldSelected[i].Z2) / 2.0;
+			X += (AntGizmoOldSelected[i].X1 + AntGizmoOldSelected[i].X2) / 2.0;
+			Y += (AntGizmoOldSelected[i].Y1 + AntGizmoOldSelected[i].Y2) / 2.0;
+			Z += (AntGizmoOldSelected[i].Z1 + AntGizmoOldSelected[i].Z2) / 2.0;
 			cnt++;
 		}
 		if( cnt > 0 ){
-			sx /= double(cnt);
-			sy /= double(cnt);
-			sz /= double(cnt);
+			X /= double(cnt);
+			Y /= double(cnt);
+			Z /= double(cnt);
 		}
 	}
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::GetAntGizmoFreeDelta(int X, int Y, double &DX, double &DY, double &DZ)
+{
+	DX = DY = DZ = 0.0;
+	double sx, sy, sz;
+	GetAntGizmoAnchor(sx, sy, sz);
 
 	int x0, y0, xx, yx, xy, yy, xz, yz;
 	AntWorldToScreen(sx, sy, sz, x0, y0);
@@ -3505,10 +3516,46 @@ void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y, TShiftState Shift)
 	if( !AntGizmoDrag ) return;
 	if( (AntGizmoWire < 0) || (AntGizmoWire >= ant.wmax) ) return;
 	WDEF *wp = &ant.wdef[AntGizmoWire];
+	double mx = double(X - AntGizmoMouseX);
+	double my = double(Y - AntGizmoMouseY);
+	bool ctrl = Shift.Contains(ssCtrl);
+	bool shift = Shift.Contains(ssShift);
+	AntGizmoShowSnapVertices = shift && !ctrl;
+	double sx, sy, sz;
+	GetAntGizmoAnchor(sx, sy, sz);
 	if( AntGizmoAxis < 0 ){
+		int dragX = X;
+		int dragY = Y;
+		if( ctrl && shift ){
+			if( ABS(mx) >= ABS(my) ) dragY = AntGizmoMouseY;
+			else dragX = AntGizmoMouseX;
+		}
 		double dx, dy, dz;
-		GetAntGizmoFreeDelta(X, Y, dx, dy, dz);
-		if( AntGizmoEndpoint == 2 ){
+		GetAntGizmoFreeDelta(dragX, dragY, dx, dy, dz);
+		int rx, ry;
+		AntWorldToScreen(sx + dx, sy + dy, sz + dz, rx, ry);
+		double tx, ty, tz;
+		if( shift && !ctrl && (FindAntSnapVertex(rx, ry, tx, ty, tz) == TRUE) ){
+			dx = tx - sx;
+			dy = ty - sy;
+			dz = tz - sz;
+		}
+		else if( ctrl && !shift && (FindAntSnapEdge(rx, ry, tx, ty, tz) == TRUE) ){
+			dx = tx - sx;
+			dy = ty - sy;
+			dz = tz - sz;
+		}
+		if( AntGizmoEndpoint == 0 ){
+			wp->X1 = AntGizmoOldW.X1 + dx;
+			wp->Y1 = AntGizmoOldW.Y1 + dy;
+			wp->Z1 = AntGizmoOldW.Z1 + dz;
+		}
+		else if( AntGizmoEndpoint == 1 ){
+			wp->X2 = AntGizmoOldW.X2 + dx;
+			wp->Y2 = AntGizmoOldW.Y2 + dy;
+			wp->Z2 = AntGizmoOldW.Z2 + dz;
+		}
+		else if( AntGizmoEndpoint == 2 ){
 			memcpy(wp, &AntGizmoOldW, sizeof(WDEF));
 			wp->X1 += dx; wp->Y1 += dy; wp->Z1 += dz;
 			wp->X2 += dx; wp->Y2 += dy; wp->Z2 += dz;
@@ -3529,45 +3576,11 @@ void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y, TShiftState Shift)
 	double len2 = (AntGizmoAxisDX * AntGizmoAxisDX) + (AntGizmoAxisDY * AntGizmoAxisDY);
 	if( len2 <= 0.0 ) return;
 
-	double mx = double(X - AntGizmoMouseX);
-	double my = double(Y - AntGizmoMouseY);
-	bool ctrl = Shift.Contains(ssCtrl);
-	bool shift = Shift.Contains(ssShift);
-	AntGizmoShowSnapVertices = shift && !ctrl;
 	if( ctrl && shift ){
 		if( ABS(mx) >= ABS(my) ) my = 0.0;
 		else mx = 0.0;
 	}
 	double d = ((mx * AntGizmoAxisDX) + (my * AntGizmoAxisDY)) / len2;
-	double sx = AntGizmoOldW.X1;
-	double sy = AntGizmoOldW.Y1;
-	double sz = AntGizmoOldW.Z1;
-	if( AntGizmoEndpoint == 1 ){
-		sx = AntGizmoOldW.X2;
-		sy = AntGizmoOldW.Y2;
-		sz = AntGizmoOldW.Z2;
-	}
-	else if( AntGizmoEndpoint == 2 ){
-		sx = (AntGizmoOldW.X1 + AntGizmoOldW.X2) / 2.0;
-		sy = (AntGizmoOldW.Y1 + AntGizmoOldW.Y2) / 2.0;
-		sz = (AntGizmoOldW.Z1 + AntGizmoOldW.Z2) / 2.0;
-	}
-	else if( AntGizmoEndpoint == 3 ){
-		sx = sy = sz = 0.0;
-		int cnt = 0;
-		for( int i = 0; i < ant.wmax; i++ ){
-			if( !IsAntWireSelected(i) ) continue;
-			sx += (AntGizmoOldSelected[i].X1 + AntGizmoOldSelected[i].X2) / 2.0;
-			sy += (AntGizmoOldSelected[i].Y1 + AntGizmoOldSelected[i].Y2) / 2.0;
-			sz += (AntGizmoOldSelected[i].Z1 + AntGizmoOldSelected[i].Z2) / 2.0;
-			cnt++;
-		}
-		if( cnt > 0 ){
-			sx /= double(cnt);
-			sy /= double(cnt);
-			sz /= double(cnt);
-		}
-	}
 	double ax = (AntGizmoAxis == ANT_GIZMO_AXIS_X) ? 1.0 : 0.0;
 	double ay = (AntGizmoAxis == ANT_GIZMO_AXIS_Y) ? 1.0 : 0.0;
 	double az = (AntGizmoAxis == ANT_GIZMO_AXIS_Z) ? 1.0 : 0.0;

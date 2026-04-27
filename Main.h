@@ -465,6 +465,7 @@ private:	// ÉÜÅ[ÉUÅ[êÈåæ
 	int __fastcall FindAntSnapEdge(int X, int Y, double &WX, double &WY, double &WZ);
 	int __fastcall HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis);
 	int __fastcall BeginAntGizmoDrag(int X, int Y);
+	void __fastcall GetAntGizmoAnchor(double &X, double &Y, double &Z);
 	void __fastcall GetAntGizmoFreeDelta(int X, int Y, double &DX, double &DY, double &DZ);
 	void __fastcall UpdateAntGizmoDrag(int X, int Y, TShiftState Shift);
 	void __fastcall EndAntGizmoDrag(void);
