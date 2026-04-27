@@ -2799,13 +2799,13 @@ int __fastcall TMainWnd::GetAntSelectionCenter(double &X, double &Y, double &Z)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::CopyAntWires(void)
 {
-	int w = Grid2->Row - 1;
-	if( (w < 0) || (w >= ant.wmax) ){
-		::MessageBeep(MB_ICONEXCLAMATION);
-		return;
+	AntWireClipboardCount = 0;
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( !IsAntWireSelected(i) ) continue;
+		memcpy(&AntWireClipboard[AntWireClipboardCount], &ant.wdef[i], sizeof(WDEF));
+		AntWireClipboardCount++;
 	}
-	memcpy(&AntWireClipboard[0], &ant.wdef[w], sizeof(WDEF));
-	AntWireClipboardCount = 1;
+	if( AntWireClipboardCount <= 0 ) ::MessageBeep(MB_ICONEXCLAMATION);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PasteAntWires(void)
@@ -2814,18 +2814,26 @@ void __fastcall TMainWnd::PasteAntWires(void)
 		::MessageBeep(MB_ICONEXCLAMATION);
 		return;
 	}
-	if( ant.wmax >= WMAX ){
+	if( ant.wmax + AntWireClipboardCount > WMAX ){
 		::MessageBeep(MB_ICONEXCLAMATION);
 		return;
 	}
 	PushAntUndo();
-	int n = ant.wmax;
-	memcpy(&ant.wdef[n], &AntWireClipboard[0], sizeof(WDEF));
-	ant.wmax++;
+	int first = ant.wmax;
+	for( int i = 0; i < AntWireClipboardCount; i++ ){
+		memcpy(&ant.wdef[ant.wmax], &AntWireClipboard[i], sizeof(WDEF));
+		ant.wmax++;
+	}
 	Grid2->RowCount = ant.wmax + 2;
-	Grid2->Row = n + 1;
+	ClearAntWireSelection();
+	for( int i = first; i < ant.wmax; i++ ){
+		AntWireSelected[i] = TRUE;
+		AntWireSelectionCount++;
+	}
+	Grid2->Row = first + 1;
 	UpdateAntData();
-	Grid2->Row = n + 1;
+	Grid2->Row = first + 1;
+	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::CreateAntDrawControls(void)
