@@ -1225,7 +1225,7 @@ int Str2PlusNo(ANTDEF *ap, LPCSTR s)
 	char	bf[32];
 	char	c;
 	LPSTR	p;
-	int		n, w, pno;
+	int		n, w, pno = 0;
 
 	strcpy(bf, s);
 	strupr(bf);
@@ -1251,6 +1251,7 @@ int Str2PlusNo(ANTDEF *ap, LPCSTR s)
 		if( bf[1] ){
 			sscanf(&bf[1], "%u", &w);
 			if( w ) w--;
+			if( (w < 0) || (w >= ap->wmax) ) return 0;
 		}
 		else {
 			// ’è‹`ƒGƒ‰[
@@ -1269,6 +1270,9 @@ int Str2PlusNo(ANTDEF *ap, LPCSTR s)
 			case 'E':		// ––”ö
 				pno = ap->wdef[w].PNo + ap->wdef[w].PMax;
 				pno -= n;
+				break;
+			default:
+				pno = 0;
 				break;
 		}
 	}

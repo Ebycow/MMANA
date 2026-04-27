@@ -366,15 +366,15 @@ int __fastcall TOptDlgBox::Execute(double freq, double r, double x, double l, do
 	EditRecentMax->Text = exeenv.RecentMax;
 	RecentMAA->Checked = exeenv.RecentMAA;
 	EditFont->Text = env.FontSize;
-	MouseLeft->ItemIndex = MouseActionIndex(exeenv.AntMouseLeft, ANT_MOUSE_PAN);
-	MouseMiddle->ItemIndex = MouseActionIndex(exeenv.AntMouseMiddle, ANT_MOUSE_ROTATE);
+	MouseLeft->ItemIndex = MouseActionIndex(exeenv.AntMouseLeft, ANT_MOUSE_ROTATE);
+	MouseMiddle->ItemIndex = MouseActionIndex(exeenv.AntMouseMiddle, ANT_MOUSE_PAN);
 	MouseWheel->ItemIndex = MouseActionIndex(exeenv.AntMouseWheel, ANT_MOUSE_ZOOM);
 	SetValueItem(-1);
 	if( ShowModal() == IDOK ){
 		exeenv.CurDir = CBCurDir->Checked;
 		exeenv.FixFreeAngle = RGFixAngle->ItemIndex;
-		exeenv.AntMouseLeft = MouseActionIndex(MouseLeft->ItemIndex, ANT_MOUSE_PAN);
-		exeenv.AntMouseMiddle = MouseActionIndex(MouseMiddle->ItemIndex, ANT_MOUSE_ROTATE);
+		exeenv.AntMouseLeft = MouseActionIndex(MouseLeft->ItemIndex, ANT_MOUSE_ROTATE);
+		exeenv.AntMouseMiddle = MouseActionIndex(MouseMiddle->ItemIndex, ANT_MOUSE_PAN);
 		exeenv.AntMouseWheel = MouseActionIndex(MouseWheel->ItemIndex, ANT_MOUSE_ZOOM);
 		env.fbr = 0;
 		int di;

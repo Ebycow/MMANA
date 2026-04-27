@@ -213,8 +213,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	exeenv.BwMatch = 0;
 	exeenv.IntPos = 1;
 	exeenv.Ant3D = 1;
-	exeenv.AntMouseLeft = ANT_MOUSE_PAN;
-	exeenv.AntMouseMiddle = ANT_MOUSE_ROTATE;
+	exeenv.AntMouseLeft = ANT_MOUSE_ROTATE;
+	exeenv.AntMouseMiddle = ANT_MOUSE_PAN;
 	exeenv.AntMouseWheel = ANT_MOUSE_ZOOM;
 	exeenv.CurDir = 0;
 	exeenv.FixFreeAngle = 1;
@@ -615,8 +615,8 @@ void __fastcall TMainWnd::ReadRegister(void)
 	exeenv.AntMouseLeft = pIniFile->ReadInteger("Job", "AntMouseLeft", exeenv.AntMouseLeft);
 	exeenv.AntMouseMiddle = pIniFile->ReadInteger("Job", "AntMouseMiddle", exeenv.AntMouseMiddle);
 	exeenv.AntMouseWheel = pIniFile->ReadInteger("Job", "AntMouseWheel", exeenv.AntMouseWheel);
-	if( (exeenv.AntMouseLeft < ANT_MOUSE_NONE) || (exeenv.AntMouseLeft > ANT_MOUSE_ZOOM) ) exeenv.AntMouseLeft = ANT_MOUSE_PAN;
-	if( (exeenv.AntMouseMiddle < ANT_MOUSE_NONE) || (exeenv.AntMouseMiddle > ANT_MOUSE_ZOOM) ) exeenv.AntMouseMiddle = ANT_MOUSE_ROTATE;
+	if( (exeenv.AntMouseLeft < ANT_MOUSE_NONE) || (exeenv.AntMouseLeft > ANT_MOUSE_ZOOM) ) exeenv.AntMouseLeft = ANT_MOUSE_ROTATE;
+	if( (exeenv.AntMouseMiddle < ANT_MOUSE_NONE) || (exeenv.AntMouseMiddle > ANT_MOUSE_ZOOM) ) exeenv.AntMouseMiddle = ANT_MOUSE_PAN;
 	if( (exeenv.AntMouseWheel < ANT_MOUSE_NONE) || (exeenv.AntMouseWheel > ANT_MOUSE_ZOOM) ) exeenv.AntMouseWheel = ANT_MOUSE_ZOOM;
 	exeenv.IntPos = pIniFile->ReadInteger("Job", "IntPos", exeenv.IntPos);
 	exeenv.MmSel = pIniFile->ReadInteger("Job", "LengthUnitMM", exeenv.MmSel);
@@ -751,12 +751,18 @@ void __fastcall TMainWnd::UpdateLengthUnitUI(void)
 // アンテナデータを初期化する
 void __fastcall TMainWnd::InitAntDef(void)
 {
+	Grid2->EditorMode = FALSE;
+	Grid3->EditorMode = FALSE;
+	Grid4->EditorMode = FALSE;
 	if( pACal != NULL ){
 		delete pACal;
 		pACal = NULL;
 	}
 	antRem = "";
 	antDef = "";
+	antSave = "";
+	AntUndoList->Clear();
+	AntRedoList->Clear();
 	memset(&ant, 0, sizeof(ant));
 	ant.cauto = 1;
 	ant.lenb = 1;
@@ -2341,14 +2347,19 @@ void __fastcall TMainWnd::K10Click(TObject *Sender)
 // パルス番号からセグメント番号を得る
 int __fastcall TMainWnd::Plus2Seg(int Plus)
 {
+	if( (Plus <= 0) || (pCalAnt->wzmax <= 0) ) return 1;
 	int i;
 	for( i = 0; i < pCalAnt->wzmax; i++ ){
 		if( Plus < pCalAnt->wzdef[i].PNo ) break;
 	}
 	i--;
-	while( !pCalAnt->wzdef[i].PNo ) i--;
+	while( (i > 0) && !pCalAnt->wzdef[i].PNo ) i--;
 	if( i < 0 ) i = 0;
-	return pCalAnt->wzdef[i].SNo + (Plus - pCalAnt->wzdef[i].PNo);
+	if( !pCalAnt->wzdef[i].PNo ) return 1;
+	int Seg = pCalAnt->wzdef[i].SNo + (Plus - pCalAnt->wzdef[i].PNo);
+	if( Seg < pCalAnt->wzdef[i].SNo ) Seg = pCalAnt->wzdef[i].SNo;
+	if( Seg > pCalAnt->wzdef[i].SMax ) Seg = pCalAnt->wzdef[i].SMax;
+	return Seg;
 }
 
 //---------------------------------------------------------------------------
@@ -2475,7 +2486,9 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	PBoxAnt->Canvas->Ellipse(3, YT + (FH/4), 10, YT + (FH/4) + 7);
 	YT += FH + 2;
 	for( i = 0; i < pCalAnt->cmax; i++ ){	// 給電点
-		GetSegPos(cx, cy, cz, Plus2Seg(pCalAnt->cdef[i].PLUSNo));
+		int PlusNo = Str2PlusNo(pCalAnt, pCalAnt->cdef[i].PLUS);
+		if( PlusNo <= 0 ) continue;
+		GetSegPos(cx, cy, cz, Plus2Seg(PlusNo));
 		CalcAntViewXY(x, y, deg, zdeg, cx, cy, cz);
 		X = int((x * sc)) + Xc;
 		Y = Yc - int((y * sc));
@@ -2490,7 +2503,9 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	PBoxAnt->Canvas->TextOut(12, YT, "集中定数");
 	if( EnbLoad->Checked ){
 		for( i = 0; i < pCalAnt->lmax; i++ ){	// ロード
-			GetSegPos(cx, cy, cz, Plus2Seg(pCalAnt->ldef[i].PLUSNo));
+			int PlusNo = Str2PlusNo(pCalAnt, pCalAnt->ldef[i].PLUS);
+			if( PlusNo <= 0 ) continue;
+			GetSegPos(cx, cy, cz, Plus2Seg(PlusNo));
 			CalcAntViewXY(x, y, deg, zdeg, cx, cy, cz);
 			X = int((x * sc)) + Xc;
 			Y = Yc - int((y * sc));
