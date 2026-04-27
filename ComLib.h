@@ -216,6 +216,9 @@ typedef struct {		// 実行環境の定義
 	int		BwMatch;		// 周波数特性の帯域表示マッチング
 
 	int		Ant3D;			// ３Ｄ表示方法
+	int		AntMouseLeft;	// アンテナ表示 左ドラッグの動作
+	int		AntMouseMiddle;	// アンテナ表示 中ボタンドラッグの動作
+	int		AntMouseWheel;	// アンテナ表示 ホイールの動作
 	int		CurDir;			// 電流方向の表現
 	int		FixFreeAngle;	// 自由空間の時は計算仰角を０度に固定
 	int		RecentMax;		// Recent File の表示する数
@@ -230,6 +233,13 @@ typedef struct {		// 実行環境の定義
 	FARFILE	*pFarFile;		// 遠距離電界強度ファイル
 }EXEENV;
 extern	EXEENV	exeenv;
+
+enum {
+	ANT_MOUSE_NONE = 0,
+	ANT_MOUSE_PAN,
+	ANT_MOUSE_ROTATE,
+	ANT_MOUSE_ZOOM
+};
 
 int GetFileVersion(LPCSTR pbf, LPCSTR pVer);
 char LastC(LPCSTR p);

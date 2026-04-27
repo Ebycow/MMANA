@@ -280,6 +280,13 @@ __published:
 	
 	void __fastcall AutojXClick(TObject *Sender);
 private:
+	TTabSheet *TabMouse;
+	TLabel *LabelMouseLeft;
+	TLabel *LabelMouseMiddle;
+	TLabel *LabelMouseWheel;
+	TComboBox *MouseLeft;
+	TComboBox *MouseMiddle;
+	TComboBox *MouseWheel;
 	int		EnbCalc;
 	double	Freq;
     double	X;

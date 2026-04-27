@@ -361,6 +361,7 @@ __published:	// IDE 管理のコンポーネント
 	void __fastcall K49Click(TObject *Sender);
 private:	// ユーザー宣言
 	void __fastcall OnIdle(TObject *Sender, bool &Done);
+	void __fastcall OnAppMessage(tagMSG &Msg, bool &Handled);
 	void __fastcall MmUnitClick(TObject *Sender);
 
     int			FirstInit;
@@ -417,9 +418,26 @@ private:	// ユーザー宣言
 	void __fastcall AllRoundUp(double sc);
 	int __fastcall SelectWire(int X, int Y);
 	void __fastcall UpdateAntData(void);
+	int __fastcall GetAntMouseAction(TMouseButton Button);
+	void __fastcall SetTrackBarPosition(TTrackBar *Bar, int Pos);
+	double __fastcall GetAntViewScale(void);
+	void __fastcall AntViewZoom(int Delta, int X, int Y);
+	void __fastcall AntViewPan(int DX, int DY);
+	void __fastcall AntViewRotate(int DX, int DY);
+	void __fastcall PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y);
+	void __fastcall PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
+	TShiftState Shift, int X, int Y);
+	void __fastcall PBoxAntMouseWheel(TObject *Sender, TShiftState Shift,
+	int WheelDelta, const TPoint &MousePos, bool &Handled);
 
     int		PBoxAntMX;
     int		PBoxAntMY;
+	int		PBoxAntLastX;
+	int		PBoxAntLastY;
+	int		PBoxAntDragButton;
+	int		PBoxAntDragAction;
+	int		PBoxAntDragMoved;
+	int		PBoxAntIgnoreClick;
 
 	int __fastcall DrawPtn(void);
 

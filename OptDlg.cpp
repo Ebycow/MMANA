@@ -30,6 +30,21 @@ LPCSTR CoreTypeT[]={
 };
 const float CorePT[]={0.98, 0.98, 0.98, 0.85, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.67, 0.81, 0.81, 0.80, 0.81, 0.83, 0.83, 0.88, 0.88, 0};
 const float CoreZT[]={600, 600, 450, 300, 75, 75, 75, 75, 50, 50, 53.5, 50, 50, 50, 50, 50, 50, 50, 50, 50, 0};
+const LPCSTR MouseActionT[]={"なし","移動","回転","拡大縮小",NULL};
+//---------------------------------------------------------------------
+static void AddMouseActionItems(TComboBox *Box)
+{
+	Box->Style = csDropDownList;
+	for( int i = 0; MouseActionT[i] != NULL; i++ ){
+		Box->Items->Add(MouseActionT[i]);
+	}
+}
+//---------------------------------------------------------------------
+static int MouseActionIndex(int n, int def)
+{
+	if( (n < ANT_MOUSE_NONE) || (n > ANT_MOUSE_ZOOM) ) return def;
+	return n;
+}
 //---------------------------------------------------------------------
 __fastcall TOptDlgBox::TOptDlgBox(TComponent* AOwner)
 	: TForm(AOwner)
@@ -92,6 +107,46 @@ __fastcall TOptDlgBox::TOptDlgBox(TComponent* AOwner)
 	for( int i = 0; CorePT[i]; i++ ){
 		CType->Items->Add(CoreTypeT[i]);
 	}
+
+	TabMouse = new TTabSheet(this);
+	TabMouse->PageControl = Page;
+	TabMouse->Caption = "マウス";
+
+	LabelMouseLeft = new TLabel(this);
+	LabelMouseLeft->Parent = TabMouse;
+	LabelMouseLeft->Left = 24;
+	LabelMouseLeft->Top = 28;
+	LabelMouseLeft->Caption = "左ドラッグ";
+	MouseLeft = new TComboBox(this);
+	MouseLeft->Parent = TabMouse;
+	MouseLeft->Left = 160;
+	MouseLeft->Top = 24;
+	MouseLeft->Width = 160;
+	AddMouseActionItems(MouseLeft);
+
+	LabelMouseMiddle = new TLabel(this);
+	LabelMouseMiddle->Parent = TabMouse;
+	LabelMouseMiddle->Left = 24;
+	LabelMouseMiddle->Top = 60;
+	LabelMouseMiddle->Caption = "中ボタンドラッグ";
+	MouseMiddle = new TComboBox(this);
+	MouseMiddle->Parent = TabMouse;
+	MouseMiddle->Left = 160;
+	MouseMiddle->Top = 56;
+	MouseMiddle->Width = 160;
+	AddMouseActionItems(MouseMiddle);
+
+	LabelMouseWheel = new TLabel(this);
+	LabelMouseWheel->Parent = TabMouse;
+	LabelMouseWheel->Left = 24;
+	LabelMouseWheel->Top = 92;
+	LabelMouseWheel->Caption = "ホイール";
+	MouseWheel = new TComboBox(this);
+	MouseWheel->Parent = TabMouse;
+	MouseWheel->Left = 160;
+	MouseWheel->Top = 88;
+	MouseWheel->Width = 160;
+	AddMouseActionItems(MouseWheel);
 }
 //---------------------------------------------------------------------
 void __fastcall TOptDlgBox::SetValueItem(int n)
@@ -311,10 +366,16 @@ int __fastcall TOptDlgBox::Execute(double freq, double r, double x, double l, do
 	EditRecentMax->Text = exeenv.RecentMax;
 	RecentMAA->Checked = exeenv.RecentMAA;
 	EditFont->Text = env.FontSize;
+	MouseLeft->ItemIndex = MouseActionIndex(exeenv.AntMouseLeft, ANT_MOUSE_PAN);
+	MouseMiddle->ItemIndex = MouseActionIndex(exeenv.AntMouseMiddle, ANT_MOUSE_ROTATE);
+	MouseWheel->ItemIndex = MouseActionIndex(exeenv.AntMouseWheel, ANT_MOUSE_ZOOM);
 	SetValueItem(-1);
 	if( ShowModal() == IDOK ){
 		exeenv.CurDir = CBCurDir->Checked;
 		exeenv.FixFreeAngle = RGFixAngle->ItemIndex;
+		exeenv.AntMouseLeft = MouseActionIndex(MouseLeft->ItemIndex, ANT_MOUSE_PAN);
+		exeenv.AntMouseMiddle = MouseActionIndex(MouseMiddle->ItemIndex, ANT_MOUSE_ROTATE);
+		exeenv.AntMouseWheel = MouseActionIndex(MouseWheel->ItemIndex, ANT_MOUSE_ZOOM);
 		env.fbr = 0;
 		int di;
 		double	d;

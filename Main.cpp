@@ -73,6 +73,16 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	Grid3->Options = Grid3->Options << goAlwaysShowEditor;
 	Grid4->Options = Grid4->Options << goAlwaysShowEditor;
 	Application->OnIdle = OnIdle;
+	Application->OnMessage = OnAppMessage;
+	PBoxAntLastX = PBoxAntLastY = 0;
+	PBoxAntDragButton = -1;
+	PBoxAntDragAction = ANT_MOUSE_NONE;
+	PBoxAntDragMoved = FALSE;
+	PBoxAntIgnoreClick = FALSE;
+	PBoxAnt->OnMouseDown = PBoxAntMouseDown;
+	PBoxAnt->OnMouseMove = PBoxAntMouseMove;
+	PBoxAnt->OnMouseUp = PBoxAntMouseUp;
+	OnMouseWheel = PBoxAntMouseWheel;
 
 	for( int i = 0; FreqTbl[i] != NULL; i++ ){
 		Freq->Items->Add(FreqTbl[i]);
@@ -116,6 +126,9 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	exeenv.BwMatch = 0;
 	exeenv.IntPos = 1;
 	exeenv.Ant3D = 1;
+	exeenv.AntMouseLeft = ANT_MOUSE_PAN;
+	exeenv.AntMouseMiddle = ANT_MOUSE_ROTATE;
+	exeenv.AntMouseWheel = ANT_MOUSE_ZOOM;
 	exeenv.CurDir = 0;
 	exeenv.FixFreeAngle = 1;
 	exeenv.RecentMax = 4;
@@ -385,6 +398,17 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 	KMMANAWebW1->Enabled = WebRef.IsHTML();
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
+{
+	if( Msg.message != WM_MOUSEWHEEL ) return;
+	TPoint pt;
+	pt.x = (short)LOWORD(Msg.lParam);
+	pt.y = (short)HIWORD(Msg.lParam);
+	bool wh = FALSE;
+	PBoxAntMouseWheel(this, TShiftState(), (short)HIWORD(Msg.wParam), pt, wh);
+	if( wh ) Handled = TRUE;
+}
+//---------------------------------------------------------------------------
 // ウイエトカーソルを設定する
 void __fastcall TMainWnd::SetWaitCursor(void)
 {
@@ -447,6 +471,12 @@ void __fastcall TMainWnd::ReadRegister(void)
 	env.FontSize = pIniFile->ReadInteger("Env", "FontSize", env.FontSize);
 // 表示
 	exeenv.Ant3D = pIniFile->ReadInteger("Job", "Ant3D", exeenv.Ant3D);
+	exeenv.AntMouseLeft = pIniFile->ReadInteger("Job", "AntMouseLeft", exeenv.AntMouseLeft);
+	exeenv.AntMouseMiddle = pIniFile->ReadInteger("Job", "AntMouseMiddle", exeenv.AntMouseMiddle);
+	exeenv.AntMouseWheel = pIniFile->ReadInteger("Job", "AntMouseWheel", exeenv.AntMouseWheel);
+	if( (exeenv.AntMouseLeft < ANT_MOUSE_NONE) || (exeenv.AntMouseLeft > ANT_MOUSE_ZOOM) ) exeenv.AntMouseLeft = ANT_MOUSE_PAN;
+	if( (exeenv.AntMouseMiddle < ANT_MOUSE_NONE) || (exeenv.AntMouseMiddle > ANT_MOUSE_ZOOM) ) exeenv.AntMouseMiddle = ANT_MOUSE_ROTATE;
+	if( (exeenv.AntMouseWheel < ANT_MOUSE_NONE) || (exeenv.AntMouseWheel > ANT_MOUSE_ZOOM) ) exeenv.AntMouseWheel = ANT_MOUSE_ZOOM;
 	exeenv.IntPos = pIniFile->ReadInteger("Job", "IntPos", exeenv.IntPos);
 	exeenv.MmSel = pIniFile->ReadInteger("Job", "LengthUnitMM", exeenv.MmSel);
 	exeenv.CurDir = pIniFile->ReadInteger("Job", "CurDir", exeenv.CurDir);
@@ -498,6 +528,9 @@ void __fastcall TMainWnd::WriteRegister(void)
 	pIniFile->WriteInteger("Env", "FontSize", env.FontSize);
 // 表示
 	pIniFile->WriteInteger("Job", "Ant3D", exeenv.Ant3D);
+	pIniFile->WriteInteger("Job", "AntMouseLeft", exeenv.AntMouseLeft);
+	pIniFile->WriteInteger("Job", "AntMouseMiddle", exeenv.AntMouseMiddle);
+	pIniFile->WriteInteger("Job", "AntMouseWheel", exeenv.AntMouseWheel);
 	pIniFile->WriteInteger("Job", "IntPos", exeenv.IntPos);
 	pIniFile->WriteInteger("Job", "LengthUnitMM", exeenv.MmSel);
 	pIniFile->WriteInteger("Job", "CurDir", exeenv.CurDir);
@@ -2416,17 +2449,133 @@ int __fastcall TMainWnd::SelectWire(int X, int Y)
 	return r;
 }
 //---------------------------------------------------------------------------
+// アンテナ形状表示のマウス操作設定
+int __fastcall TMainWnd::GetAntMouseAction(TMouseButton Button)
+{
+	if( Button == mbLeft ) return exeenv.AntMouseLeft;
+	if( Button == mbMiddle ) return exeenv.AntMouseMiddle;
+	return ANT_MOUSE_NONE;
+}
+//---------------------------------------------------------------------------
+double __fastcall TMainWnd::GetAntViewScale(void)
+{
+	double sc = double(TBarSC->Position) / 20.0;
+	return sc * sc * sc * sc;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::SetTrackBarPosition(TTrackBar *Bar, int Pos)
+{
+	if( Pos < Bar->Min ) Pos = Bar->Min;
+	if( Pos > Bar->Max ) Pos = Bar->Max;
+	if( Bar->Position != Pos ) Bar->Position = Pos;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntViewPan(int DX, int DY)
+{
+	double sc = GetAntViewScale();
+	if( sc <= 0.0 ) return;
+	exeenv.AntXc += double(DX) / sc;
+	exeenv.AntYc += double(DY) / sc;
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntViewRotate(int DX, int DY)
+{
+	SetTrackBarPosition(TBarDeg, TBarDeg->Position + DX);
+	if( exeenv.Ant3D ){
+		SetTrackBarPosition(TBarZDeg, TBarZDeg->Position - DY);
+	}
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntViewZoom(int Delta, int X, int Y)
+{
+	double oldSc = GetAntViewScale();
+	int oldPos = TBarSC->Position;
+	SetTrackBarPosition(TBarSC, TBarSC->Position + Delta);
+	if( oldPos == TBarSC->Position ) return;
+	double newSc = GetAntViewScale();
+	if( (oldSc > 0.0) && (newSc > 0.0) ){
+		exeenv.AntXc += double(X - (PBoxAnt->Width / 2)) * ((1.0 / newSc) - (1.0 / oldSc));
+		exeenv.AntYc += double(Y - (PBoxAnt->Height / 2)) * ((1.0 / newSc) - (1.0 / oldSc));
+	}
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
 // アンテナ形状表示のマウスイベント
 void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 	TShiftState Shift, int X, int Y)
 {
 	PBoxAntMX = X;
 	PBoxAntMY = Y;
+	PBoxAntLastX = X;
+	PBoxAntLastY = Y;
+	PBoxAntDragButton = int(Button);
+	PBoxAntDragAction = GetAntMouseAction(Button);
+	PBoxAntDragMoved = FALSE;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y)
+{
+	if( PBoxAntDragAction == ANT_MOUSE_NONE ) return;
+	int dx = X - PBoxAntLastX;
+	int dy = Y - PBoxAntLastY;
+	if( !dx && !dy ) return;
+	if( !PBoxAntDragMoved && (ABS(X - PBoxAntMX) < 3) && (ABS(Y - PBoxAntMY) < 3) ) return;
+	PBoxAntDragMoved = TRUE;
+	switch( PBoxAntDragAction ){
+		case ANT_MOUSE_PAN:
+			AntViewPan(dx, dy);
+			break;
+		case ANT_MOUSE_ROTATE:
+			AntViewRotate(dx, dy);
+			break;
+		case ANT_MOUSE_ZOOM:
+			AntViewZoom(-dy / 2, X, Y);
+			break;
+	}
+	PBoxAntLastX = X;
+	PBoxAntLastY = Y;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
+	TShiftState Shift, int X, int Y)
+{
+	if( int(Button) == PBoxAntDragButton ){
+		PBoxAntDragButton = -1;
+		PBoxAntDragAction = ANT_MOUSE_NONE;
+		if( PBoxAntDragMoved ) PBoxAntIgnoreClick = TRUE;
+	}
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PBoxAntMouseWheel(TObject *Sender, TShiftState Shift,
+	int WheelDelta, const TPoint &MousePos, bool &Handled)
+{
+	TPoint pt = PBoxAnt->ScreenToClient(MousePos);
+	if( (pt.x < 0) || (pt.y < 0) || (pt.x >= PBoxAnt->Width) || (pt.y >= PBoxAnt->Height) ) return;
+	Handled = TRUE;
+	int step = WheelDelta / WHEEL_DELTA;
+	if( !step ) step = (WheelDelta > 0) ? 1 : -1;
+	switch( exeenv.AntMouseWheel ){
+		case ANT_MOUSE_PAN:
+			AntViewPan(0, step * 24);
+			break;
+		case ANT_MOUSE_ROTATE:
+			AntViewRotate(step * 5, 0);
+			break;
+		case ANT_MOUSE_ZOOM:
+			AntViewZoom(step * 2, pt.x, pt.y);
+			break;
+	}
 }
 //---------------------------------------------------------------------------
 // アンテナ形状表示のシングルクリック
 void __fastcall TMainWnd::PBoxAntClick(TObject *Sender)
 {
+	if( PBoxAntIgnoreClick ){
+		PBoxAntIgnoreClick = FALSE;
+		return;
+	}
 	if( SelectWire(PBoxAntMX, PBoxAntMY) == TRUE ){
 		PBoxAnt->Invalidate();
 	}
