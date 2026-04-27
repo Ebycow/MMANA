@@ -599,7 +599,12 @@ void __fastcall TMainWnd::UpdateLengthUnitUI(void)
 		KMmUnit->Checked = exeenv.MmSel;
 	}
 	Grid2->Invalidate();
-	PBoxAnt->Invalidate();
+	if( ant.wmax ){
+		AllViewBtnClick(NULL);
+	}
+	else {
+		PBoxAnt->Invalidate();
+	}
 }
 //---------------------------------------------------------------------------
 // アンテナデータを初期化する
@@ -2252,10 +2257,10 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	for( i = 0; i < pCalAnt->wmax; i++, wp++ ){
 		PBoxAnt->Canvas->Pen->Color = wp->R ? clBlack : clGray;
 		PBoxAnt->Canvas->Pen->Width = ((i == sel) ? 2 : 1);
-		Calc3DXY(x, y, deg, zdeg, wp->X1, wp->Y1, wp->Z1);
+		CalcAntViewXY(x, y, deg, zdeg, wp->X1, wp->Y1, wp->Z1);
 		X = int((x * sc)) + Xc;
 		Y = Yc - int((y * sc));
-		Calc3DXY(x, y, deg, zdeg, wp->X2, wp->Y2, wp->Z2);
+		CalcAntViewXY(x, y, deg, zdeg, wp->X2, wp->Y2, wp->Z2);
 		X2 = int((x * sc)) + Xc;
 		Y2 = Yc - int((y * sc));
 		if( Clip.Clip(X, Y, X2, Y2) == TRUE ){
@@ -2272,7 +2277,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 				int j;
 				WDEF *tp;
 				for( tp = temp, j = 0; j < n; j++, tp++ ){
-					Calc3DXY(x, y, deg, zdeg, tp->X2, tp->Y2, tp->Z2);
+					CalcAntViewXY(x, y, deg, zdeg, tp->X2, tp->Y2, tp->Z2);
 					X = int((x * sc)) + Xc;
 					Y = Yc - int((y * sc));
 					::SetBkMode(PBoxAnt->Canvas->Handle, TRANSPARENT);
@@ -2290,7 +2295,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 		PBoxAnt->Canvas->Pen->Color = clGreen;
 		for( i = 1; i <= (GetPlusMax()+(pCalAnt->wzmax*2)); i++ ){
 			GetSegPos(cx, cy, cz, i);
-			Calc3DXY(x, y, deg, zdeg, cx, cy, cz);
+			CalcAntViewXY(x, y, deg, zdeg, cx, cy, cz);
 			X = int((x * sc)) + Xc;
 			Y = Yc - int((y * sc));
 			::SetBkMode(PBoxAnt->Canvas->Handle, TRANSPARENT);
@@ -2306,7 +2311,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	YT += FH + 2;
 	for( i = 0; i < pCalAnt->cmax; i++ ){	// 給電点
 		GetSegPos(cx, cy, cz, Plus2Seg(pCalAnt->cdef[i].PLUSNo));
-		Calc3DXY(x, y, deg, zdeg, cx, cy, cz);
+		CalcAntViewXY(x, y, deg, zdeg, cx, cy, cz);
 		X = int((x * sc)) + Xc;
 		Y = Yc - int((y * sc));
 		::SetBkMode(PBoxAnt->Canvas->Handle, TRANSPARENT);
@@ -2321,7 +2326,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	if( EnbLoad->Checked ){
 		for( i = 0; i < pCalAnt->lmax; i++ ){	// ロード
 			GetSegPos(cx, cy, cz, Plus2Seg(pCalAnt->ldef[i].PLUSNo));
-			Calc3DXY(x, y, deg, zdeg, cx, cy, cz);
+			CalcAntViewXY(x, y, deg, zdeg, cx, cy, cz);
 			X = int((x * sc)) + Xc;
 			Y = Yc - int((y * sc));
 			::SetBkMode(PBoxAnt->Canvas->Handle, TRANSPARENT);
@@ -2380,7 +2385,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 					cz += Cur;
 					PBoxAnt->Canvas->Pen->Color = clBlue;
 				}
-				Calc3DXY(x, y, deg, zdeg, cx, cy, cz);
+				CalcAntViewXY(x, y, deg, zdeg, cx, cy, cz);
 				X = int((x * sc)) + Xc;
 				Y = Yc - int((y * sc));
 				ClipXY(X, Y);
@@ -2427,10 +2432,10 @@ int __fastcall TMainWnd::SelectWire(int X, int Y)
 	int mw = 9;
 	int w, mi;
 	for( i = 0; i < pCalAnt->wmax; i++ ){
-		Calc3DXY(x, y, deg, zdeg, pCalAnt->wdef[i].X1, pCalAnt->wdef[i].Y1, pCalAnt->wdef[i].Z1);
+		CalcAntViewXY(x, y, deg, zdeg, pCalAnt->wdef[i].X1, pCalAnt->wdef[i].Y1, pCalAnt->wdef[i].Z1);
 		BP.x = int((x * sc)) + Xc;
 		BP.y = Yc - int((y * sc));
-		Calc3DXY(x, y, deg, zdeg, pCalAnt->wdef[i].X2, pCalAnt->wdef[i].Y2, pCalAnt->wdef[i].Z2);
+		CalcAntViewXY(x, y, deg, zdeg, pCalAnt->wdef[i].X2, pCalAnt->wdef[i].Y2, pCalAnt->wdef[i].Z2);
 		EP.x = int((x * sc)) + Xc;
 		EP.y = Yc - int((y * sc));
 		for( w = 1; w <= mw; w++ ){
@@ -2468,6 +2473,20 @@ void __fastcall TMainWnd::SetTrackBarPosition(TTrackBar *Bar, int Pos)
 	if( Pos < Bar->Min ) Pos = Bar->Min;
 	if( Pos > Bar->Max ) Pos = Bar->Max;
 	if( Bar->Position != Pos ) Bar->Position = Pos;
+}
+//---------------------------------------------------------------------------
+double __fastcall TMainWnd::GetAntViewUnitScale(void)
+{
+	if( !exeenv.RmdSel && exeenv.MmSel ) return 1000.0;
+	return 1.0;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::CalcAntViewXY(double &x, double &y, double deg, double zdeg, double X, double Y, double Z)
+{
+	Calc3DXY(x, y, deg, zdeg, X, Y, Z);
+	double us = GetAntViewUnitScale();
+	x *= us;
+	y *= us;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AntViewPan(int DX, int DY)
@@ -2621,12 +2640,12 @@ void __fastcall TMainWnd::AllViewBtnClick(TObject *Sender)
 	YL = MAXDOUBLE; YH = -MAXDOUBLE;
 	pos = 0;
 	for( i = 0; i < pCalAnt->wmax; i++ ){
-		Calc3DXY(x, y, deg, zdeg, pCalAnt->wdef[i].X1, pCalAnt->wdef[i].Y1, pCalAnt->wdef[i].Z1);
+		CalcAntViewXY(x, y, deg, zdeg, pCalAnt->wdef[i].X1, pCalAnt->wdef[i].Y1, pCalAnt->wdef[i].Z1);
 		if( XL > x ) XL = x;
 		if( XH < x ) XH = x;
 		if( YL > y ) YL = y;
 		if( YH < y ) YH = y;
-		Calc3DXY(x, y, deg, zdeg, pCalAnt->wdef[i].X2, pCalAnt->wdef[i].Y2, pCalAnt->wdef[i].Z2);
+		CalcAntViewXY(x, y, deg, zdeg, pCalAnt->wdef[i].X2, pCalAnt->wdef[i].Y2, pCalAnt->wdef[i].Z2);
 		if( XL > x ) XL = x;
 		if( XH < x ) XH = x;
 		if( YL > y ) YL = y;

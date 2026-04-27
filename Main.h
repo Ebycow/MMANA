@@ -421,6 +421,8 @@ private:	// ÉÜÅ[ÉUÅ[êÈåæ
 	int __fastcall GetAntMouseAction(TMouseButton Button);
 	void __fastcall SetTrackBarPosition(TTrackBar *Bar, int Pos);
 	double __fastcall GetAntViewScale(void);
+	double __fastcall GetAntViewUnitScale(void);
+	void __fastcall CalcAntViewXY(double &x, double &y, double deg, double zdeg, double X, double Y, double Z);
 	void __fastcall AntViewZoom(int Delta, int X, int Y);
 	void __fastcall AntViewPan(int DX, int DY);
 	void __fastcall AntViewRotate(int DX, int DY);
