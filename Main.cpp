@@ -68,6 +68,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	pACal = NULL;
 	pCalAnt = &ant;
 	QuadMode = false;
+	QuadSwitching = false;
+	QuadSavedClientWidth = QuadSavedClientHeight = 0;
 	InitQuadLayout();
 	Grid2->Options = Grid2->Options << goAlwaysShowEditor;
 	Grid3->Options = Grid3->Options << goAlwaysShowEditor;
@@ -3126,6 +3128,10 @@ void __fastcall TMainWnd::LayoutQuadAntPanel(void)
 void __fastcall TMainWnd::SwitchToQuadMode(void)
 {
 	if( QuadMode ) return;
+
+	QuadSavedClientWidth = ClientWidth;
+	QuadSavedClientHeight = ClientHeight;
+	QuadSwitching = true;
 	QuadMode = true;
 
 	const int PANE_W = 792;
@@ -3156,6 +3162,7 @@ void __fastcall TMainWnd::SwitchToQuadMode(void)
 	QuadContainer->SetBounds(0, 0, ClientWidth, ClientHeight);
 	QuadContainer->Align = alClient;
 	QuadContainer->Visible = true;
+	QuadSwitching = false;
 	LayoutQuadAntPanel();
 
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width/2-2, PBoxPtn->Height);
@@ -3168,7 +3175,7 @@ void __fastcall TMainWnd::SwitchToQuadMode(void)
 void __fastcall TMainWnd::SwitchToTabMode(void)
 {
 	if( !QuadMode ) return;
-	QuadMode = false;
+	QuadSwitching = true;
 
 	PBoxAnt->Align = alNone;
 	PBoxPtn->Align = alNone;
@@ -3189,6 +3196,12 @@ void __fastcall TMainWnd::SwitchToTabMode(void)
 	QuadContainer->Visible = false;
 	Page->Align = alClient;
 	Page->Visible = true;
+	if( (QuadSavedClientWidth > 0) && (QuadSavedClientHeight > 0) ){
+		ClientWidth = QuadSavedClientWidth;
+		ClientHeight = QuadSavedClientHeight;
+	}
+	QuadMode = false;
+	QuadSwitching = false;
 
 	AlignList.NewAlign(Page->ActivePage);
 	AlignGrid[0].NewAlign(Grid1);
@@ -3212,6 +3225,8 @@ void __fastcall TMainWnd::QuadViewToggle(TObject *Sender)
 // Application resize event
 void __fastcall TMainWnd::FormResize(TObject *Sender)
 {
+	if( QuadSwitching ) return;
+
 	if( !QuadMode ){
 		AlignList.NewAlign(Page->ActivePage);
 		AlignGrid[0].NewAlign(Grid1);

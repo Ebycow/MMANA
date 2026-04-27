@@ -466,6 +466,9 @@ private:	// ƒ†[ƒU[éŒ¾
 	TMenuItem		*KMmUnit;
 
 	bool            QuadMode;
+	bool            QuadSwitching;
+	int             QuadSavedClientWidth;
+	int             QuadSavedClientHeight;
 	TPanel          *QuadContainer;
 	TPanel          *PanelTop;
 	TPanel          *PanelBottom;
