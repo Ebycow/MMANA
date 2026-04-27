@@ -1468,12 +1468,16 @@ void __fastcall TMainWnd::Grid3SetEditText(TObject *Sender, int ACol,   //ja7ude
 {
 	double	d;
 	char	bf[64];
+	CDEF	OldC;
+	int		OldCmax;
 
 	if( ARow ){
 		Grid3GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
 		PushAntUndo();
 		ARow--;
+		OldCmax = ant.cmax;
+		memcpy(&OldC, &ant.cdef[ARow], sizeof(CDEF));
 		switch(ACol){
 			case 1:		// PLUS
 				if( !Value.IsEmpty() ){
@@ -1495,6 +1499,9 @@ void __fastcall TMainWnd::Grid3SetEditText(TObject *Sender, int ACol,   //ja7ude
 					}
 				}
 				break;
+		}
+		if( (OldCmax != ant.cmax) || memcmp(&OldC, &ant.cdef[ARow], sizeof(CDEF)) ){
+			UpdateAntPreview();
 		}
 	}
 }
