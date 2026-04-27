@@ -2964,10 +2964,15 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
 
 	WDEF *wp = &ant.wdef[w];
-	for( int endp = 0; endp < 2; endp++ ){
+	for( int endp = 0; endp < 3; endp++ ){
 		double wx = endp ? wp->X2 : wp->X1;
 		double wy = endp ? wp->Y2 : wp->Y1;
 		double wz = endp ? wp->Z2 : wp->Z1;
+		if( endp == 2 ){
+			wx = (wp->X1 + wp->X2) / 2.0;
+			wy = (wp->Y1 + wp->Y2) / 2.0;
+			wz = (wp->Z1 + wp->Z2) / 2.0;
+		}
 		int sx, sy;
 		AntWorldToScreen(wx, wy, wz, sx, sy);
 		PBoxAnt->Canvas->Pen->Color = clBlack;
@@ -3007,10 +3012,15 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 	WDEF *wp = &ant.wdef[w];
 	double best = (8.0 * 8.0) + 1.0;
 	int found = FALSE;
-	for( int endp = 0; endp < 2; endp++ ){
+	for( int endp = 0; endp < 3; endp++ ){
 		double wx = endp ? wp->X2 : wp->X1;
 		double wy = endp ? wp->Y2 : wp->Y1;
 		double wz = endp ? wp->Z2 : wp->Z1;
+		if( endp == 2 ){
+			wx = (wp->X1 + wp->X2) / 2.0;
+			wy = (wp->Y1 + wp->Y2) / 2.0;
+			wz = (wp->Z1 + wp->Z2) / 2.0;
+		}
 		for( int axis = 0; axis < 3; axis++ ){
 			int x1, y1, x2, y2;
 			double dx, dy;
@@ -3039,6 +3049,11 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 	double wx = endpoint ? wp->X2 : wp->X1;
 	double wy = endpoint ? wp->Y2 : wp->Y1;
 	double wz = endpoint ? wp->Z2 : wp->Z1;
+	if( endpoint == 2 ){
+		wx = (wp->X1 + wp->X2) / 2.0;
+		wy = (wp->Y1 + wp->Y2) / 2.0;
+		wz = (wp->Z1 + wp->Z2) / 2.0;
+	}
 	int x1, y1, x2, y2;
 	double dx, dy;
 	if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) return FALSE;
@@ -3078,7 +3093,7 @@ void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y)
 			case ANT_GIZMO_AXIS_Z: wp->Z1 += d; break;
 		}
 	}
-	else {
+	else if( AntGizmoEndpoint == 1 ){
 		wp->X2 = AntGizmoOldW.X2;
 		wp->Y2 = AntGizmoOldW.Y2;
 		wp->Z2 = AntGizmoOldW.Z2;
@@ -3086,6 +3101,14 @@ void __fastcall TMainWnd::UpdateAntGizmoDrag(int X, int Y)
 			case ANT_GIZMO_AXIS_X: wp->X2 += d; break;
 			case ANT_GIZMO_AXIS_Y: wp->Y2 += d; break;
 			case ANT_GIZMO_AXIS_Z: wp->Z2 += d; break;
+		}
+	}
+	else {
+		memcpy(wp, &AntGizmoOldW, sizeof(WDEF));
+		switch( AntGizmoAxis ){
+			case ANT_GIZMO_AXIS_X: wp->X1 += d; wp->X2 += d; break;
+			case ANT_GIZMO_AXIS_Y: wp->Y1 += d; wp->Y2 += d; break;
+			case ANT_GIZMO_AXIS_Z: wp->Z1 += d; wp->Z2 += d; break;
 		}
 	}
 	ant.Edit = ant.Flag = 1;
