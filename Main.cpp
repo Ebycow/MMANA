@@ -119,6 +119,9 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	FirstInit = TRUE;
 	int i;
 	KAntDrawWire = NULL;
+	KMirrorSelectedX = NULL;
+	KMirrorSelectedY = NULL;
+	KMirrorSelectedZ = NULL;
 	AntDrawBtn = NULL;
 	AntDrawXYBtn = NULL;
 	AntDrawXZBtn = NULL;
@@ -223,6 +226,21 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	KMmUnit->OnClick = MmUnitClick;
 	KV1->Add(KMmUnit);
 	K17->ShortCut = Vcl::Menus::ShortCut('F', TShiftState());
+	TMenuItem *NMirrorSelected = new TMenuItem(this);
+	NMirrorSelected->Caption = "-";
+	KE1->Add(NMirrorSelected);
+	KMirrorSelectedX = new TMenuItem(this);
+	KMirrorSelectedX->Caption = "Flip Selected X";
+	KMirrorSelectedX->OnClick = MirrorSelectedXClick;
+	KE1->Add(KMirrorSelectedX);
+	KMirrorSelectedY = new TMenuItem(this);
+	KMirrorSelectedY->Caption = "Flip Selected Y";
+	KMirrorSelectedY->OnClick = MirrorSelectedYClick;
+	KE1->Add(KMirrorSelectedY);
+	KMirrorSelectedZ = new TMenuItem(this);
+	KMirrorSelectedZ->Caption = "Flip Selected Z";
+	KMirrorSelectedZ->OnClick = MirrorSelectedZClick;
+	KE1->Add(KMirrorSelectedZ);
 
 	ResColors[0] = clBlack;	//	•F
 	ResColors[1] = clMaroon;	//	ŒIF
@@ -2836,6 +2854,49 @@ void __fastcall TMainWnd::PasteAntWires(void)
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::MirrorSelectedWires(int Axis)
+{
+	double cx, cy, cz;
+	if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+	PushAntUndo();
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( !IsAntWireSelected(i) ) continue;
+		WDEF *wp = &ant.wdef[i];
+		switch( Axis ){
+			case ANT_GIZMO_AXIS_X:
+				wp->X1 = (2.0 * cx) - wp->X1;
+				wp->X2 = (2.0 * cx) - wp->X2;
+				break;
+			case ANT_GIZMO_AXIS_Y:
+				wp->Y1 = (2.0 * cy) - wp->Y1;
+				wp->Y2 = (2.0 * cy) - wp->Y2;
+				break;
+			case ANT_GIZMO_AXIS_Z:
+				wp->Z1 = (2.0 * cz) - wp->Z1;
+				wp->Z2 = (2.0 * cz) - wp->Z2;
+				break;
+		}
+	}
+	UpdateAntData();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::MirrorSelectedXClick(TObject *Sender)
+{
+	MirrorSelectedWires(ANT_GIZMO_AXIS_X);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::MirrorSelectedYClick(TObject *Sender)
+{
+	MirrorSelectedWires(ANT_GIZMO_AXIS_Y);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::MirrorSelectedZClick(TObject *Sender)
+{
+	MirrorSelectedWires(ANT_GIZMO_AXIS_Z);
+}//---------------------------------------------------------------------------
 void __fastcall TMainWnd::CreateAntDrawControls(void)
 {
 	if( AntDrawBtn != NULL ) return;

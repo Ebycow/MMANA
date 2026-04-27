@@ -443,6 +443,10 @@ private:	// ユーザー宣言
 	int __fastcall GetAntSelectionCount(void);
 	int __fastcall IsAntWireSelected(int Wire);
 	int __fastcall GetAntSelectionCenter(double &X, double &Y, double &Z);
+	void __fastcall MirrorSelectedWires(int Axis);
+	void __fastcall MirrorSelectedXClick(TObject *Sender);
+	void __fastcall MirrorSelectedYClick(TObject *Sender);
+	void __fastcall MirrorSelectedZClick(TObject *Sender);
 	void __fastcall CreateAntDrawControls(void);
 	void __fastcall LayoutAntDrawControls(void);
 	void __fastcall UpdateAntDrawControls(void);
@@ -504,6 +508,9 @@ private:	// ユーザー宣言
 	int	AntWireSelectionCount;
 	int	PBoxAntClickCtrl;
 	WDEF	AntGizmoOldSelected[WMAX];
+	TMenuItem	*KMirrorSelectedX;
+	TMenuItem	*KMirrorSelectedY;
+	TMenuItem	*KMirrorSelectedZ;
 
 	int __fastcall DrawPtn(void);
 
