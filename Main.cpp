@@ -136,6 +136,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntGizmoMouseX = AntGizmoMouseY = 0;
 	AntGizmoAxisDX = AntGizmoAxisDY = 0.0;
 	memset(&AntGizmoOldW, 0, sizeof(WDEF));
+	AntUndoList = new TStringList;
+	AntRedoList = new TStringList;
 	CreateAntDrawControls();
 	EntryAlignControl();
 	pACal = NULL;
@@ -216,6 +218,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	KMmUnit->Checked = exeenv.MmSel;
 	KMmUnit->OnClick = MmUnitClick;
 	KV1->Add(KMmUnit);
+	K17->ShortCut = Vcl::Menus::ShortCut(VK_F, TShiftState());
 
 	ResColors[0] = clBlack;	//	黒色
 	ResColors[1] = clMaroon;	//	栗色
@@ -252,6 +255,8 @@ __fastcall TMainWnd::~TMainWnd(void)
 {
 	if( pACal != NULL ) delete pACal;
 	if( pCalAnt != &ant ) delete pCalAnt;
+	delete AntUndoList;
+	delete AntRedoList;
 	DeleteNEC();
 }
 
@@ -477,6 +482,25 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
 {
+	if( Msg.message == WM_KEYDOWN ){
+		bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
+		if( ctrl && (Msg.wParam == 'Z') ){
+			UndoAntEdit();
+			Handled = TRUE;
+			return;
+		}
+		if( ctrl && (Msg.wParam == 'Y') ){
+			RedoAntEdit();
+			Handled = TRUE;
+			return;
+		}
+		if( Msg.wParam == VK_F ){
+			K17Click(NULL);
+			Handled = TRUE;
+			return;
+		}
+		return;
+	}
 	if( Msg.message != WM_MOUSEWHEEL ) return;
 	TPoint pt;
 	pt.x = (short)LOWORD(Msg.lParam);
@@ -1272,6 +1296,7 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 	if( ARow ){
 		Grid2GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
+		PushAntUndo();
 		ARow--;
 		OldWmax = ant.wmax;
 		memcpy(&OldW, &ant.wdef[ARow], sizeof(WDEF));
@@ -1396,6 +1421,7 @@ void __fastcall TMainWnd::Grid3SetEditText(TObject *Sender, int ACol,   //ja7ude
 	if( ARow ){
 		Grid3GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
+		PushAntUndo();
 		ARow--;
 		switch(ACol){
 			case 1:		// PLUS
@@ -1513,6 +1539,7 @@ void __fastcall TMainWnd::Grid4SetEditText(TObject *Sender, int ACol,
 	if( ARow ){
 		Grid4GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
+		PushAntUndo();
 		ARow--;
 		switch(ACol){
 			case 1:		// パルス
@@ -2623,6 +2650,52 @@ void __fastcall TMainWnd::AntViewRotateDrag(int X, int Y)
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::ClearAntRedo(void)
+{
+	AntRedoList->Clear();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PushAntUndo(void)
+{
+	AnsiString snap;
+	SaveAntStrings(snap);
+	if( AntUndoList->Count && (AntUndoList->Strings[AntUndoList->Count - 1] == snap) ) return;
+	AntUndoList->Add(snap);
+	while( AntUndoList->Count > 64 ) AntUndoList->Delete(0);
+	ClearAntRedo();
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::RestoreAntSnapshot(TStringList *From, TStringList *To)
+{
+	if( From->Count <= 0 ) return FALSE;
+	AnsiString cur;
+	SaveAntStrings(cur);
+	To->Add(cur);
+	while( To->Count > 64 ) To->Delete(0);
+
+	int n = From->Count - 1;
+	AnsiString snap = From->Strings[n];
+	From->Delete(n);
+	LoadAntStrings(snap);
+	SetAntDef();
+	ant.Edit = ant.Flag = 1;
+	exeenv.CalcLog = 1;
+	SetStackAnt();
+	res.ClearBWC();
+	UpdateAllViews();
+	return TRUE;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::UndoAntEdit(void)
+{
+	if( RestoreAntSnapshot(AntUndoList, AntRedoList) != TRUE ) ::MessageBeep(MB_ICONEXCLAMATION);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::RedoAntEdit(void)
+{
+	if( RestoreAntSnapshot(AntRedoList, AntUndoList) != TRUE ) ::MessageBeep(MB_ICONEXCLAMATION);
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::CreateAntDrawControls(void)
 {
 	if( AntDrawBtn != NULL ) return;
@@ -2958,6 +3031,7 @@ int __fastcall TMainWnd::BeginAntGizmoDrag(int X, int Y)
 {
 	int endpoint, axis;
 	if( HitAntEditGizmo(X, Y, endpoint, axis) != TRUE ) return FALSE;
+	PushAntUndo();
 	int w = Grid2->Row - 1;
 	if( (w < 0) || (w >= ant.wmax) ) return FALSE;
 
@@ -3062,6 +3136,7 @@ void __fastcall TMainWnd::PaintAntDrawPreview(void)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2)
 {
+	PushAntUndo();
 	if( ant.wmax >= WMAX ){
 		::MessageBeep(MB_ICONEXCLAMATION);
 		return;
@@ -4762,6 +4837,7 @@ void __fastcall TMainWnd::KT1Click(TObject *Sender)
 #if 1
 	TWireEditDlg *Box = new TWireEditDlg(this);
 
+	PushAntUndo();
 	if( Box->Execute(ant.wdef, Grid2->Row-1, ant.wmax) == TRUE ){
 		UpdateAntData();
 	}
@@ -5117,6 +5193,7 @@ void __fastcall TMainWnd::KCADClick(TObject *Sender)
 {
 	TWireCadDlg *Box = new TWireCadDlg(this);
 
+	PushAntUndo();
 	int Sel = Grid2->Row - 1;
 	if( Box->Execute(&ant, Sel) == TRUE ){
 		UpdateAntData();
@@ -5146,6 +5223,7 @@ void __fastcall TMainWnd::UpdateAntData(void)
 void __fastcall TMainWnd::K35Click(TObject *Sender)
 {
 	if( ant.wmax && Grid2->Row ){
+		PushAntUndo();
 		int n = Grid2->Row - 1;
 		double X = ant.wdef[n].X1;
 		double Y = ant.wdef[n].Y1;

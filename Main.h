@@ -429,6 +429,11 @@ private:	// ユーザー宣言
 	void __fastcall AntViewPan(int DX, int DY);
 	void __fastcall AntViewRotate(int DX, int DY);
 	void __fastcall AntViewRotateDrag(int X, int Y);
+	void __fastcall PushAntUndo(void);
+	void __fastcall ClearAntRedo(void);
+	int __fastcall RestoreAntSnapshot(TStringList *From, TStringList *To);
+	void __fastcall UndoAntEdit(void);
+	void __fastcall RedoAntEdit(void);
 	void __fastcall CreateAntDrawControls(void);
 	void __fastcall LayoutAntDrawControls(void);
 	void __fastcall UpdateAntDrawControls(void);
@@ -482,6 +487,8 @@ private:	// ユーザー宣言
 	double	AntGizmoAxisDX;
 	double	AntGizmoAxisDY;
 	WDEF	AntGizmoOldW;
+	TStringList	*AntUndoList;
+	TStringList	*AntRedoList;
 
 	int __fastcall DrawPtn(void);
 
