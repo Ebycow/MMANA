@@ -335,6 +335,7 @@ __published:	// IDE 管理のコンポーネント
 
 
 	void __fastcall KCADClick(TObject *Sender);
+	void __fastcall AntDrawWireToggle(TObject *Sender);
 	void __fastcall K35Click(TObject *Sender);
 
 	void __fastcall FormPaint(TObject *Sender);
@@ -428,6 +429,18 @@ private:	// ユーザー宣言
 	void __fastcall AntViewPan(int DX, int DY);
 	void __fastcall AntViewRotate(int DX, int DY);
 	void __fastcall AntViewRotateDrag(int X, int Y);
+	void __fastcall CreateAntDrawControls(void);
+	void __fastcall LayoutAntDrawControls(void);
+	void __fastcall UpdateAntDrawControls(void);
+	void __fastcall SetAntDrawMode(int Enabled);
+	void __fastcall SetAntDrawPlane(int Plane);
+	void __fastcall AntDrawPlaneClick(TObject *Sender);
+	void __fastcall AntDrawCancelClick(TObject *Sender);
+	int __fastcall AntViewPointToXY(int X, int Y, double &WX, double &WY, double &WZ);
+	void __fastcall AntWorldToScreen(double WX, double WY, double WZ, int &X, int &Y);
+	int __fastcall SnapAntDrawPoint(int X, int Y, double &WX, double &WY, double &WZ);
+	void __fastcall PaintAntDrawPreview(void);
+	void __fastcall AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2);
 	void __fastcall PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y);
 	void __fastcall PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 	TShiftState Shift, int X, int Y);
@@ -444,6 +457,15 @@ private:	// ユーザー宣言
 	int		PBoxAntDragAction;
 	int		PBoxAntDragMoved;
 	int		PBoxAntIgnoreClick;
+	int		AntDrawMode;
+	int		AntDrawActive;
+	int		AntDrawPlane;
+	double	AntDrawX1;
+	double	AntDrawY1;
+	double	AntDrawZ1;
+	double	AntDrawX2;
+	double	AntDrawY2;
+	double	AntDrawZ2;
 
 	int __fastcall DrawPtn(void);
 
@@ -464,6 +486,12 @@ private:	// ユーザー宣言
     CRecentMenu	RecentMenu;
     CWebRef		WebRef;
 	TMenuItem		*KMmUnit;
+	TMenuItem		*KAntDrawWire;
+	TButton			*AntDrawBtn;
+	TButton			*AntDrawXYBtn;
+	TButton			*AntDrawXZBtn;
+	TButton			*AntDrawYZBtn;
+	TButton			*AntDrawCancelBtn;
 
 	bool            QuadMode;
 	bool            QuadSwitching;

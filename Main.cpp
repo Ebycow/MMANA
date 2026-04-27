@@ -46,6 +46,12 @@
 #pragma resource "*.dfm"
 TMainWnd *MainWnd;
 
+enum {
+	ANT_DRAW_PLANE_XY = 0,
+	ANT_DRAW_PLANE_XZ,
+	ANT_DRAW_PLANE_YZ
+};
+
 //---------------------------------------------------------------------------
 static void LogPrint(char *ct, ...)
 {
@@ -64,6 +70,18 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 {
 	FirstInit = TRUE;
 	int i;
+	KAntDrawWire = NULL;
+	AntDrawBtn = NULL;
+	AntDrawXYBtn = NULL;
+	AntDrawXZBtn = NULL;
+	AntDrawYZBtn = NULL;
+	AntDrawCancelBtn = NULL;
+	AntDrawMode = FALSE;
+	AntDrawActive = FALSE;
+	AntDrawPlane = ANT_DRAW_PLANE_XY;
+	AntDrawX1 = AntDrawY1 = AntDrawZ1 = 0.0;
+	AntDrawX2 = AntDrawY2 = AntDrawZ2 = 0.0;
+	CreateAntDrawControls();
 	EntryAlignControl();
 	pACal = NULL;
 	pCalAnt = &ant;
@@ -356,6 +374,7 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 	K36->Enabled = antDef.IsEmpty() ? FALSE : TRUE;	// 最適化前状態に戻す
 	K39->Enabled = antSave.IsEmpty() ? FALSE : TRUE;	// 記憶した状態に戻す
 	TBarZDeg->Enabled = exeenv.Ant3D ? TRUE : FALSE;
+	UpdateAntDrawControls();
 	if( res.Bwc.bcnt ){
 		BwBtn->Enabled = TRUE;	// 周波数特性ボタン
 	}
@@ -2293,6 +2312,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 		}
 	}
 	PBoxAnt->Canvas->Pen->Width = 1;
+	PaintAntDrawPreview();
 	double	cx, cy, cz;
 	if( pCalAnt->wmax && DspPlus->Checked ){		// セグメント分割の表示
 		PBoxAnt->Canvas->Pen->Color = clGreen;
@@ -2547,6 +2567,290 @@ void __fastcall TMainWnd::AntViewRotateDrag(int X, int Y)
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::CreateAntDrawControls(void)
+{
+	if( AntDrawBtn != NULL ) return;
+
+	AntDrawBtn = new TButton(this);
+	AntDrawBtn->Parent = TabSheet2;
+	AntDrawBtn->Caption = "Draw";
+	AntDrawBtn->TabStop = false;
+	AntDrawBtn->OnClick = AntDrawWireToggle;
+
+	AntDrawXYBtn = new TButton(this);
+	AntDrawXYBtn->Parent = TabSheet2;
+	AntDrawXYBtn->Caption = "XY";
+	AntDrawXYBtn->TabStop = false;
+	AntDrawXYBtn->OnClick = AntDrawPlaneClick;
+
+	AntDrawXZBtn = new TButton(this);
+	AntDrawXZBtn->Parent = TabSheet2;
+	AntDrawXZBtn->Caption = "XZ";
+	AntDrawXZBtn->TabStop = false;
+	AntDrawXZBtn->OnClick = AntDrawPlaneClick;
+
+	AntDrawYZBtn = new TButton(this);
+	AntDrawYZBtn->Parent = TabSheet2;
+	AntDrawYZBtn->Caption = "YZ";
+	AntDrawYZBtn->TabStop = false;
+	AntDrawYZBtn->OnClick = AntDrawPlaneClick;
+
+	AntDrawCancelBtn = new TButton(this);
+	AntDrawCancelBtn->Parent = TabSheet2;
+	AntDrawCancelBtn->Caption = "Cancel";
+	AntDrawCancelBtn->TabStop = false;
+	AntDrawCancelBtn->OnClick = AntDrawCancelClick;
+
+	LayoutAntDrawControls();
+	UpdateAntDrawControls();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::LayoutAntDrawControls(void)
+{
+	if( (AntDrawBtn == NULL) || (AllViewBtn == NULL) || (OrgBtn == NULL) ) return;
+
+	const int gap = 4;
+	const int drawW = 54;
+	const int planeW = 32;
+	const int cancelW = 50;
+	int top = OrgBtn->Top;
+	int h = OrgBtn->Height;
+	int total = drawW + gap + planeW + gap + planeW + gap + planeW + gap + cancelW;
+	int left = AllViewBtn->Left - gap - total;
+	if( left < 2 ) left = 2;
+
+	AntDrawBtn->SetBounds(left, top, drawW, h);
+	left += drawW + gap;
+	AntDrawXYBtn->SetBounds(left, top, planeW, h);
+	left += planeW + gap;
+	AntDrawXZBtn->SetBounds(left, top, planeW, h);
+	left += planeW + gap;
+	AntDrawYZBtn->SetBounds(left, top, planeW, h);
+	left += planeW + gap;
+	AntDrawCancelBtn->SetBounds(left, top, cancelW, h);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::UpdateAntDrawControls(void)
+{
+	if( AntDrawBtn == NULL ) return;
+
+	bool enabled = exeenv.Ant3D ? true : false;
+	AntDrawBtn->Enabled = enabled;
+	AntDrawXYBtn->Enabled = enabled;
+	AntDrawXZBtn->Enabled = enabled;
+	AntDrawYZBtn->Enabled = enabled;
+	AntDrawCancelBtn->Enabled = enabled && AntDrawMode;
+
+	AntDrawBtn->Caption = AntDrawMode ? "[Draw]" : "Draw";
+	AntDrawXYBtn->Caption = (AntDrawPlane == ANT_DRAW_PLANE_XY) ? "[XY]" : "XY";
+	AntDrawXZBtn->Caption = (AntDrawPlane == ANT_DRAW_PLANE_XZ) ? "[XZ]" : "XZ";
+	AntDrawYZBtn->Caption = (AntDrawPlane == ANT_DRAW_PLANE_YZ) ? "[YZ]" : "YZ";
+
+	if( KAntDrawWire != NULL ){
+		KAntDrawWire->Checked = AntDrawMode ? true : false;
+		KAntDrawWire->Enabled = enabled;
+	}
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::SetAntDrawPlane(int Plane)
+{
+	if( (Plane < ANT_DRAW_PLANE_XY) || (Plane > ANT_DRAW_PLANE_YZ) ) return;
+	if( AntDrawPlane != Plane ){
+		AntDrawPlane = Plane;
+		AntDrawActive = FALSE;
+	}
+	UpdateAntDrawControls();
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntDrawPlaneClick(TObject *Sender)
+{
+	if( Sender == AntDrawXYBtn ) SetAntDrawPlane(ANT_DRAW_PLANE_XY);
+	else if( Sender == AntDrawXZBtn ) SetAntDrawPlane(ANT_DRAW_PLANE_XZ);
+	else if( Sender == AntDrawYZBtn ) SetAntDrawPlane(ANT_DRAW_PLANE_YZ);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntDrawCancelClick(TObject *Sender)
+{
+	if( AntDrawActive ){
+		AntDrawActive = FALSE;
+		PBoxAnt->Invalidate();
+	}
+	else {
+		SetAntDrawMode(FALSE);
+	}
+	UpdateAntDrawControls();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::SetAntDrawMode(int Enabled)
+{
+	if( Enabled && !exeenv.Ant3D ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		Enabled = FALSE;
+	}
+	AntDrawMode = Enabled ? TRUE : FALSE;
+	AntDrawActive = FALSE;
+	PBoxAntDragButton = -1;
+	PBoxAntDragAction = ANT_MOUSE_NONE;
+	PBoxAnt->Cursor = AntDrawMode ? crCross : crDefault;
+	UpdateAntDrawControls();
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntDrawWireToggle(TObject *Sender)
+{
+	SetAntDrawMode(!AntDrawMode);
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::AntViewPointToXY(int X, int Y, double &WX, double &WY, double &WZ)
+{
+	if( !exeenv.Ant3D ) return FALSE;
+	double sc = GetAntViewScale();
+	double us = GetAntViewUnitScale();
+	if( (sc <= 0.0) || (us <= 0.0) ) return FALSE;
+
+	int Xc = int(PBoxAnt->Width/2 + (exeenv.AntXc * sc));
+	int Yc = int(PBoxAnt->Height/2 + (exeenv.AntYc * sc));
+	double sx = (double(X - Xc) / sc) / us;
+	double sy = (double(Yc - Y) / sc) / us;
+	double deg = double(TBarDeg->Position) * (PAI / 180.0);
+	double zdeg = double(TBarZDeg->Position) * (PAI / 180.0);
+	double sd = sin(deg);
+	double cd = cos(deg);
+	double sz = sin(zdeg);
+	double cz = cos(zdeg);
+	double planeX = AntDrawActive ? AntDrawX1 : 0.0;
+	double planeY = AntDrawActive ? AntDrawY1 : 0.0;
+	double planeZ = AntDrawActive ? AntDrawZ1 : 0.0;
+
+	switch( AntDrawPlane ){
+		case ANT_DRAW_PLANE_XY:
+		{
+			if( ABS(sz) < 0.05 ) return FALSE;
+			double q = (sy - (planeZ * cz)) / sz;
+			WX = (sd * sx) - (cd * q);
+			WY = (cd * sx) + (sd * q);
+			WZ = planeZ;
+			return TRUE;
+		}
+		case ANT_DRAW_PLANE_XZ:
+		{
+			if( (ABS(sd) < 0.05) || (ABS(cz) < 0.05) ) return FALSE;
+			WX = (sx - (cd * planeY)) / sd;
+			WY = planeY;
+			WZ = (sy - (sd * sz * planeY) + (cd * sz * WX)) / cz;
+			return TRUE;
+		}
+		case ANT_DRAW_PLANE_YZ:
+		{
+			if( (ABS(cd) < 0.05) || (ABS(cz) < 0.05) ) return FALSE;
+			WX = planeX;
+			WY = (sx - (sd * planeX)) / cd;
+			WZ = (sy + (cd * sz * planeX) - (sd * sz * WY)) / cz;
+			return TRUE;
+		}
+	}
+	return FALSE;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntWorldToScreen(double WX, double WY, double WZ, int &X, int &Y)
+{
+	double sc = GetAntViewScale();
+	int Xc = int(PBoxAnt->Width/2 + (exeenv.AntXc * sc));
+	int Yc = int(PBoxAnt->Height/2 + (exeenv.AntYc * sc));
+	double deg = double(TBarDeg->Position) * (PAI / 180.0);
+	double zdeg = double(TBarZDeg->Position) * (PAI / 180.0);
+	double x, y;
+	CalcAntViewXY(x, y, deg, zdeg, WX, WY, WZ);
+	X = int(x * sc) + Xc;
+	Y = Yc - int(y * sc);
+}
+//---------------------------------------------------------------------------
+int __fastcall TMainWnd::SnapAntDrawPoint(int X, int Y, double &WX, double &WY, double &WZ)
+{
+	int found = FALSE;
+	int best = (8 * 8) + 1;
+	for( int i = 0; i < ant.wmax; i++ ){
+		int sx, sy;
+		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, sx, sy);
+		int dx = sx - X;
+		int dy = sy - Y;
+		int d = (dx * dx) + (dy * dy);
+		if( d < best ){
+			best = d;
+			WX = ant.wdef[i].X1;
+			WY = ant.wdef[i].Y1;
+			WZ = ant.wdef[i].Z1;
+			found = TRUE;
+		}
+		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, sx, sy);
+		dx = sx - X;
+		dy = sy - Y;
+		d = (dx * dx) + (dy * dy);
+		if( d < best ){
+			best = d;
+			WX = ant.wdef[i].X2;
+			WY = ant.wdef[i].Y2;
+			WZ = ant.wdef[i].Z2;
+			found = TRUE;
+		}
+	}
+	return found;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PaintAntDrawPreview(void)
+{
+	if( !AntDrawMode || !AntDrawActive ) return;
+	int X1, Y1, X2, Y2;
+	AntWorldToScreen(AntDrawX1, AntDrawY1, AntDrawZ1, X1, Y1);
+	AntWorldToScreen(AntDrawX2, AntDrawY2, AntDrawZ2, X2, Y2);
+
+	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
+	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
+	int oldWidth = PBoxAnt->Canvas->Pen->Width;
+	PBoxAnt->Canvas->Pen->Color = clRed;
+	PBoxAnt->Canvas->Pen->Style = psDash;
+	PBoxAnt->Canvas->Pen->Width = 1;
+	PBoxAnt->Canvas->MoveTo(X1, Y1);
+	PBoxAnt->Canvas->LineTo(X2, Y2);
+	PBoxAnt->Canvas->Pen->Style = psSolid;
+	PBoxAnt->Canvas->Ellipse(X1-3, Y1-3, X1+4, Y1+4);
+	PBoxAnt->Canvas->Ellipse(X2-3, Y2-3, X2+4, Y2+4);
+	PBoxAnt->Canvas->Pen->Color = oldColor;
+	PBoxAnt->Canvas->Pen->Style = oldStyle;
+	PBoxAnt->Canvas->Pen->Width = oldWidth;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2)
+{
+	if( ant.wmax >= WMAX ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+	if( (ABS(X2-X1) + ABS(Y2-Y1) + ABS(Z2-Z1)) < 1.0e-9 ) return;
+
+	int n = ant.wmax;
+	WDEF *wp = &ant.wdef[n];
+	memset(wp, 0, sizeof(WDEF));
+	wp->X1 = X1;
+	wp->Y1 = Y1;
+	wp->Z1 = Z1;
+	wp->X2 = X2;
+	wp->Y2 = Y2;
+	wp->Z2 = Z2;
+	wp->R = 0.0008;
+	wp->SEG = 0;
+	if( n ){
+		if( ant.wdef[n-1].R > 0.0 ) wp->R = ant.wdef[n-1].R;
+		wp->SEG = ant.wdef[n-1].SEG;
+	}
+	ant.wmax++;
+	Grid2->RowCount = ant.wmax + 2;
+	Grid2->Row = n + 1;
+	UpdateAntData();
+	if( n < (Grid2->RowCount - 1) ) Grid2->Row = n + 1;
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::AntViewZoom(int Delta, int X, int Y)
 {
 	double oldSc = GetAntViewScale();
@@ -2567,6 +2871,38 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 {
 	PBoxAntMX = X;
 	PBoxAntMY = Y;
+	if( AntDrawMode ){
+		PBoxAntIgnoreClick = TRUE;
+		PBoxAntDragButton = -1;
+		PBoxAntDragAction = ANT_MOUSE_NONE;
+		if( Button == mbRight ){
+			AntDrawActive = FALSE;
+			PBoxAnt->Invalidate();
+			return;
+		}
+		if( Button != mbLeft ) return;
+		double wx, wy, wz;
+		if( AntViewPointToXY(X, Y, wx, wy, wz) != TRUE ){
+			::MessageBeep(MB_ICONEXCLAMATION);
+			return;
+		}
+		SnapAntDrawPoint(X, Y, wx, wy, wz);
+		if( !AntDrawActive ){
+			AntDrawX1 = AntDrawX2 = wx;
+			AntDrawY1 = AntDrawY2 = wy;
+			AntDrawZ1 = AntDrawZ2 = wz;
+			AntDrawActive = TRUE;
+			PBoxAnt->Invalidate();
+		}
+		else {
+			AntDrawX2 = wx;
+			AntDrawY2 = wy;
+			AntDrawZ2 = wz;
+			AddAntDrawWire(AntDrawX1, AntDrawY1, AntDrawZ1, AntDrawX2, AntDrawY2, AntDrawZ2);
+			AntDrawActive = FALSE;
+		}
+		return;
+	}
 	PBoxAntLastX = X;
 	PBoxAntLastY = Y;
 	PBoxAntStartDeg = TBarDeg->Position;
@@ -2578,6 +2914,19 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y)
 {
+	if( AntDrawMode ){
+		if( AntDrawActive ){
+			double wx, wy, wz;
+			if( AntViewPointToXY(X, Y, wx, wy, wz) == TRUE ){
+				SnapAntDrawPoint(X, Y, wx, wy, wz);
+				AntDrawX2 = wx;
+				AntDrawY2 = wy;
+				AntDrawZ2 = wz;
+				PBoxAnt->Invalidate();
+			}
+		}
+		return;
+	}
 	if( PBoxAntDragAction == ANT_MOUSE_NONE ) return;
 	int dx = X - PBoxAntLastX;
 	int dy = Y - PBoxAntLastY;
@@ -2602,6 +2951,11 @@ void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, i
 void __fastcall TMainWnd::PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 	TShiftState Shift, int X, int Y)
 {
+	if( AntDrawMode ){
+		PBoxAntDragButton = -1;
+		PBoxAntDragAction = ANT_MOUSE_NONE;
+		return;
+	}
 	if( int(Button) == PBoxAntDragButton ){
 		PBoxAntDragButton = -1;
 		PBoxAntDragAction = ANT_MOUSE_NONE;
@@ -2645,6 +2999,7 @@ void __fastcall TMainWnd::PBoxAntClick(TObject *Sender)
 // アンテナ形状表示のダブルクリック
 void __fastcall TMainWnd::PBoxAntDblClick(TObject *Sender)
 {
+	if( AntDrawMode ) return;
 	if( !exeenv.CalcF && (Grid2->Row <= ant.wmax) && (KT1->Enabled == TRUE) ){
 		KT1Click(NULL);
 	}
@@ -3103,9 +3458,15 @@ void __fastcall TMainWnd::InitQuadLayout(void)
 	KQ1->OnClick = QuadViewToggle;
 	KQ1->ShortCut = Vcl::Menus::ShortCut('Q', TShiftState() << ssCtrl);
 	KV1->Insert(0, KQ1);
+	KAntDrawWire = new TMenuItem(MainMenu);
+	KAntDrawWire->Caption = "3D Wire Draw(&D)";
+	KAntDrawWire->AutoCheck = false;
+	KAntDrawWire->OnClick = AntDrawWireToggle;
+	KAntDrawWire->ShortCut = Vcl::Menus::ShortCut('D', TShiftState() << ssCtrl);
+	KV1->Insert(1, KAntDrawWire);
 	TMenuItem *NQ = new TMenuItem(MainMenu);
 	NQ->Caption = "-";
-	KV1->Insert(1, NQ);
+	KV1->Insert(2, NQ);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::LayoutQuadAntPanel(void)
@@ -3122,6 +3483,7 @@ void __fastcall TMainWnd::LayoutQuadAntPanel(void)
 
 	PBoxAnt->Align = alNone;
 	PBoxAnt->SetBounds(0, PBoxAnt->Top, PanelTopRight->ClientWidth, h);
+	LayoutAntDrawControls();
 }
 //---------------------------------------------------------------------------
 // Switch to quad-split view
@@ -3208,6 +3570,7 @@ void __fastcall TMainWnd::SwitchToTabMode(void)
 	AlignGrid[1].NewAlign(Grid2);
 	AlignGrid[2].NewAlign(Grid3);
 	AlignGrid[3].NewAlign(Grid4);
+	LayoutAntDrawControls();
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width/2-2, PBoxPtn->Height);
 	DrawPtnV.SetRect(PBoxPtn->Canvas, PBoxPtn->Width/2+2, 0, PBoxPtn->Width, PBoxPtn->Height);
 	UpdateAllViews();
@@ -3239,6 +3602,7 @@ void __fastcall TMainWnd::FormResize(TObject *Sender)
 		PanelBottomLeft->Width = ClientWidth  / 2;
 		LayoutQuadAntPanel();
 	}
+	LayoutAntDrawControls();
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width / 2 - 2, PBoxPtn->Height);
 	DrawPtnV.SetRect(PBoxPtn->Canvas, (PBoxPtn->Width/2) + 2, 0, PBoxPtn->Width, PBoxPtn->Height);
 	UpdateAllViews();
@@ -3298,6 +3662,11 @@ void __fastcall TMainWnd::EntryAlignControl(void)
 	AlignList.EntryControl(EditSC, BasicControl, EditSC->Font);
 	AlignList.EntryControl(OrgBtn, BasicControl, OrgBtn->Font);
 	AlignList.EntryControl(AllViewBtn, BasicControl, AllViewBtn->Font);
+	AlignList.EntryControl(AntDrawBtn, BasicControl, AntDrawBtn->Font);
+	AlignList.EntryControl(AntDrawXYBtn, BasicControl, AntDrawXYBtn->Font);
+	AlignList.EntryControl(AntDrawXZBtn, BasicControl, AntDrawXZBtn->Font);
+	AlignList.EntryControl(AntDrawYZBtn, BasicControl, AntDrawYZBtn->Font);
+	AlignList.EntryControl(AntDrawCancelBtn, BasicControl, AntDrawCancelBtn->Font);
 	AlignList.EntryControl(ACalBtn, BasicControl, ACalBtn->Font);
 	AlignList.EntryControl(EleEditBtn, BasicControl, EleEditBtn->Font);
 	AlignList.EntryControl(WireCadBtn, BasicControl, WireCadBtn->Font);
@@ -4744,6 +5113,8 @@ void __fastcall TMainWnd::AddWireNo(LPSTR t, int off)
 void __fastcall TMainWnd::Ant3DClick(TObject *Sender)
 {
 	exeenv.Ant3D = Ant3D->Checked;
+	if( !exeenv.Ant3D ) SetAntDrawMode(FALSE);
+	UpdateAntDrawControls();
 	AllViewBtnClick(NULL);
 }
 //---------------------------------------------------------------------------
