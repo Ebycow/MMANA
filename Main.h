@@ -420,12 +420,14 @@ private:	// ユーザー宣言
 	void __fastcall UpdateAntData(void);
 	int __fastcall GetAntMouseAction(TMouseButton Button);
 	void __fastcall SetTrackBarPosition(TTrackBar *Bar, int Pos);
+	void __fastcall SetTrackBarPositionWrapped(TTrackBar *Bar, int Pos);
 	double __fastcall GetAntViewScale(void);
 	double __fastcall GetAntViewUnitScale(void);
 	void __fastcall CalcAntViewXY(double &x, double &y, double deg, double zdeg, double X, double Y, double Z);
 	void __fastcall AntViewZoom(int Delta, int X, int Y);
 	void __fastcall AntViewPan(int DX, int DY);
 	void __fastcall AntViewRotate(int DX, int DY);
+	void __fastcall AntViewRotateDrag(int X, int Y);
 	void __fastcall PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y);
 	void __fastcall PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 	TShiftState Shift, int X, int Y);
@@ -436,6 +438,8 @@ private:	// ユーザー宣言
     int		PBoxAntMY;
 	int		PBoxAntLastX;
 	int		PBoxAntLastY;
+	int		PBoxAntStartDeg;
+	int		PBoxAntStartZDeg;
 	int		PBoxAntDragButton;
 	int		PBoxAntDragAction;
 	int		PBoxAntDragMoved;

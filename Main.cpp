@@ -75,6 +75,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	Application->OnIdle = OnIdle;
 	Application->OnMessage = OnAppMessage;
 	PBoxAntLastX = PBoxAntLastY = 0;
+	PBoxAntStartDeg = PBoxAntStartZDeg = 0;
 	PBoxAntDragButton = -1;
 	PBoxAntDragAction = ANT_MOUSE_NONE;
 	PBoxAntDragMoved = FALSE;
@@ -2475,6 +2476,30 @@ void __fastcall TMainWnd::SetTrackBarPosition(TTrackBar *Bar, int Pos)
 	if( Bar->Position != Pos ) Bar->Position = Pos;
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::SetTrackBarPositionWrapped(TTrackBar *Bar, int Pos)
+{
+	int range = Bar->Max - Bar->Min + 1;
+	if( range <= 0 ){
+		SetTrackBarPosition(Bar, Pos);
+		return;
+	}
+	while( Pos < Bar->Min ) Pos += range;
+	while( Pos > Bar->Max ) Pos -= range;
+	if( Bar->Position != Pos ) Bar->Position = Pos;
+}
+//---------------------------------------------------------------------------
+static int RoundMouseAngle(double Value)
+{
+	return (Value >= 0.0) ? int(Value + 0.5) : int(Value - 0.5);
+}
+//---------------------------------------------------------------------------
+static double MouseDragToAngle(int Pixels, int Extent)
+{
+	if( Extent < 240 ) Extent = 240;
+	if( Extent > 480 ) Extent = 480;
+	return double(Pixels) * 180.0 / double(Extent);
+}
+//---------------------------------------------------------------------------
 double __fastcall TMainWnd::GetAntViewUnitScale(void)
 {
 	if( !exeenv.RmdSel && exeenv.MmSel ) return 1000.0;
@@ -2500,9 +2525,22 @@ void __fastcall TMainWnd::AntViewPan(int DX, int DY)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AntViewRotate(int DX, int DY)
 {
-	SetTrackBarPosition(TBarDeg, TBarDeg->Position + DX);
+	SetTrackBarPositionWrapped(TBarDeg, TBarDeg->Position + DX);
 	if( exeenv.Ant3D ){
 		SetTrackBarPosition(TBarZDeg, TBarZDeg->Position - DY);
+	}
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntViewRotateDrag(int X, int Y)
+{
+	int dx = X - PBoxAntMX;
+	int dy = Y - PBoxAntMY;
+	int deg = PBoxAntStartDeg + RoundMouseAngle(MouseDragToAngle(dx, PBoxAnt->Width));
+	SetTrackBarPositionWrapped(TBarDeg, deg);
+	if( exeenv.Ant3D ){
+		int zdeg = PBoxAntStartZDeg - RoundMouseAngle(MouseDragToAngle(dy, PBoxAnt->Height));
+		SetTrackBarPosition(TBarZDeg, zdeg);
 	}
 	PBoxAnt->Invalidate();
 }
@@ -2529,6 +2567,8 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 	PBoxAntMY = Y;
 	PBoxAntLastX = X;
 	PBoxAntLastY = Y;
+	PBoxAntStartDeg = TBarDeg->Position;
+	PBoxAntStartZDeg = TBarZDeg->Position;
 	PBoxAntDragButton = int(Button);
 	PBoxAntDragAction = GetAntMouseAction(Button);
 	PBoxAntDragMoved = FALSE;
@@ -2547,7 +2587,7 @@ void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, i
 			AntViewPan(dx, dy);
 			break;
 		case ANT_MOUSE_ROTATE:
-			AntViewRotate(dx, dy);
+			AntViewRotateDrag(X, Y);
 			break;
 		case ANT_MOUSE_ZOOM:
 			AntViewZoom(-dy / 2, X, Y);
