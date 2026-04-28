@@ -1,11 +1,11 @@
 # MMANA — アンテナ設計・解析プログラム
 
-MMANA（Mininec-based Antenna ANAlyzer）は、**JE3HHT 森 誠OM**が開発されたWindows用アンテナ設計・解析ソフトウェアです。  
+MMANA（Mininec-based Antenna ANAlyzer）は、**JE3HHT 森 誠氏**が開発されたWindows用アンテナ設計・解析ソフトウェアです。  
 MININEC3の計算エンジンをベースに、ダイポールから複雑な多素子アレーまで、グラフィカルに設計・シミュレーションできます。
 
 ---
 
-jl3oxr OM版をベースに、以下の変更を加えています。
+JL3OXR 氏版をベースに、以下の変更を加えています。
 
 ### 新機能
 
@@ -122,7 +122,7 @@ Copyright 1999-2013 Makoto Mori (JE3HHT), Nobuyuki Oba (JA7UDE)
 
 | リポジトリ | 説明 |
 |---|---|
-| [`ja7ude/MMANA`](https://github.com/ja7ude/MMANA) | JA7UDE 大庭OM — XE4移植・オープンソース化 |
-| [`7M4KSC/MMANA`](https://github.com/7M4KSC/MMANA) | 7M4KSC OM — 10.4対応・Win64対応 |
-| [`jl3oxr/MMANA`](https://github.com/jl3oxr/MMANA) | jl3oxr OM — 多数の改善・11.3/12.1対応 |
+| [`ja7ude/MMANA`](https://github.com/ja7ude/MMANA) | JA7UDE 大庭氏 — XE4移植・オープンソース化 |
+| [`7M4KSC/MMANA`](https://github.com/7M4KSC/MMANA) | 7M4KSC 氏 — 10.4対応・Win64対応 |
+| [`jl3oxr/MMANA`](https://github.com/jl3oxr/MMANA) | jl3oxr 氏 — 多数の改善・11.3/12.1対応 |
 | [`Ebycow/MMANA`](https://github.com/Ebycow/MMANA) | このリポジトリ — クワッドビュー等の追加 |
