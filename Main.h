@@ -383,6 +383,10 @@ private:	// ユーザー宣言
 	void __fastcall UpdateAntPreview(void);
 	void __fastcall UpdateCount(void);
 	void __fastcall UpdateLengthUnitUI(void);
+	void __fastcall RunCurrentCalculation(int AddHistory, int CalcLog);
+	void __fastcall RequestAutoCalc(int Immediate);
+	void __fastcall AutoCalcTimerTimer(TObject *Sender);
+	void __fastcall AutoCalcMenuClick(TObject *Sender);
 
 	void __fastcall InitAntDef(void);
 	void __fastcall SetAntDef(void);
@@ -500,6 +504,9 @@ private:	// ユーザー宣言
 	int		PBoxAntDragAction;
 	int		PBoxAntDragMoved;
 	int		PBoxAntIgnoreClick;
+	TTimer	*AutoCalcTimer;
+	int		AutoCalcPending;
+	int		AutoCalcRunning;
 	int		AntDrawMode;
 	int		AntDrawActive;
 	int		AntDrawPlane;
@@ -531,6 +538,7 @@ private:	// ユーザー宣言
 	int	PBoxAntClickCtrl;
 	WDEF	AntGizmoOldSelected[WMAX];
 	int	AntGizmoShowSnapVertices;
+	TMenuItem	*KAutoCalc;
 	TMenuItem	*KMirrorSelectedX;
 	TMenuItem	*KMirrorSelectedY;
 	TMenuItem	*KMirrorSelectedZ;

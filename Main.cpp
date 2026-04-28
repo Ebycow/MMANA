@@ -122,6 +122,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	KMirrorSelectedX = NULL;
 	KMirrorSelectedY = NULL;
 	KMirrorSelectedZ = NULL;
+	KAutoCalc = NULL;
 	AntDrawBtn = NULL;
 	AntDrawXYBtn = NULL;
 	AntDrawXZBtn = NULL;
@@ -174,6 +175,13 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	PBoxAntDragAction = ANT_MOUSE_NONE;
 	PBoxAntDragMoved = FALSE;
 	PBoxAntIgnoreClick = FALSE;
+	AutoCalcTimer = new TTimer(this);
+	AutoCalcTimer->Enabled = FALSE;
+	AutoCalcTimer->Interval = 600;
+	AutoCalcTimer->OnTimer = AutoCalcTimerTimer;
+	AutoCalcPending = FALSE;
+	AutoCalcRunning = FALSE;
+
 	PBoxAnt->OnMouseDown = PBoxAntMouseDown;
 	PBoxAnt->OnMouseMove = PBoxAntMouseMove;
 	PBoxAnt->OnMouseUp = PBoxAntMouseUp;
@@ -236,6 +244,11 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	KMmUnit->OnClick = MmUnitClick;
 	KV1->Add(KMmUnit);
 	K8->ShortCut = Vcl::Menus::ShortCut('F', TShiftState());
+	KAutoCalc = new TMenuItem(this);
+	KAutoCalc->Caption = "自動計算";
+	KAutoCalc->Checked = FALSE;
+	KAutoCalc->OnClick = AutoCalcMenuClick;
+	KE1->Add(KAutoCalc);
 	TMenuItem *NMirrorSelected = new TMenuItem(this);
 	NMirrorSelected->Caption = "-";
 	KE1->Add(NMirrorSelected);
@@ -761,6 +774,95 @@ void __fastcall TMainWnd::UpdateAntPreview(void)
 	exeenv.CalcLog = 1;
 	SetStackAnt();
 	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::RunCurrentCalculation(int AddHistory, int CalcLog)
+{
+	if( AutoCalcRunning || exeenv.CalcF ) return;
+	AutoCalcRunning = TRUE;
+	int OldCalcLog = exeenv.CalcLog;
+	GetAntDef();
+	if( ant.cfq == 0.0 ) ant.cfq = ant.fq;
+	SetWaitCursor();
+	ant.Flag = 0;
+	exeenv.CalcLog = CalcLog;
+	if( SetStackAnt() == TRUE ){
+		if( (!env.type) || ((pCalAnt->MinZ + env.antheight) >= 0.0) || (YesNoMB( "一部のワイヤが地中に埋まっています. 計算を中止しますか ?") == IDNO) ){
+			if( AddHistory || !res.GetCnt() ) res.IncResP();
+			res.GetResP()->TYPE = env.type;
+			res.GetResP()->HEIGHT = env.antheight;
+			res.GetResP()->FBR = env.fbr;
+			res.GetResP()->RO = env.RO;
+			res.GetResP()->JXO = env.JXO;
+			res.ClearBWC();
+			Grid1->RowCount = res.GetCnt() + (res.GetCnt() ? 1 : 2);
+			BgnTime = ::GetTickCount();
+			exeenv.CalcF = 1;
+			CalCurrent();
+			exeenv.CalcF = 0;
+			EndTime = ::GetTickCount();
+			if( CalcLog ) LogPrint("%.2lf(s)", double(EndTime - BgnTime)/1000.0);
+			res.SetCalc(ant.Name);
+			res.InitBWC();
+			AntName4->Caption = ant.Name;
+			DrawPtnH.SetMaxDB(res.MaxG);
+			DrawPtnV.SetMaxDB(res.MaxG);
+			UpdateAllViews();
+		}
+	}
+	exeenv.CalcF = 0;
+	exeenv.CalcLog = OldCalcLog;
+	AutoCalcRunning = FALSE;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::RequestAutoCalc(int Immediate)
+{
+	if( AutoCalcRunning || exeenv.CalcF ) return;
+	if( (KAutoCalc == NULL) || (KAutoCalc->Checked != TRUE) ){
+		AutoCalcPending = FALSE;
+		if( AutoCalcTimer != NULL ) AutoCalcTimer->Enabled = FALSE;
+		return;
+	}
+	if( !ant.wmax || !ant.cmax ) return;
+	AutoCalcPending = TRUE;
+	if( AutoCalcTimer == NULL ) return;
+	AutoCalcTimer->Enabled = FALSE;
+	if( Immediate ){
+		AutoCalcTimerTimer(NULL);
+	}
+	else {
+		AutoCalcTimer->Interval = 600;
+		AutoCalcTimer->Enabled = TRUE;
+	}
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AutoCalcTimerTimer(TObject *Sender)
+{
+	if( AutoCalcTimer != NULL ) AutoCalcTimer->Enabled = FALSE;
+	if( (KAutoCalc == NULL) || (KAutoCalc->Checked != TRUE) ){
+		AutoCalcPending = FALSE;
+		return;
+	}
+	if( !AutoCalcPending ) return;
+	if( AntGizmoDrag || AntDrawActive ){
+		RequestAutoCalc(FALSE);
+		return;
+	}
+	AutoCalcPending = FALSE;
+	RunCurrentCalculation(FALSE, FALSE);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AutoCalcMenuClick(TObject *Sender)
+{
+	if( KAutoCalc == NULL ) return;
+	KAutoCalc->Checked = !KAutoCalc->Checked;
+	if( KAutoCalc->Checked == TRUE ){
+		RequestAutoCalc(TRUE);
+	}
+	else {
+		AutoCalcPending = FALSE;
+		if( AutoCalcTimer != NULL ) AutoCalcTimer->Enabled = FALSE;
+	}
 }
 //---------------------------------------------------------------------------
 // Update length unit UI.
@@ -1457,6 +1559,7 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 		}
 		if( (OldWmax != ant.wmax) || memcmp(&OldW, &ant.wdef[ARow], sizeof(WDEF)) ){
 			UpdateAntPreview();
+			RequestAutoCalc(FALSE);
 		}
 	}
 }
@@ -1538,6 +1641,7 @@ void __fastcall TMainWnd::Grid3SetEditText(TObject *Sender, int ACol,   //ja7ude
 		}
 		if( (OldCmax != ant.cmax) || memcmp(&OldC, &ant.cdef[ARow], sizeof(CDEF)) ){
 			UpdateAntPreview();
+			RequestAutoCalc(FALSE);
 		}
 	}
 }
@@ -1629,12 +1733,16 @@ void __fastcall TMainWnd::Grid4SetEditText(TObject *Sender, int ACol,
 {
 	double	d, dw;
 	char	bf[64];
+	LDEF	OldL;
+	int		OldLmax;
 
 	if( ARow ){
 		Grid4GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
 		PushAntUndo();
 		ARow--;
+		OldLmax = ant.lmax;
+		memcpy(&OldL, &ant.ldef[ARow], sizeof(LDEF));
 		switch(ACol){
 			case 1:		// パルス
 				if( !Value.IsEmpty() ){
@@ -1732,6 +1840,9 @@ void __fastcall TMainWnd::Grid4SetEditText(TObject *Sender, int ACol,
 				}
 				break;
 		}
+		if( (OldLmax != ant.lmax) || memcmp(&OldL, &ant.ldef[ARow], sizeof(LDEF)) ){
+			RequestAutoCalc(FALSE);
+		}
 	}
 }
 //---------------------------------------------------------------------------
@@ -1790,6 +1901,7 @@ void __fastcall TMainWnd::K7Click(TObject *Sender)
 			ClearAntWireSelection();
 			Grid2->Invalidate();
 			UpdateAntPreview();
+			RequestAutoCalc(FALSE);
 		}
 	}
 	else if( ActiveControl == Grid3 ){	// 給電
@@ -1857,6 +1969,7 @@ void __fastcall TMainWnd::K9Click(TObject *Sender)
 			ClearAntWireSelection();
 			Grid2->Invalidate();
 			UpdateAntPreview();
+			RequestAutoCalc(FALSE);
 		}
 	}
 	else if( ActiveControl == Grid3 ){	// 給電
@@ -2361,33 +2474,9 @@ void __fastcall TMainWnd::K5Click(TObject *Sender)
 // 計算ボタン
 void __fastcall TMainWnd::CalTrgBtnClick(TObject *Sender)
 {
-	GetAntDef();
-	if( ant.cfq == 0.0 ) ant.cfq = ant.fq;
-	SetWaitCursor();
-	ant.Flag = 0;
-	exeenv.CalcLog = 1;
-	if( SetStackAnt() == TRUE ){
-		if( (!env.type) || ((pCalAnt->MinZ + env.antheight) >= 0.0) || (YesNoMB( "一部のワイヤが地中に埋まっています. 計算を中止しますか ?") == IDNO) ){
-			res.IncResP();
-			res.GetResP()->TYPE = env.type;
-			res.GetResP()->HEIGHT = env.antheight;
-			res.GetResP()->FBR = env.fbr;
-			res.ClearBWC();
-			Grid1->RowCount = res.GetCnt() + (res.GetCnt() ? 1 : 2);
-			BgnTime = ::GetTickCount();
-			exeenv.CalcF = 1;
-			CalCurrent();
-			exeenv.CalcF = 0;
-			EndTime = ::GetTickCount();
-			LogPrint("%.2lf(s)", double(EndTime - BgnTime)/1000.0);
-			res.SetCalc(ant.Name);		// 計算完了フラグ
-			res.InitBWC();
-			AntName4->Caption = ant.Name;
-			DrawPtnH.SetMaxDB(res.MaxG);
-			DrawPtnV.SetMaxDB(res.MaxG);
-			UpdateAllViews();
-		}
-	}
+	AutoCalcPending = FALSE;
+	if( AutoCalcTimer != NULL ) AutoCalcTimer->Enabled = FALSE;
+	RunCurrentCalculation(TRUE, TRUE);
 }
 //---------------------------------------------------------------------------
 
@@ -2822,6 +2911,7 @@ int __fastcall TMainWnd::RestoreAntSnapshot(TStringList *From, TStringList *To)
 	Grid3->Invalidate();
 	Grid4->Invalidate();
 	UpdateAllViews();
+	RequestAutoCalc(FALSE);
 	return TRUE;
 }
 //---------------------------------------------------------------------------
@@ -2871,6 +2961,7 @@ void __fastcall TMainWnd::DeleteSelectedAntWires(void)
 	Grid2->Invalidate();
 	PBoxAnt->Invalidate();
 	UpdateAntPreview();
+	RequestAutoCalc(FALSE);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::ClearAntWireSelection(void)
@@ -3972,12 +4063,14 @@ void __fastcall TMainWnd::EndAntGizmoDrag(void)
 	if( (w >= 0) && (w < ant.wmax) ){
 		if( AntGizmoEndpoint == 3 ){
 			UpdateAntData();
+			RequestAutoCalc(TRUE);
 			return;
 		}
 		if( ChkWith->Checked == TRUE ){
 			AdjWireChen(ant.wdef, ant.wmax, &ant.wdef[w], &AntGizmoOldW);
 		}
 		UpdateAntData();
+		RequestAutoCalc(TRUE);
 	}
 	else {
 		PBoxAnt->Invalidate();
@@ -6197,6 +6290,7 @@ void __fastcall TMainWnd::UpdateAntData(void)
 	SetAntDef();
 	ant.Flag = 0;
 	UpdateAllViews();
+	RequestAutoCalc(FALSE);
 }
 //---------------------------------------------------------------------------
 // 始点と終点の入れ替え
@@ -6650,4 +6744,3 @@ void __fastcall TMainWnd::KMMANAWebW1Click(TObject *Sender)
 	WebRef.ShowHTML("http://je3hht.g1.xrea.com/mmana/index.html");
 }
 //---------------------------------------------------------------------------
-
