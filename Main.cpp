@@ -42,63 +42,12 @@
 #include "WComb.h"
 #include "WcombDsp.h"
 #include "FreqSet.h"
+#include "AntView.h"
+#include "AntEditor.h"
 //---------------------------------------------------------------------------
 #pragma resource "*.dfm"
 TMainWnd *MainWnd;
 
-enum {
-	ANT_DRAW_PLANE_XY = 0,
-	ANT_DRAW_PLANE_XZ,
-	ANT_DRAW_PLANE_YZ
-};
-
-enum {
-	ANT_GIZMO_AXIS_X = 0,
-	ANT_GIZMO_AXIS_Y,
-	ANT_GIZMO_AXIS_Z
-};
-
-//---------------------------------------------------------------------------
-static double SqDistPointToSegment(int PX, int PY, int X1, int Y1, int X2, int Y2)
-{
-	double vx = double(X2 - X1);
-	double vy = double(Y2 - Y1);
-	double wx = double(PX - X1);
-	double wy = double(PY - Y1);
-	double len2 = (vx * vx) + (vy * vy);
-	double t = 0.0;
-	if( len2 > 0.0 ){
-		t = ((wx * vx) + (wy * vy)) / len2;
-		if( t < 0.0 ) t = 0.0;
-		else if( t > 1.0 ) t = 1.0;
-	}
-	double dx = double(X1) + (vx * t) - double(PX);
-	double dy = double(Y1) + (vy * t) - double(PY);
-	return (dx * dx) + (dy * dy);
-}
-
-//---------------------------------------------------------------------------
-static void DrawScreenArrow(TCanvas *Canvas, int X1, int Y1, int X2, int Y2)
-{
-	Canvas->MoveTo(X1, Y1);
-	Canvas->LineTo(X2, Y2);
-	double dx = double(X2 - X1);
-	double dy = double(Y2 - Y1);
-	double len = sqrt((dx * dx) + (dy * dy));
-	if( len < 1.0 ) return;
-	dx /= len;
-	dy /= len;
-	double px = -dy;
-	double py = dx;
-	int ax1 = int(double(X2) - (dx * 8.0) + (px * 4.0));
-	int ay1 = int(double(Y2) - (dy * 8.0) + (py * 4.0));
-	int ax2 = int(double(X2) - (dx * 8.0) - (px * 4.0));
-	int ay2 = int(double(Y2) - (dy * 8.0) - (py * 4.0));
-	Canvas->MoveTo(X2, Y2);
-	Canvas->LineTo(ax1, ay1);
-	Canvas->MoveTo(X2, Y2);
-	Canvas->LineTo(ax2, ay2);
-}
 
 //---------------------------------------------------------------------------
 static void LogPrint(char *ct, ...)
@@ -2792,8 +2741,7 @@ int __fastcall TMainWnd::GetAntMouseAction(TMouseButton Button)
 //---------------------------------------------------------------------------
 double __fastcall TMainWnd::GetAntViewScale(void)
 {
-	double sc = double(TBarSC->Position) / 20.0;
-	return sc * sc * sc * sc;
+	return AntViewScaleFromTrack(TBarSC->Position);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::SetTrackBarPosition(TTrackBar *Bar, int Pos)
@@ -2815,30 +2763,14 @@ void __fastcall TMainWnd::SetTrackBarPositionWrapped(TTrackBar *Bar, int Pos)
 	if( Bar->Position != Pos ) Bar->Position = Pos;
 }
 //---------------------------------------------------------------------------
-static int RoundMouseAngle(double Value)
-{
-	return (Value >= 0.0) ? int(Value + 0.5) : int(Value - 0.5);
-}
-//---------------------------------------------------------------------------
-static double MouseDragToAngle(int Pixels, int Extent)
-{
-	if( Extent < 240 ) Extent = 240;
-	if( Extent > 480 ) Extent = 480;
-	return double(Pixels) * 180.0 / double(Extent);
-}
-//---------------------------------------------------------------------------
 double __fastcall TMainWnd::GetAntViewUnitScale(void)
 {
-	if( !exeenv.RmdSel && exeenv.MmSel ) return 1000.0;
-	return 1.0;
+	return AntViewUnitScale(exeenv.RmdSel, exeenv.MmSel);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::CalcAntViewXY(double &x, double &y, double deg, double zdeg, double X, double Y, double Z)
 {
-	Calc3DXY(x, y, deg, zdeg, X, Y, Z);
-	double us = GetAntViewUnitScale();
-	x *= us;
-	y *= us;
+	AntViewProject(x, y, deg, zdeg, GetAntViewUnitScale(), X, Y, Z);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AntViewPan(int DX, int DY)
@@ -2863,10 +2795,10 @@ void __fastcall TMainWnd::AntViewRotateDrag(int X, int Y)
 {
 	int dx = X - PBoxAntMX;
 	int dy = Y - PBoxAntMY;
-	int deg = PBoxAntStartDeg + RoundMouseAngle(MouseDragToAngle(dx, PBoxAnt->Width));
+	int deg = PBoxAntStartDeg + AntViewRoundMouseAngle(AntViewMouseDragToAngle(dx, PBoxAnt->Width));
 	SetTrackBarPositionWrapped(TBarDeg, deg);
 	if( exeenv.Ant3D ){
-		int zdeg = PBoxAntStartZDeg - RoundMouseAngle(MouseDragToAngle(dy, PBoxAnt->Height));
+		int zdeg = PBoxAntStartZDeg - AntViewRoundMouseAngle(AntViewMouseDragToAngle(dy, PBoxAnt->Height));
 		SetTrackBarPosition(TBarZDeg, zdeg);
 	}
 	PBoxAnt->Invalidate();
@@ -2932,25 +2864,14 @@ void __fastcall TMainWnd::DeleteSelectedAntWires(void)
 		return;
 	}
 	PushAntUndo();
-	int oldMax = ant.wmax;
 	int firstDeleted = -1;
-	int dst = 0;
-	for( int i = 0; i < oldMax; i++ ){
-		if( IsAntWireSelected(i) ){
-			if( firstDeleted < 0 ) firstDeleted = i;
-			continue;
-		}
-		if( dst != i ) memcpy(&ant.wdef[dst], &ant.wdef[i], sizeof(WDEF));
-		dst++;
+	if( AntEditorDeleteSelectedWires(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, firstDeleted) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
 	}
-	for( int i = dst; i < oldMax; i++ ){
-		memset(&ant.wdef[i], 0, sizeof(WDEF));
-	}
-	ant.wmax = dst;
-	ant.Edit = ant.Flag = 1;
+	AntGizmoShowSnapVertices = FALSE;
 	UpdateCount();
 	Grid2->RowCount = ant.wmax + 2;
-	ClearAntWireSelection();
 	if( ant.wmax ){
 		if( firstDeleted >= ant.wmax ) firstDeleted = ant.wmax - 1;
 		Grid2->Row = firstDeleted + 1;
@@ -2966,15 +2887,14 @@ void __fastcall TMainWnd::DeleteSelectedAntWires(void)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::ClearAntWireSelection(void)
 {
-	memset(AntWireSelected, 0, sizeof(AntWireSelected));
+	AntEditorClearSelection(AntWireSelected, AntWireSelectionCount);
 	AntGizmoShowSnapVertices = FALSE;
-	AntWireSelectionCount = 0;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::DeselectAntWireSelection(void)
 {
-	ClearAntWireSelection();
-	AntWireSelectionCount = -1;
+	AntEditorDeselectSelection(AntWireSelected, AntWireSelectionCount);
+	AntGizmoShowSnapVertices = FALSE;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::SelectOnlyAntWire(int Wire)
@@ -3027,48 +2947,24 @@ void __fastcall TMainWnd::SelectAllAntWires(void)
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::GetAntSelectionCount(void)
 {
-	if( AntWireSelectionCount > 0 ) return AntWireSelectionCount;
-	if( AntWireSelectionCount < 0 ) return 0;
-	int w = Grid2->Row - 1;
-	return ((w >= 0) && (w < ant.wmax)) ? 1 : 0;
+	return AntEditorSelectionCount(&ant, AntWireSelectionCount, Grid2->Row - 1);
 }
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::IsAntWireSelected(int Wire)
 {
-	if( (Wire < 0) || (Wire >= ant.wmax) ) return FALSE;
-	if( AntWireSelectionCount > 0 ) return AntWireSelected[Wire];
-	if( AntWireSelectionCount < 0 ) return FALSE;
-	return (Wire == (Grid2->Row - 1));
+	return AntEditorIsWireSelected(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, Wire);
 }
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::GetAntSelectionCenter(double &X, double &Y, double &Z)
 {
-	int cnt = 0;
-	X = Y = Z = 0.0;
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( !IsAntWireSelected(i) ) continue;
-		WDEF *wp = &ant.wdef[i];
-		X += (wp->X1 + wp->X2) / 2.0;
-		Y += (wp->Y1 + wp->Y2) / 2.0;
-		Z += (wp->Z1 + wp->Z2) / 2.0;
-		cnt++;
-	}
-	if( cnt <= 0 ) return FALSE;
-	X /= double(cnt);
-	Y /= double(cnt);
-	Z /= double(cnt);
-	return TRUE;
+	return AntEditorSelectionCenter(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, X, Y, Z);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::CopyAntWires(void)
 {
-	AntWireClipboardCount = 0;
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( !IsAntWireSelected(i) ) continue;
-		memcpy(&AntWireClipboard[AntWireClipboardCount], &ant.wdef[i], sizeof(WDEF));
-		AntWireClipboardCount++;
+	if( AntEditorCopySelectedWires(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, AntWireClipboard, AntWireClipboardCount) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
 	}
-	if( AntWireClipboardCount <= 0 ) ::MessageBeep(MB_ICONEXCLAMATION);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PasteAntWires(void)
@@ -3082,17 +2978,12 @@ void __fastcall TMainWnd::PasteAntWires(void)
 		return;
 	}
 	PushAntUndo();
-	int first = ant.wmax;
-	for( int i = 0; i < AntWireClipboardCount; i++ ){
-		memcpy(&ant.wdef[ant.wmax], &AntWireClipboard[i], sizeof(WDEF));
-		ant.wmax++;
+	int first = 0;
+	if( AntEditorPasteWires(&ant, AntWireSelected, AntWireSelectionCount, AntWireClipboard, AntWireClipboardCount, first) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
 	}
 	Grid2->RowCount = ant.wmax + 2;
-	ClearAntWireSelection();
-	for( int i = first; i < ant.wmax; i++ ){
-		AntWireSelected[i] = TRUE;
-		AntWireSelectionCount++;
-	}
 	Grid2->Row = first + 1;
 	UpdateAntData();
 	Grid2->Row = first + 1;
@@ -3101,29 +2992,14 @@ void __fastcall TMainWnd::PasteAntWires(void)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::MirrorSelectedWires(int Axis)
 {
-	double cx, cy, cz;
-	if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+	if( GetAntSelectionCount() <= 0 ){
 		::MessageBeep(MB_ICONEXCLAMATION);
 		return;
 	}
 	PushAntUndo();
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( !IsAntWireSelected(i) ) continue;
-		WDEF *wp = &ant.wdef[i];
-		switch( Axis ){
-			case ANT_GIZMO_AXIS_X:
-				wp->X1 = (2.0 * cx) - wp->X1;
-				wp->X2 = (2.0 * cx) - wp->X2;
-				break;
-			case ANT_GIZMO_AXIS_Y:
-				wp->Y1 = (2.0 * cy) - wp->Y1;
-				wp->Y2 = (2.0 * cy) - wp->Y2;
-				break;
-			case ANT_GIZMO_AXIS_Z:
-				wp->Z1 = (2.0 * cz) - wp->Z1;
-				wp->Z2 = (2.0 * cz) - wp->Z2;
-				break;
-		}
+	if( AntEditorMirrorSelectedWires(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, Axis) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
 	}
 	UpdateAntData();
 }
@@ -3145,48 +3021,28 @@ void __fastcall TMainWnd::MirrorSelectedZClick(TObject *Sender)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AlignSelectedWiresToOrigin(int Axis)
 {
-	double cx, cy, cz;
-	if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+	if( GetAntSelectionCount() <= 0 ){
 		::MessageBeep(MB_ICONEXCLAMATION);
 		return;
 	}
-
-	double dx = (Axis == ANT_GIZMO_AXIS_X) ? -cx : 0.0;
-	double dy = (Axis == ANT_GIZMO_AXIS_Y) ? -cy : 0.0;
-	if( (dx == 0.0) && (dy == 0.0) ) return;
-
 	PushAntUndo();
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( !IsAntWireSelected(i) ) continue;
-		WDEF *wp = &ant.wdef[i];
-		wp->X1 += dx;
-		wp->X2 += dx;
-		wp->Y1 += dy;
-		wp->Y2 += dy;
+	if( AntEditorAlignSelectedWiresToOrigin(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, Axis) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
 	}
 	UpdateAntData();
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::RotateSelectedWires90(void)
 {
-	double cx, cy, cz;
-	if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+	if( GetAntSelectionCount() <= 0 ){
 		::MessageBeep(MB_ICONEXCLAMATION);
 		return;
 	}
-
 	PushAntUndo();
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( !IsAntWireSelected(i) ) continue;
-		WDEF *wp = &ant.wdef[i];
-		double x1 = wp->X1 - cx;
-		double y1 = wp->Y1 - cy;
-		double x2 = wp->X2 - cx;
-		double y2 = wp->Y2 - cy;
-		wp->X1 = cx - y1;
-		wp->Y1 = cy + x1;
-		wp->X2 = cx - y2;
-		wp->Y2 = cy + x2;
+	if( AntEditorRotateSelectedWires90(&ant, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
 	}
 	UpdateAntData();
 }
@@ -3405,104 +3261,51 @@ void __fastcall TMainWnd::AntDrawWireToggle(TObject *Sender)
 int __fastcall TMainWnd::AntViewPointToXY(int X, int Y, double &WX, double &WY, double &WZ)
 {
 	if( !exeenv.Ant3D ) return FALSE;
-	double sc = GetAntViewScale();
-	double us = GetAntViewUnitScale();
-	if( (sc <= 0.0) || (us <= 0.0) ) return FALSE;
-
-	int Xc = int(PBoxAnt->Width/2 + (exeenv.AntXc * sc));
-	int Yc = int(PBoxAnt->Height/2 + (exeenv.AntYc * sc));
-	double sx = (double(X - Xc) / sc) / us;
-	double sy = (double(Yc - Y) / sc) / us;
-	double deg = double(TBarDeg->Position) * (PAI / 180.0);
-	double zdeg = double(TBarZDeg->Position) * (PAI / 180.0);
-	double sd = sin(deg);
-	double cd = cos(deg);
-	double sz = sin(zdeg);
-	double cz = cos(zdeg);
-	double planeX = AntDrawActive ? AntDrawX1 : 0.0;
-	double planeY = AntDrawActive ? AntDrawY1 : 0.0;
-	double planeZ = AntDrawActive ? AntDrawZ1 : 0.0;
-
-	switch( AntDrawPlane ){
-		case ANT_DRAW_PLANE_XY:
-		{
-			if( ABS(sz) < 0.05 ) return FALSE;
-			double q = (sy - (planeZ * cz)) / sz;
-			WX = (sd * sx) - (cd * q);
-			WY = (cd * sx) + (sd * q);
-			WZ = planeZ;
-			return TRUE;
-		}
-		case ANT_DRAW_PLANE_XZ:
-		{
-			if( (ABS(sd) < 0.05) || (ABS(cz) < 0.05) ) return FALSE;
-			WX = (sx - (cd * planeY)) / sd;
-			WY = planeY;
-			WZ = (sy - (sd * sz * planeY) + (cd * sz * WX)) / cz;
-			return TRUE;
-		}
-		case ANT_DRAW_PLANE_YZ:
-		{
-			if( (ABS(cd) < 0.05) || (ABS(cz) < 0.05) ) return FALSE;
-			WX = planeX;
-			WY = (sx - (sd * planeX)) / cd;
-			WZ = (sy + (cd * sz * planeX) - (sd * sz * WY)) / cz;
-			return TRUE;
-		}
-	}
-	return FALSE;
+	TAntViewParams view;
+	view.Width = PBoxAnt->Width;
+	view.Height = PBoxAnt->Height;
+	view.CenterX = exeenv.AntXc;
+	view.CenterY = exeenv.AntYc;
+	view.Deg = TBarDeg->Position;
+	view.ZDeg = TBarZDeg->Position;
+	view.Scale = GetAntViewScale();
+	view.UnitScale = GetAntViewUnitScale();
+	TAntDrawPlaneState plane;
+	plane.Plane = AntDrawPlane;
+	plane.Active = AntDrawActive;
+	plane.X1 = AntDrawX1;
+	plane.Y1 = AntDrawY1;
+	plane.Z1 = AntDrawZ1;
+	return AntViewScreenToPlane(view, plane, X, Y, WX, WY, WZ);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AntWorldToScreen(double WX, double WY, double WZ, int &X, int &Y)
 {
-	double sc = GetAntViewScale();
-	int Xc = int(PBoxAnt->Width/2 + (exeenv.AntXc * sc));
-	int Yc = int(PBoxAnt->Height/2 + (exeenv.AntYc * sc));
-	double deg = double(TBarDeg->Position) * (PAI / 180.0);
-	double zdeg = double(TBarZDeg->Position) * (PAI / 180.0);
-	double x, y;
-	CalcAntViewXY(x, y, deg, zdeg, WX, WY, WZ);
-	X = int(x * sc) + Xc;
-	Y = Yc - int(y * sc);
+	TAntViewParams view;
+	view.Width = PBoxAnt->Width;
+	view.Height = PBoxAnt->Height;
+	view.CenterX = exeenv.AntXc;
+	view.CenterY = exeenv.AntYc;
+	view.Deg = TBarDeg->Position;
+	view.ZDeg = TBarZDeg->Position;
+	view.Scale = GetAntViewScale();
+	view.UnitScale = GetAntViewUnitScale();
+	AntViewWorldToScreen(view, WX, WY, WZ, X, Y);
 }
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::SnapAntDrawPoint(int X, int Y, double &WX, double &WY, double &WZ)
 {
-	int found = FALSE;
-	double best = (10.0 * 10.0) + 1.0;
+	TAntViewParams view;
+	view.Width = PBoxAnt->Width;
+	view.Height = PBoxAnt->Height;
+	view.CenterX = exeenv.AntXc;
+	view.CenterY = exeenv.AntYc;
+	view.Deg = TBarDeg->Position;
+	view.ZDeg = TBarZDeg->Position;
+	view.Scale = GetAntViewScale();
+	view.UnitScale = GetAntViewUnitScale();
 	AntDrawSnapVisible = FALSE;
-	for( int i = 0; i < ant.wmax; i++ ){
-		WDEF *wp = &ant.wdef[i];
-		for( int p = 0; p < 3; p++ ){
-			double tx = wp->X1;
-			double ty = wp->Y1;
-			double tz = wp->Z1;
-			if( p == 1 ){
-				tx = wp->X2;
-				ty = wp->Y2;
-				tz = wp->Z2;
-			}
-			else if( p == 2 ){
-				tx = (wp->X1 + wp->X2) / 2.0;
-				ty = (wp->Y1 + wp->Y2) / 2.0;
-				tz = (wp->Z1 + wp->Z2) / 2.0;
-			}
-			int sx, sy;
-			AntWorldToScreen(tx, ty, tz, sx, sy);
-			double dx = double(sx - X);
-			double dy = double(sy - Y);
-			double d = (dx * dx) + (dy * dy);
-			if( d < best ){
-				best = d;
-				WX = tx;
-				WY = ty;
-				WZ = tz;
-				found = TRUE;
-			}
-		}
-
-
-	}
+	int found = AntViewFindSnapPoint(&ant, view, X, Y, WX, WY, WZ);
 	if( found ){
 		AntDrawSnapVisible = TRUE;
 		AntDrawSnapX = WX;
@@ -3515,25 +3318,16 @@ int __fastcall TMainWnd::SnapAntDrawPoint(int X, int Y, double &WX, double &WY, 
 int __fastcall TMainWnd::GetAntGizmoAxisScreen(double WX, double WY, double WZ, int Axis, int Len,
 	int &X1, int &Y1, int &X2, int &Y2, double &DX, double &DY)
 {
-	double ex = WX;
-	double ey = WY;
-	double ez = WZ;
-	switch( Axis ){
-		case ANT_GIZMO_AXIS_X: ex += 1.0; break;
-		case ANT_GIZMO_AXIS_Y: ey += 1.0; break;
-		case ANT_GIZMO_AXIS_Z: ez += 1.0; break;
-		default: return FALSE;
-	}
-	int AX, AY;
-	AntWorldToScreen(WX, WY, WZ, X1, Y1);
-	AntWorldToScreen(ex, ey, ez, AX, AY);
-	DX = double(AX - X1);
-	DY = double(AY - Y1);
-	double d = sqrt((DX * DX) + (DY * DY));
-	if( d < 0.1 ) return FALSE;
-	X2 = X1 + int((DX / d) * double(Len));
-	Y2 = Y1 + int((DY / d) * double(Len));
-	return TRUE;
+	TAntViewParams view;
+	view.Width = PBoxAnt->Width;
+	view.Height = PBoxAnt->Height;
+	view.CenterX = exeenv.AntXc;
+	view.CenterY = exeenv.AntYc;
+	view.Deg = TBarDeg->Position;
+	view.ZDeg = TBarZDeg->Position;
+	view.Scale = GetAntViewScale();
+	view.UnitScale = GetAntViewUnitScale();
+	return AntViewGizmoAxisScreen(view, WX, WY, WZ, Axis, Len, X1, Y1, X2, Y2, DX, DY);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntEditGizmo(void)
@@ -3568,7 +3362,7 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 				case ANT_GIZMO_AXIS_Z: PBoxAnt->Canvas->Pen->Color = clBlue; break;
 			}
 			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoEndpoint == 3) && (AntGizmoAxis == axis)) ? 3 : 2;
-			DrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
+			AntViewDrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
 		}
 		PaintAntGizmoMoveDistance();
 
@@ -3611,7 +3405,7 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 			}
 			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoWire == w) &&
 				(AntGizmoEndpoint == endp) && (AntGizmoAxis == axis)) ? 3 : 2;
-			DrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
+			AntViewDrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
 		}
 	}
 
@@ -3677,69 +3471,30 @@ void __fastcall TMainWnd::PaintAntDrawSnapPoint(void)
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ)
 {
-	int found = FALSE;
-	int best = (12 * 12) + 1;
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( IsAntWireSelected(i) ) continue;
-		int sx, sy;
-		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, sx, sy);
-		int dx = sx - X;
-		int dy = sy - Y;
-		int d = (dx * dx) + (dy * dy);
-		if( d < best ){
-			best = d;
-			WX = ant.wdef[i].X1;
-			WY = ant.wdef[i].Y1;
-			WZ = ant.wdef[i].Z1;
-			found = TRUE;
-		}
-		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, sx, sy);
-		dx = sx - X;
-		dy = sy - Y;
-		d = (dx * dx) + (dy * dy);
-		if( d < best ){
-			best = d;
-			WX = ant.wdef[i].X2;
-			WY = ant.wdef[i].Y2;
-			WZ = ant.wdef[i].Z2;
-			found = TRUE;
-		}
-	}
-	return found;
+	TAntViewParams view;
+	view.Width = PBoxAnt->Width;
+	view.Height = PBoxAnt->Height;
+	view.CenterX = exeenv.AntXc;
+	view.CenterY = exeenv.AntYc;
+	view.Deg = TBarDeg->Position;
+	view.ZDeg = TBarZDeg->Position;
+	view.Scale = GetAntViewScale();
+	view.UnitScale = GetAntViewUnitScale();
+	return AntViewFindSnapVertex(&ant, view, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, X, Y, WX, WY, WZ);
 }
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::FindAntSnapEdge(int X, int Y, double &WX, double &WY, double &WZ)
 {
-	int found = FALSE;
-	double best = (12.0 * 12.0) + 1.0;
-	for( int i = 0; i < ant.wmax; i++ ){
-		if( IsAntWireSelected(i) ) continue;
-		int x1, y1, x2, y2;
-		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, x1, y1);
-		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, x2, y2);
-		double vx = double(x2 - x1);
-		double vy = double(y2 - y1);
-		double len2 = (vx * vx) + (vy * vy);
-		double t = 0.0;
-		if( len2 > 0.0 ){
-			t = ((double(X - x1) * vx) + (double(Y - y1) * vy)) / len2;
-			if( t < 0.0 ) t = 0.0;
-			else if( t > 1.0 ) t = 1.0;
-		}
-		double px = double(x1) + (vx * t);
-		double py = double(y1) + (vy * t);
-		double dx = px - double(X);
-		double dy = py - double(Y);
-		double d = (dx * dx) + (dy * dy);
-		if( d < best ){
-			best = d;
-			WX = ant.wdef[i].X1 + ((ant.wdef[i].X2 - ant.wdef[i].X1) * t);
-			WY = ant.wdef[i].Y1 + ((ant.wdef[i].Y2 - ant.wdef[i].Y1) * t);
-			WZ = ant.wdef[i].Z1 + ((ant.wdef[i].Z2 - ant.wdef[i].Z1) * t);
-			found = TRUE;
-		}
-	}
-	return found;
+	TAntViewParams view;
+	view.Width = PBoxAnt->Width;
+	view.Height = PBoxAnt->Height;
+	view.CenterX = exeenv.AntXc;
+	view.CenterY = exeenv.AntYc;
+	view.Deg = TBarDeg->Position;
+	view.ZDeg = TBarZDeg->Position;
+	view.Scale = GetAntViewScale();
+	view.UnitScale = GetAntViewUnitScale();
+	return AntViewFindSnapEdge(&ant, view, AntWireSelected, AntWireSelectionCount, Grid2->Row - 1, X, Y, WX, WY, WZ);
 }
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
@@ -3766,7 +3521,7 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 				int x1, y1, x2, y2;
 				double dx, dy;
 				if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 46, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
-				double d = SqDistPointToSegment(X, Y, x1, y1, x2, y2);
+				double d = AntViewSqDistPointToSegment(X, Y, x1, y1, x2, y2);
 				if( d < best ){
 					best = d;
 					Endpoint = 3;
@@ -3803,7 +3558,7 @@ int __fastcall TMainWnd::HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis)
 			int x1, y1, x2, y2;
 			double dx, dy;
 			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
-			double d = SqDistPointToSegment(X, Y, x1, y1, x2, y2);
+			double d = AntViewSqDistPointToSegment(X, Y, x1, y1, x2, y2);
 			if( d < best ){
 				best = d;
 				Endpoint = endp;

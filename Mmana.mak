@@ -10,7 +10,7 @@ OBJFILES = Mmana.obj Main.obj mininec3.obj ComLib.obj TextEdit.obj VerDsp.obj \
    MediaDlg.obj ResCmp.obj GrpWire.obj ACalBox.obj ACalRes.obj OptDlg.obj \
    ACalMult.obj WireScl.obj BwDisp.obj ValRep.obj MoveDlg.obj NearSet.obj \
    FarSet.obj RotWire.obj WireCad.obj WireEdit.obj ACalInfo.obj StackDlg.obj \
-   WComb.obj WcombDsp.obj ACalEle.obj FreqSet.obj Print.obj
+   WComb.obj WcombDsp.obj ACalEle.obj FreqSet.obj Print.obj AntView.obj AntEditor.obj
 RESFILES = mmana.res Mmanam.res
 RESDEPEN = $(RESFILES) Main.dfm TextEdit.dfm VerDsp.dfm MediaDlg.dfm \
    ResCmp.dfm GrpWire.dfm ACalBox.dfm ACalRes.dfm OptDlg.dfm ACalMult.dfm \

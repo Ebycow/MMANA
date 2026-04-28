@@ -176,6 +176,14 @@
             <DependentOn>ACalRes.h</DependentOn>
             <BuildOrder>11</BuildOrder>
         </CppCompile>
+        <CppCompile Include="AntEditor.cpp">
+            <BuildOrder>31</BuildOrder>
+            <DependentOn>AntEditor.h</DependentOn>
+        </CppCompile>
+        <CppCompile Include="AntView.cpp">
+            <BuildOrder>32</BuildOrder>
+            <DependentOn>AntView.h</DependentOn>
+        </CppCompile>
         <CppCompile Include="BwDisp.cpp">
             <Form>BwDispDlg</Form>
             <DependentOn>BwDisp.h</DependentOn>
