@@ -453,8 +453,14 @@ private:	// ユーザー宣言
 	void __fastcall MirrorSelectedXClick(TObject *Sender);
 	void __fastcall MirrorSelectedYClick(TObject *Sender);
 	void __fastcall MirrorSelectedZClick(TObject *Sender);
+	void __fastcall AlignSelectedWiresToOrigin(int Axis);
+	void __fastcall RotateSelectedWires90(void);
+	void __fastcall AlignSelectedX0Click(TObject *Sender);
+	void __fastcall AlignSelectedY0Click(TObject *Sender);
+	void __fastcall RotateSelected90Click(TObject *Sender);
 	void __fastcall CreateAntDrawControls(void);
 	void __fastcall LayoutAntDrawControls(void);
+	void __fastcall LayoutQuadPanels(void);
 	void __fastcall UpdateAntDrawControls(void);
 	void __fastcall SetAntDrawMode(int Enabled);
 	void __fastcall SetAntDrawPlane(int Plane);
@@ -554,6 +560,9 @@ private:	// ユーザー宣言
 	TButton			*AntDrawXZBtn;
 	TButton			*AntDrawYZBtn;
 	TButton			*AntDrawCancelBtn;
+	TButton			*AntAlignX0Btn;
+	TButton			*AntAlignY0Btn;
+	TButton			*AntRotate90Btn;
 
 	bool            QuadMode;
 	bool            QuadSwitching;
@@ -571,6 +580,7 @@ private:	// ユーザー宣言
 	TSplitter       *SplitterVBot;
 	void __fastcall InitQuadLayout(void);
 	void __fastcall LayoutQuadAntPanel(void);
+	void __fastcall LayoutQuadPtnPanel(void);
 	void __fastcall SwitchToQuadMode(void);
 	void __fastcall SwitchToTabMode(void);
 	void __fastcall QuadViewToggle(TObject *Sender);

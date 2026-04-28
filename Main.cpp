@@ -127,6 +127,9 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntDrawXZBtn = NULL;
 	AntDrawYZBtn = NULL;
 	AntDrawCancelBtn = NULL;
+	AntAlignX0Btn = NULL;
+	AntAlignY0Btn = NULL;
+	AntRotate90Btn = NULL;
 	AntDrawMode = FALSE;
 	AntDrawActive = FALSE;
 	AntDrawPlane = ANT_DRAW_PLANE_XY;
@@ -3049,6 +3052,69 @@ void __fastcall TMainWnd::MirrorSelectedZClick(TObject *Sender)
 	MirrorSelectedWires(ANT_GIZMO_AXIS_Z);
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::AlignSelectedWiresToOrigin(int Axis)
+{
+	double cx, cy, cz;
+	if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+
+	double dx = (Axis == ANT_GIZMO_AXIS_X) ? -cx : 0.0;
+	double dy = (Axis == ANT_GIZMO_AXIS_Y) ? -cy : 0.0;
+	if( (dx == 0.0) && (dy == 0.0) ) return;
+
+	PushAntUndo();
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( !IsAntWireSelected(i) ) continue;
+		WDEF *wp = &ant.wdef[i];
+		wp->X1 += dx;
+		wp->X2 += dx;
+		wp->Y1 += dy;
+		wp->Y2 += dy;
+	}
+	UpdateAntData();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::RotateSelectedWires90(void)
+{
+	double cx, cy, cz;
+	if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+
+	PushAntUndo();
+	for( int i = 0; i < ant.wmax; i++ ){
+		if( !IsAntWireSelected(i) ) continue;
+		WDEF *wp = &ant.wdef[i];
+		double x1 = wp->X1 - cx;
+		double y1 = wp->Y1 - cy;
+		double x2 = wp->X2 - cx;
+		double y2 = wp->Y2 - cy;
+		wp->X1 = cx - y1;
+		wp->Y1 = cy + x1;
+		wp->X2 = cx - y2;
+		wp->Y2 = cy + x2;
+	}
+	UpdateAntData();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AlignSelectedX0Click(TObject *Sender)
+{
+	AlignSelectedWiresToOrigin(ANT_GIZMO_AXIS_X);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AlignSelectedY0Click(TObject *Sender)
+{
+	AlignSelectedWiresToOrigin(ANT_GIZMO_AXIS_Y);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::RotateSelected90Click(TObject *Sender)
+{
+	RotateSelectedWires90();
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::CreateAntDrawControls(void)
 {
 	if( AntDrawBtn != NULL ) return;
@@ -3083,21 +3149,69 @@ void __fastcall TMainWnd::CreateAntDrawControls(void)
 	AntDrawCancelBtn->TabStop = false;
 	AntDrawCancelBtn->OnClick = AntDrawCancelClick;
 
+	AntAlignX0Btn = new TButton(this);
+	AntAlignX0Btn->Parent = TabSheet2;
+	AntAlignX0Btn->Caption = "X0";
+	AntAlignX0Btn->TabStop = false;
+	AntAlignX0Btn->Hint = "Move selected wires to X=0";
+	AntAlignX0Btn->ShowHint = true;
+	AntAlignX0Btn->OnClick = AlignSelectedX0Click;
+
+	AntAlignY0Btn = new TButton(this);
+	AntAlignY0Btn->Parent = TabSheet2;
+	AntAlignY0Btn->Caption = "Y0";
+	AntAlignY0Btn->TabStop = false;
+	AntAlignY0Btn->Hint = "Move selected wires to Y=0";
+	AntAlignY0Btn->ShowHint = true;
+	AntAlignY0Btn->OnClick = AlignSelectedY0Click;
+
+	AntRotate90Btn = new TButton(this);
+	AntRotate90Btn->Parent = TabSheet2;
+	AntRotate90Btn->Caption = "R90";
+	AntRotate90Btn->TabStop = false;
+	AntRotate90Btn->Hint = "Rotate selected wires 90 degrees";
+	AntRotate90Btn->ShowHint = true;
+	AntRotate90Btn->OnClick = RotateSelected90Click;
+
 	LayoutAntDrawControls();
 	UpdateAntDrawControls();
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::LayoutAntDrawControls(void)
 {
-	if( (AntDrawBtn == NULL) || (AllViewBtn == NULL) || (OrgBtn == NULL) ) return;
+	if( (AntDrawBtn == NULL) || (AntAlignX0Btn == NULL) || (AllViewBtn == NULL) || (OrgBtn == NULL) ) return;
 
 	const int gap = 4;
 	const int drawW = 54;
 	const int planeW = 32;
 	const int cancelW = 50;
+	const int alignW = 36;
+	const int rotateW = 44;
 	int top = OrgBtn->Top;
 	int h = OrgBtn->Height;
-	int total = drawW + gap + planeW + gap + planeW + gap + planeW + gap + cancelW;
+
+	if( QuadMode && (PanelTopRight != NULL) ){
+		top = 2;
+		h = 25;
+		int right = PanelTopRight->ClientWidth - gap;
+		OrgBtn->SetBounds(right - 91, top, 91, h);
+		right -= 91 + gap;
+		AllViewBtn->SetBounds(right - 91, top, 91, h);
+
+		OrgBtn->Font->Assign(Font);
+		AllViewBtn->Font->Assign(Font);
+		AntDrawBtn->Font->Assign(Font);
+		AntDrawXYBtn->Font->Assign(Font);
+		AntDrawXZBtn->Font->Assign(Font);
+		AntDrawYZBtn->Font->Assign(Font);
+		AntDrawCancelBtn->Font->Assign(Font);
+		AntAlignX0Btn->Font->Assign(Font);
+		AntAlignY0Btn->Font->Assign(Font);
+		AntRotate90Btn->Font->Assign(Font);
+	}
+
+	int total = drawW + gap + planeW + gap + planeW + gap + planeW + gap +
+		cancelW + gap + alignW + gap + alignW + gap + rotateW;
 	int left = AllViewBtn->Left - gap - total;
 	if( left < 2 ) left = 2;
 
@@ -3110,6 +3224,12 @@ void __fastcall TMainWnd::LayoutAntDrawControls(void)
 	AntDrawYZBtn->SetBounds(left, top, planeW, h);
 	left += planeW + gap;
 	AntDrawCancelBtn->SetBounds(left, top, cancelW, h);
+	left += cancelW + gap;
+	AntAlignX0Btn->SetBounds(left, top, alignW, h);
+	left += alignW + gap;
+	AntAlignY0Btn->SetBounds(left, top, alignW, h);
+	left += alignW + gap;
+	AntRotate90Btn->SetBounds(left, top, rotateW, h);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::UpdateAntDrawControls(void)
@@ -3117,11 +3237,15 @@ void __fastcall TMainWnd::UpdateAntDrawControls(void)
 	if( AntDrawBtn == NULL ) return;
 
 	bool enabled = exeenv.Ant3D ? true : false;
+	bool selected = (GetAntSelectionCount() > 0) ? true : false;
 	AntDrawBtn->Enabled = enabled;
 	AntDrawXYBtn->Enabled = enabled;
 	AntDrawXZBtn->Enabled = enabled;
 	AntDrawYZBtn->Enabled = enabled;
 	AntDrawCancelBtn->Enabled = enabled && AntDrawMode;
+	AntAlignX0Btn->Enabled = selected;
+	AntAlignY0Btn->Enabled = selected;
+	AntRotate90Btn->Enabled = selected;
 
 	AntDrawBtn->Caption = AntDrawMode ? "[Draw]" : "Draw";
 	AntDrawXYBtn->Caption = (AntDrawPlane == ANT_DRAW_PLANE_XY) ? "[XY]" : "XY";
@@ -4559,19 +4683,107 @@ void __fastcall TMainWnd::InitQuadLayout(void)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::LayoutQuadAntPanel(void)
 {
-	int controlTop = Label7->Top;
-	if( Label8->Top < controlTop ) controlTop = Label8->Top;
-	if( Label13->Top < controlTop ) controlTop = Label13->Top;
-	if( Label17->Top < controlTop ) controlTop = Label17->Top;
-	if( Ant3D->Top < controlTop ) controlTop = Ant3D->Top;
+	const int margin = 4;
+	int cw = PanelTopRight->ClientWidth;
+	int ch = PanelTopRight->ClientHeight;
 
-	int h = controlTop - PBoxAnt->Top - 8;
-	if( h < 32 ) h = PanelTopRight->ClientHeight - PBoxAnt->Top;
-	if( h < 32 ) h = 32;
+	LayoutAntDrawControls();
+
+	Label7->Font->Assign(Font);
+	Label8->Font->Assign(Font);
+	Label13->Font->Assign(Font);
+	Label17->Font->Assign(Font);
+	Ant3D->Font->Assign(Font);
+	DspCur->Font->Assign(Font);
+	DspPlus->Font->Assign(Font);
+
+	int labelH = Label7->Height;
+	if( Label8->Height > labelH ) labelH = Label8->Height;
+	if( Label13->Height > labelH ) labelH = Label13->Height;
+	if( Label17->Height > labelH ) labelH = Label17->Height;
+	if( Ant3D->Height > labelH ) labelH = Ant3D->Height;
+
+	int barH = TBarDeg->Height;
+	int controlTop = ch - labelH - barH - (margin * 2);
+	int pboxTop = 33;
+	if( controlTop < pboxTop + 32 ) controlTop = pboxTop + 32;
+	if( controlTop > ch - 32 ) controlTop = ch - 32;
 
 	PBoxAnt->Align = alNone;
-	PBoxAnt->SetBounds(0, PBoxAnt->Top, PanelTopRight->ClientWidth, h);
-	LayoutAntDrawControls();
+	PBoxAnt->SetBounds(0, pboxTop, cw, controlTop - pboxTop - margin);
+
+	int labelTop = controlTop;
+	int barTop = labelTop + labelH + 2;
+	int trackW = (cw - 96) / 5;
+	if( trackW < 90 ) trackW = 90;
+	if( trackW > 180 ) trackW = 180;
+
+	int x1 = margin + 6;
+	int x2 = x1 + trackW + 28;
+	int x3 = x2 + trackW + 40;
+	int curX = cw - trackW - margin - 10;
+	int checkX = x3 + trackW + 26;
+	if( checkX + 130 > curX ) checkX = curX - 130;
+	if( checkX < x3 + trackW + 8 ) checkX = x3 + trackW + 8;
+
+	Label7->SetBounds(x1 + (trackW - Label7->Width) / 2, labelTop, Label7->Width, Label7->Height);
+	TBarDeg->SetBounds(x1, barTop, trackW, barH);
+	Label17->SetBounds(x2 + (trackW - Label17->Width) / 2, labelTop, Label17->Width, Label17->Height);
+	TBarZDeg->SetBounds(x2, barTop, trackW, barH);
+	Label8->SetBounds(x3 + (trackW - Label8->Width) / 2, labelTop, Label8->Width, Label8->Height);
+	TBarSC->SetBounds(x3, barTop, trackW, barH);
+	Ant3D->SetBounds(checkX, labelTop, Ant3D->Width, Ant3D->Height);
+	DspCur->SetBounds(checkX, barTop, DspCur->Width, DspCur->Height);
+	DspPlus->SetBounds(checkX, barTop + DspCur->Height + 2, DspPlus->Width, DspPlus->Height);
+	Label13->SetBounds(curX + (trackW - Label13->Width) / 2, labelTop, Label13->Width, Label13->Height);
+	TBarCur->SetBounds(curX, barTop, trackW, barH);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::LayoutQuadPtnPanel(void)
+{
+	if( !QuadMode ) return;
+
+	int top = 0;
+	int bottom = PanelBottomRight->ClientHeight;
+
+	if( AntName4->Visible ){
+		int b = AntName4->Top + AntName4->Height + 4;
+		if( b > top ) top = b;
+	}
+	if( PrintBtn->Visible ){
+		int b = PrintBtn->Top + PrintBtn->Height + 4;
+		if( b > top ) top = b;
+	}
+	if( WaveSel->Visible ){
+		int t = WaveSel->Top - 4;
+		if( t < bottom ) bottom = t;
+	}
+	if( EleBtn->Visible ){
+		int t = EleBtn->Top - 4;
+		if( t < bottom ) bottom = t;
+	}
+	if( bottom < top + 32 ) bottom = top + 32;
+	if( bottom > PanelBottomRight->ClientHeight ) bottom = PanelBottomRight->ClientHeight;
+
+	PBoxPtn->Align = alNone;
+	PBoxPtn->SetBounds(0, top, PanelBottomRight->ClientWidth, bottom - top);
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::LayoutQuadPanels(void)
+{
+	if( !QuadMode ) return;
+
+	PBoxAnt->Align = alNone;
+	PBoxPtn->Align = alNone;
+
+	AlignList.NewAlign(PanelTopLeft);
+	AlignGrid[0].NewAlign(Grid1);
+	AlignGrid[1].NewAlign(Grid2);
+	AlignGrid[2].NewAlign(Grid3);
+	AlignGrid[3].NewAlign(Grid4);
+
+	LayoutQuadAntPanel();
+	LayoutQuadPtnPanel();
 }
 //---------------------------------------------------------------------------
 // Switch to quad-split view
@@ -4605,7 +4817,6 @@ void __fastcall TMainWnd::SwitchToQuadMode(void)
 
 	while( TabSheet5->ControlCount > 0 )
 		TabSheet5->Controls[0]->Parent = PanelBottomRight;
-	PBoxPtn->Align = alClient;
 
 	Page->Align = alNone;
 	Page->Visible = false;
@@ -4613,7 +4824,7 @@ void __fastcall TMainWnd::SwitchToQuadMode(void)
 	QuadContainer->Align = alClient;
 	QuadContainer->Visible = true;
 	QuadSwitching = false;
-	LayoutQuadAntPanel();
+	LayoutQuadPanels();
 
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width/2-2, PBoxPtn->Height);
 	DrawPtnV.SetRect(PBoxPtn->Canvas, PBoxPtn->Width/2+2, 0, PBoxPtn->Width, PBoxPtn->Height);
@@ -4688,7 +4899,7 @@ void __fastcall TMainWnd::FormResize(TObject *Sender)
 		PanelTop->Height       = ClientHeight / 2;
 		PanelTopLeft->Width    = ClientWidth  / 2;
 		PanelBottomLeft->Width = ClientWidth  / 2;
-		LayoutQuadAntPanel();
+		LayoutQuadPanels();
 	}
 	LayoutAntDrawControls();
 	DrawPtnH.SetRect(PBoxPtn->Canvas, 0, 0, PBoxPtn->Width / 2 - 2, PBoxPtn->Height);
@@ -4755,6 +4966,9 @@ void __fastcall TMainWnd::EntryAlignControl(void)
 	AlignList.EntryControl(AntDrawXZBtn, BasicControl, AntDrawXZBtn->Font);
 	AlignList.EntryControl(AntDrawYZBtn, BasicControl, AntDrawYZBtn->Font);
 	AlignList.EntryControl(AntDrawCancelBtn, BasicControl, AntDrawCancelBtn->Font);
+	AlignList.EntryControl(AntAlignX0Btn, BasicControl, AntAlignX0Btn->Font);
+	AlignList.EntryControl(AntAlignY0Btn, BasicControl, AntAlignY0Btn->Font);
+	AlignList.EntryControl(AntRotate90Btn, BasicControl, AntRotate90Btn->Font);
 	AlignList.EntryControl(ACalBtn, BasicControl, ACalBtn->Font);
 	AlignList.EntryControl(EleEditBtn, BasicControl, EleEditBtn->Font);
 	AlignList.EntryControl(WireCadBtn, BasicControl, WireCadBtn->Font);
