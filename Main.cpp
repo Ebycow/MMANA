@@ -3570,6 +3570,8 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoEndpoint == 3) && (AntGizmoAxis == axis)) ? 3 : 2;
 			DrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
 		}
+		PaintAntGizmoMoveDistance();
+
 		PBoxAnt->Canvas->Pen->Color = oldColor;
 		PBoxAnt->Canvas->Pen->Style = oldStyle;
 		PBoxAnt->Canvas->Pen->Width = oldWidth;
@@ -3612,6 +3614,8 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 			DrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
 		}
 	}
+
+	PaintAntGizmoMoveDistance();
 
 	PBoxAnt->Canvas->Pen->Color = oldColor;
 	PBoxAnt->Canvas->Pen->Style = oldStyle;
@@ -4075,6 +4079,81 @@ void __fastcall TMainWnd::EndAntGizmoDrag(void)
 	else {
 		PBoxAnt->Invalidate();
 	}
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PaintAntGizmoMoveDistance(void)
+{
+	if( !AntGizmoDrag ) return;
+	if( (AntGizmoWire < 0) || (AntGizmoWire >= ant.wmax) ) return;
+
+	double ox, oy, oz;
+	double cx, cy, cz;
+	GetAntGizmoAnchor(ox, oy, oz);
+	WDEF *wp = &ant.wdef[AntGizmoWire];
+	if( AntGizmoEndpoint == 0 ){
+		cx = wp->X1;
+		cy = wp->Y1;
+		cz = wp->Z1;
+	}
+	else if( AntGizmoEndpoint == 1 ){
+		cx = wp->X2;
+		cy = wp->Y2;
+		cz = wp->Z2;
+	}
+	else if( AntGizmoEndpoint == 2 ){
+		cx = (wp->X1 + wp->X2) / 2.0;
+		cy = (wp->Y1 + wp->Y2) / 2.0;
+		cz = (wp->Z1 + wp->Z2) / 2.0;
+	}
+	else if( GetAntSelectionCenter(cx, cy, cz) != TRUE ){
+		return;
+	}
+
+	double dx = cx - ox;
+	double dy = cy - oy;
+	double dz = cz - oz;
+	double dist = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+	int sx, sy;
+	AntWorldToScreen(cx, cy, cz, sx, sy);
+
+	char bf[160];
+	char mm[64];
+	char m[64];
+	strcpy(mm, StrDbl(dist * 1000.0));
+	strcpy(m, StrDbl(dist));
+	sprintf(bf, "Move:%s mm (%s m)", mm, m);
+
+	int tw = PBoxAnt->Canvas->TextWidth(bf);
+	int th = PBoxAnt->Canvas->TextHeight(bf);
+	int tx = sx + 12;
+	int ty = sy + 12;
+	if( tx + tw + 8 > PBoxAnt->Width ) tx = sx - tw - 12;
+	if( ty + th + 6 > PBoxAnt->Height ) ty = sy - th - 12;
+	if( tx < 0 ) tx = 0;
+	if( ty < 0 ) ty = 0;
+
+	TColor oldPen = PBoxAnt->Canvas->Pen->Color;
+	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
+	TColor oldFont = PBoxAnt->Canvas->Font->Color;
+	TPenStyle oldPenStyle = PBoxAnt->Canvas->Pen->Style;
+	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
+	TRect rc;
+	rc.Left = tx - 3;
+	rc.Top = ty - 2;
+	rc.Right = tx + tw + 5;
+	rc.Bottom = ty + th + 4;
+	PBoxAnt->Canvas->Pen->Color = clBlack;
+	PBoxAnt->Canvas->Pen->Style = psSolid;
+	PBoxAnt->Canvas->Brush->Color = clInfoBk;
+	PBoxAnt->Canvas->Brush->Style = bsSolid;
+	PBoxAnt->Canvas->Rectangle(rc.Left, rc.Top, rc.Right, rc.Bottom);
+	PBoxAnt->Canvas->Font->Color = clBlack;
+	PBoxAnt->Canvas->TextOut(tx, ty, bf);
+	PBoxAnt->Canvas->Pen->Color = oldPen;
+	PBoxAnt->Canvas->Brush->Color = oldBrush;
+	PBoxAnt->Canvas->Font->Color = oldFont;
+	PBoxAnt->Canvas->Pen->Style = oldPenStyle;
+	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntDrawPreview(void)

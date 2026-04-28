@@ -486,6 +486,7 @@ private:	// ÉÜÅ[ÉUÅ[êÈåæ
 	void __fastcall GetAntGizmoFreeDelta(int X, int Y, double &DX, double &DY, double &DZ);
 	void __fastcall UpdateAntGizmoDrag(int X, int Y, TShiftState Shift);
 	void __fastcall EndAntGizmoDrag(void);
+	void __fastcall PaintAntGizmoMoveDistance(void);
 	void __fastcall PaintAntDrawPreview(void);
 	void __fastcall AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2);
 	void __fastcall PBoxAntMouseMove(TObject *Sender, TShiftState Shift, int X, int Y);
