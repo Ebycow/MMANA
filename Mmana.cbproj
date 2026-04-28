@@ -183,6 +183,7 @@
             <BuildOrder>31</BuildOrder>
             <DependentOn>AntEditor.h</DependentOn>
         </CppCompile>
+        <None Include="AntTypes.h"/>
         <CppCompile Include="AntView.cpp">
             <BuildOrder>32</BuildOrder>
             <DependentOn>AntView.h</DependentOn>
@@ -220,6 +221,18 @@
             <Form>MainWnd</Form>
             <DependentOn>Main.h</DependentOn>
             <BuildOrder>1</BuildOrder>
+        </CppCompile>
+        <CppCompile Include="MainAnt.cpp">
+            <BuildOrder>33</BuildOrder>
+            <DependentOn>Main.h</DependentOn>
+        </CppCompile>
+        <CppCompile Include="MainAntIO.cpp">
+            <BuildOrder>34</BuildOrder>
+            <DependentOn>Main.h</DependentOn>
+        </CppCompile>
+        <CppCompile Include="MainQuad.cpp">
+            <BuildOrder>35</BuildOrder>
+            <DependentOn>Main.h</DependentOn>
         </CppCompile>
         <CppCompile Include="MediaDlg.cpp">
             <BuildOrder>7</BuildOrder>

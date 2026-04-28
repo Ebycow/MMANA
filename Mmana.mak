@@ -6,7 +6,7 @@ BCB = $(MAKEDIR)\..
 !endif
 # ---------------------------------------------------------------------------
 PROJECT = Mmana.exe
-OBJFILES = Mmana.obj Main.obj mininec3.obj ComLib.obj TextEdit.obj VerDsp.obj \
+OBJFILES = Mmana.obj Main.obj MainAnt.obj MainAntIO.obj MainQuad.obj mininec3.obj ComLib.obj TextEdit.obj VerDsp.obj \
    MediaDlg.obj ResCmp.obj GrpWire.obj ACalBox.obj ACalRes.obj OptDlg.obj \
    ACalMult.obj WireScl.obj BwDisp.obj ValRep.obj MoveDlg.obj NearSet.obj \
    FarSet.obj RotWire.obj WireCad.obj WireEdit.obj ACalInfo.obj StackDlg.obj \

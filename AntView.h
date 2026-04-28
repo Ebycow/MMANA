@@ -3,19 +3,8 @@
 #define AntViewH
 
 #include <Graphics.hpp>
+#include "AntTypes.h"
 #include "ComLib.h"
-
-enum {
-	ANT_DRAW_PLANE_XY = 0,
-	ANT_DRAW_PLANE_XZ,
-	ANT_DRAW_PLANE_YZ
-};
-
-enum {
-	ANT_GIZMO_AXIS_X = 0,
-	ANT_GIZMO_AXIS_Y,
-	ANT_GIZMO_AXIS_Z
-};
 
 struct TAntViewParams {
 	int Width;

@@ -3,7 +3,7 @@
 #pragma hdrstop
 
 #include "AntEditor.h"
-#include "AntView.h"
+#include "AntTypes.h"
 
 #include <memory.h>
 
