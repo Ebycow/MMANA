@@ -1,6 +1,6 @@
 # MMANA — アンテナ設計・解析プログラム
 
-MMANA（Mininec-based Antenna ANAlyzer）は、**JE3HHT 森 誠氏**が開発されたWindows用アンテナ設計・解析ソフトウェアです。  
+MMANAは、**JE3HHT 森 誠氏**が開発されたWindows用アンテナ設計・解析ソフトウェアです。  
 MININEC3の計算エンジンをベースに、ダイポールから複雑な多素子アレーまで、グラフィカルに設計・シミュレーションできます。
 
 ---
