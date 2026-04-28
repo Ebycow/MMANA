@@ -77,6 +77,9 @@
         <TASM_IncludePath>$(BDS)\include;$(BDS)\include\vcl;$(TASM_IncludePath)</TASM_IncludePath>
         <BCC_PCHCache>true</BCC_PCHCache>
         <ILINK_LibraryPath>$(BDS)\lib\obj;$(BDS)\lib;$(BDS)\lib\psdk;$(ILINK_LibraryPath)</ILINK_LibraryPath>
+        <BCC_EnableCodePaging>65001</BCC_EnableCodePaging>
+        <BCC_ExecutionCharacterSet>932</BCC_ExecutionCharacterSet>
+        <BRCC_CodePage>65001</BRCC_CodePage>
         <SanitizedProjectName>Mmana</SanitizedProjectName>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Base_Win32)'!=''">
@@ -369,7 +372,6 @@
             <CfgParent>Base</CfgParent>
         </BuildConfiguration>
     </ItemGroup>
-    <Import Project="$(BDS)\Bin\CodeGear.Cpp.Targets"/>
     <ProjectExtensions>
         <Borland.Personality>CPlusPlusBuilder.Personality.12</Borland.Personality>
         <Borland.ProjectType>CppVCLApplication</Borland.ProjectType>

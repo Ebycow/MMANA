@@ -31,6 +31,12 @@ Community Editionは個人開発者・学生・スタートアップが無償で
 
 - ダウンロード: https://www.embarcadero.com/jp/products/cbuilder/starter
 
+### ソース文字コード
+
+`.cpp` / `.h` / `.rc` / ドキュメント類は UTF-8 で管理します。`Mmana.cbproj` では C++ コンパイラの入力コードページを UTF-8（65001）に固定し、実行時の narrow 文字列は従来互換の CP932 のままにしています。
+
+`.dfm` は C++Builder が扱うバイナリフォームリソースなので、文字コード変換の対象外です。
+
 ### コマンドラインビルド
 
 RAD Studio / C++ Builder は MSBuild をビルドエンジンとして使用します。  

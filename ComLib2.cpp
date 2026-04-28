@@ -5,7 +5,7 @@
 #include "ComLib2.h"
 //---------------------------------------------------------------------------
 ///----------------------------------------------------------------
-///  CAidSpinƒNƒ‰ƒX
+///  CAidSpinã‚¯ãƒ©ã‚¹
 void CAidSpin::SetControl(TUpDown *pS, TControl *pC, double val, double min, double max, double dw)
 {
 	pSpin->Associate = pCtrl;

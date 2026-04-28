@@ -157,7 +157,7 @@ void __fastcall TACalInfoBox::AutoJXClick(TObject *Sender)
 
 	if( (Calc(R, AnsiString(EditSWRZ->Text).c_str()) == TRUE) && (R > 0.0) ){
 		UnicodeString MTZ = R < 50 ? "50" : StrDbl(R*2);     //ja7ude 1.0
-		if( InputQuery("MMANA", "®‡–Ú•W‚ÌZ‚ð“ü—Í", MTZ) == TRUE ){
+		if( InputQuery("MMANA", "æ•´åˆç›®æ¨™ã®Zã‚’å…¥åŠ›", MTZ) == TRUE ){
 			if( (Calc(MRO, AnsiString(MTZ).c_str()) == TRUE) && (MRO > R) ){
 				EditSWRJX->Text = StrDbl(-(sqrt((MRO/R)-1) * R));
 			}

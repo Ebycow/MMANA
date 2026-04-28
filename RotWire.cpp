@@ -51,19 +51,19 @@ void __fastcall TRotWireDlg::RotWire(double &X, double &Y, double &Z, double deg
 {
 	double	WL;
 	switch(BSel->ItemIndex){
-		case 0:		// Çwé≤
+		case 0:		// Ôº∏Ëª∏
 			WL = sqrt(Y*Y + Z*Z);
 			deg += GetDeg(Y, Z);
 			Y = WL * cos(deg*PAI/180.0);
 			Z = WL * sin(deg*PAI/180.0);
 			break;
-		case 1:		// Çxé≤
+		case 1:		// ÔºπËª∏
 			WL = sqrt(X*X + Z*Z);
 			deg += GetDeg(X, Z);
 			X = WL * cos(deg*PAI/180.0);
 			Z = WL * sin(deg*PAI/180.0);
 			break;
-		case 2:		// Çyé≤
+		case 2:		// Ôº∫Ëª∏
 			WL = sqrt(X*X + Y*Y);
 			deg += GetDeg(X, Y);
 			X = WL * cos(deg*PAI/180.0);

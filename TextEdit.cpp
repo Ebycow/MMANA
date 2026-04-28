@@ -39,7 +39,7 @@ int __fastcall TTextEditDlg::Execute(AnsiString &as, int flag, LPCSTR pTitle /* 
 	ap = as.c_str();
 	if( flag != TRUE ){
 		OKBtn->Visible = FALSE;
-		CancelBtn->Caption = "•Â‚¶‚é";
+		CancelBtn->Caption = "é–‰ã˜ã‚‹";
 		Memo->ReadOnly = TRUE;
 	}
 	if( pTitle != NULL ){
@@ -67,7 +67,7 @@ void __fastcall TTextEditDlg::FontBtnClick(TObject *Sender)
 	}
 }
 //---------------------------------------------------------------------------
-// ƒTƒCƒY•ÏXƒRƒ“ƒgƒ[ƒ‹‚Ì“o˜^
+// ã‚µã‚¤ã‚ºå¤‰æ›´ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«ã®ç™»éŒ²
 void __fastcall TTextEditDlg::EntryAlignControl(void)
 {
 	RECT	rc;

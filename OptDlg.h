@@ -294,10 +294,10 @@ private:
     double	C;
 
 	double	CoilL;
-    double	CoilW;		// ƒƒCƒ„‚Ì’¼Œa
-    double	CoilN;		// Šª”
-    double	CoilS;		// ƒXƒy[ƒX
-    double	CoilD;		// ƒRƒCƒ‹‚Ì’¼Œa
+    double	CoilW;		// ãƒ¯ã‚¤ãƒ¤ã®ç›´å¾„
+    double	CoilN;		// å·»æ•°
+    double	CoilS;		// ã‚¹ãƒšãƒ¼ã‚¹
+    double	CoilD;		// ã‚³ã‚¤ãƒ«ã®ç›´å¾„
 
 	double	MF;
     double	MZ;

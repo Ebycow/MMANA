@@ -58,8 +58,8 @@ __published:
 	void __fastcall MatchSelClick(TObject *Sender);
 	void __fastcall OKBtnClick(TObject *Sender);
 private:
-	CRes	SaveRes;	// Œ‹‰Ê‚ÌƒZ[ƒu—Ìˆæ
-	double	SaveFQ;		// ü”g”‚ÌƒZ[ƒu
+	CRes	SaveRes;	// çµæœã®ã‚»ãƒ¼ãƒ–é ˜åŸŸ
+	double	SaveFQ;		// å‘¨æ³¢æ•°ã®ã‚»ãƒ¼ãƒ–
 	ANTDEF	*pAnt;
 
 	int		CanCalc;

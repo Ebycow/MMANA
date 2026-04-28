@@ -31,12 +31,12 @@ __fastcall TACalEleBox::TACalEleBox(TComponent* AOwner)
 //---------------------------------------------------------------------
 void __fastcall TACalEleBox::UpdateItemIndex(void)
 {
-    RGHW->Items->Strings[1] = CBVW->Checked ? "c•‚É˜AŒg" : "OFF";
-	RGHW->Items->Strings[2] = CBXW->Checked ? "‚w•‚É˜AŒg" : "OFF";
-    RGVW->Items->Strings[1] = CBHW->Checked ? "‰¡•‚É˜AŒg" : "OFF";
-	RGVW->Items->Strings[2] = CBXW->Checked ? "‚w•‚É˜AŒg" : "OFF";
-    RGXW->Items->Strings[1] = CBHW->Checked ? "‰¡•‚É˜AŒg" : "OFF";
-	RGXW->Items->Strings[2] = CBVW->Checked ? "c•‚É˜AŒg" : "OFF";
+    RGHW->Items->Strings[1] = CBVW->Checked ? "ç¸¦å¹…ã«é€£æº" : "OFF";
+	RGHW->Items->Strings[2] = CBXW->Checked ? "ï¼¸å¹…ã«é€£æº" : "OFF";
+    RGVW->Items->Strings[1] = CBHW->Checked ? "æ¨ªå¹…ã«é€£æº" : "OFF";
+	RGVW->Items->Strings[2] = CBXW->Checked ? "ï¼¸å¹…ã«é€£æº" : "OFF";
+    RGXW->Items->Strings[1] = CBHW->Checked ? "æ¨ªå¹…ã«é€£æº" : "OFF";
+	RGXW->Items->Strings[2] = CBVW->Checked ? "ç¸¦å¹…ã«é€£æº" : "OFF";
 }
 //---------------------------------------------------------------------
 int __fastcall TACalEleBox::Execute(int &HW, int &VW, int &XW, int &HC, int &VC, int &XC)
@@ -56,12 +56,12 @@ int __fastcall TACalEleBox::Execute(int &HW, int &VW, int &XW, int &HC, int &VC,
 		CBXW->Enabled = FALSE;
         RGXW->Enabled = FALSE;
     }
-    RGHW->Items->Strings[1] = VW ? "c•‚É˜AŒg" : "OFF";
-	RGHW->Items->Strings[2] = XW ? "‚w•‚É˜AŒg" : "OFF";
-    RGVW->Items->Strings[1] = HW ? "‰¡•‚É˜AŒg" : "OFF";
-	RGVW->Items->Strings[2] = XW ? "‚w•‚É˜AŒg" : "OFF";
-    RGXW->Items->Strings[1] = HW ? "‰¡•‚É˜AŒg" : "OFF";
-	RGXW->Items->Strings[2] = VW ? "c•‚É˜AŒg" : "OFF";
+    RGHW->Items->Strings[1] = VW ? "ç¸¦å¹…ã«é€£æº" : "OFF";
+	RGHW->Items->Strings[2] = XW ? "ï¼¸å¹…ã«é€£æº" : "OFF";
+    RGVW->Items->Strings[1] = HW ? "æ¨ªå¹…ã«é€£æº" : "OFF";
+	RGVW->Items->Strings[2] = XW ? "ï¼¸å¹…ã«é€£æº" : "OFF";
+    RGXW->Items->Strings[1] = HW ? "æ¨ªå¹…ã«é€£æº" : "OFF";
+	RGXW->Items->Strings[2] = VW ? "ç¸¦å¹…ã«é€£æº" : "OFF";
     RGHW->ItemIndex = 0;
     RGVW->ItemIndex = 0;
     RGXW->ItemIndex = 0;

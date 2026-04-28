@@ -69,8 +69,8 @@ int __fastcall TNearSetDlg::Execute(void)
 //---------------------------------------------------------------------
 void __fastcall TNearSetDlg::FileBtnClick(TObject *Sender)
 {
-	MainWnd->SaveDialog->Title = "近距離データファイル";
-	MainWnd->SaveDialog->Filter = "CSVファイル(*.csv)|*.csv|";
+	MainWnd->SaveDialog->Title = "霑題ｷ晞屬繝�繝ｼ繧ｿ繝輔ぃ繧､繝ｫ";
+	MainWnd->SaveDialog->Filter = "CSV繝輔ぃ繧､繝ｫ(*.csv)|*.csv|";
 	MainWnd->SaveDialog->FileName = exeenv.pNearFile->Name;
 	MainWnd->SaveDialog->DefaultExt = "csv";
 	MainWnd->SaveDialog->InitialDir = ResDir;

@@ -58,8 +58,8 @@ int __fastcall TFarSetDlg::Execute(void)
 //---------------------------------------------------------------------
 void __fastcall TFarSetDlg::FileBtnClick(TObject *Sender)
 {
-	MainWnd->SaveDialog->Title = "遠距離データファイル";
-	MainWnd->SaveDialog->Filter = "CSVファイル(*.csv)|*.csv|";
+	MainWnd->SaveDialog->Title = "驕霍晞屬繝�繝ｼ繧ｿ繝輔ぃ繧､繝ｫ";
+	MainWnd->SaveDialog->Filter = "CSV繝輔ぃ繧､繝ｫ(*.csv)|*.csv|";
 	MainWnd->SaveDialog->FileName = exeenv.pFarFile->Name;
 	MainWnd->SaveDialog->DefaultExt = "csv";
 	MainWnd->SaveDialog->InitialDir = ResDir;

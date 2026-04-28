@@ -33,7 +33,7 @@ void __fastcall TWCombDspDlg::Execute(ANTDEF *ap, PDEF *pp, WDEF *wp, int n)
 {
 	wmax = CombWire(wdef, ap, pp, wp);
 	char bf[128];
-    sprintf(bf, "Wire No.%d    ‘g‚Ý‡‚í‚¹ƒƒCƒ„” = %d", n, wmax);
+    sprintf(bf, "Wire No.%d    çµ„ã¿åˆã‚ã›ãƒ¯ã‚¤ãƒ¤æ•° = %d", n, wmax);
 	LStat->Caption = bf;
 	int i;
 	for( wp = wdef, i = 0; i < wmax; i++, wp++ ){

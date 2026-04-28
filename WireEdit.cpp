@@ -69,7 +69,7 @@ int __fastcall TWireEditDlg::Execute(WDEF *p, int n, int max)
 {
 	char	bf[80];
 
-	sprintf(bf, "ÉèÉCÉÑ(ã…ç¿ïW)ï“èW - Wire No.%d", n + 1);
+	sprintf(bf, "„ÉØ„Ç§„É§(Ê•µÂ∫ßÊ®ô)Á∑®ÈõÜ - Wire No.%d", n + 1);
 	Caption = bf;
 	int RmdSel = exeenv.RmdSel;
 	ChkRmd->Checked = exeenv.RmdSel;
@@ -108,7 +108,7 @@ int __fastcall TWireEditDlg::Execute(WDEF *p, int n, int max)
 			}
 		}
 		if( (NowW.R != NewW.R) || (NowW.SEG != NewW.SEG) ) f = 1;
-		if( f == 0 ) return FALSE;		// ïœçXÇ»Çµ
+		if( f == 0 ) return FALSE;		// Â§âÊõ¥„Å™„Åó
 		memcpy(&p[n], &NewW, sizeof(WDEF));
 		exeenv.RmdSel = RmdSel;
 		return TRUE;
@@ -119,13 +119,13 @@ int __fastcall TWireEditDlg::Execute(WDEF *p, int n, int max)
 	}
 }
 //---------------------------------------------------------------------------
-// åªèÛÇÃç¿ïWÇ©ÇÁí∑Ç≥Ç∆äpìxÇìæÇÈ
+// ÁèæÁä∂„ÅÆÂ∫ßÊ®ô„Åã„ÇâÈï∑„Åï„Å®ËßíÂ∫¶„ÇíÂæó„Çã
 void __fastcall TWireEditDlg::CalcDegLen(void)
 {
 	GetWirePoll(WL, XYD, YZD, &NewW);
 }
 //---------------------------------------------------------------------------
-// åªèÛÇÃí∑Ç≥Ç∆äpìxÇ©ÇÁêVÇµÇ¢ç¿ïWÇìæÇÈ
+// ÁèæÁä∂„ÅÆÈï∑„Åï„Å®ËßíÂ∫¶„Åã„ÇâÊñ∞„Åó„ÅÑÂ∫ßÊ®ô„ÇíÂæó„Çã
 void __fastcall TWireEditDlg::CalcXYZ(void)
 {
 	double XX = WL * sin(YZD*PAI/180.0) * cos(XYD*PAI/180.0);
@@ -135,7 +135,7 @@ void __fastcall TWireEditDlg::CalcXYZ(void)
 	double YC = (NowW.Y1 + NowW.Y2)/2.0;
 	double ZC = (NowW.Z1 + NowW.Z2)/2.0;
 	switch(BaseSel->ItemIndex){
-		case 0:		// énì_
+		case 0:		// ÂßãÁÇπ
 			NewW.X1 = NowW.X1;
 			NewW.Y1 = NowW.Y1;
 			NewW.Z1 = NowW.Z1;
@@ -143,7 +143,7 @@ void __fastcall TWireEditDlg::CalcXYZ(void)
 			NewW.Y2 = NewW.Y1 + YY;
 			NewW.Z2 = NewW.Z1 + ZZ;
 			break;
-		case 1:		// èIì_
+		case 1:		// ÁµÇÁÇπ
 			NewW.X2 = NowW.X2;
 			NewW.Y2 = NowW.Y2;
 			NewW.Z2 = NowW.Z2;
@@ -151,7 +151,7 @@ void __fastcall TWireEditDlg::CalcXYZ(void)
 			NewW.Y1 = NewW.Y2 - YY;
 			NewW.Z1 = NewW.Z2 - ZZ;
 			break;
-		case 2:		// íÜêS
+		case 2:		// ‰∏≠ÂøÉ
 			XX /= 2.0;
 			YY /= 2.0;
 			ZZ /= 2.0;

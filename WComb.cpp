@@ -45,7 +45,7 @@ int __fastcall TWCombDlg::Execute(ANTDEF *ap)
 //---------------------------------------------------------------------
 void __fastcall TWCombDlg::GridGetText(LPSTR t, long Col, long Row)
 {
-	LPCSTR	_tt[]={"Ì","Ë","Ì *","Ë *"};
+	LPCSTR	_tt[]={"â‡”","â‡’","â‡” *","â‡’ *"};
 
 	Row--;
 	*t = 0;
@@ -57,7 +57,7 @@ void __fastcall TWCombDlg::GridGetText(LPSTR t, long Col, long Row)
 				sprintf(t, "%d", Row+1 );
             }
             else {
-				strcpy(t, "V‹K");
+				strcpy(t, "æ–°è¦");
             }
 			break;
 		case 1:
@@ -94,7 +94,7 @@ void __fastcall TWCombDlg::GridDrawCell(TObject *Sender, int Col,
 		GridGetText(bf, Col, Row);
 		Grid->Canvas->TextOut(X, Y, bf);
 	}
-	else {		// ƒ^ƒCƒgƒ‹
+	else {		// ã‚¿ã‚¤ãƒˆãƒ«
 		LPCSTR	_tt[]={
 			"No.","R(mm)","Type"
 		};
