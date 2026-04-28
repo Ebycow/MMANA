@@ -395,6 +395,8 @@ private:	// ユーザー宣言
 	void __fastcall Grid3NewLine(int Row);
 	void __fastcall Grid4GetText(LPSTR t, long Col, long Row);
 	void __fastcall Grid4NewLine(int Row);
+	void __fastcall GridEditMouseDown(TObject *Sender, TMouseButton Button,
+	TShiftState Shift, int X, int Y);
 
 	void __fastcall SaveAntStrings(AnsiString &out);
 	void __fastcall LoadAntStrings(AnsiString &in);
@@ -464,6 +466,7 @@ private:	// ユーザー宣言
 		int &X1, int &Y1, int &X2, int &Y2, double &DX, double &DY);
 	void __fastcall PaintAntEditGizmo(void);
 	void __fastcall PaintAntSnapVertices(void);
+	void __fastcall PaintAntDrawSnapPoint(void);
 	int __fastcall FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ);
 	int __fastcall FindAntSnapEdge(int X, int Y, double &WX, double &WY, double &WZ);
 	int __fastcall HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis);
@@ -499,6 +502,10 @@ private:	// ユーザー宣言
 	double	AntDrawX2;
 	double	AntDrawY2;
 	double	AntDrawZ2;
+	int		AntDrawSnapVisible;
+	double	AntDrawSnapX;
+	double	AntDrawSnapY;
+	double	AntDrawSnapZ;
 	int		AntGizmoDrag;
 	int		AntGizmoEndpoint;
 	int		AntGizmoAxis;

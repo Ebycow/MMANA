@@ -132,6 +132,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntDrawPlane = ANT_DRAW_PLANE_XY;
 	AntDrawX1 = AntDrawY1 = AntDrawZ1 = 0.0;
 	AntDrawX2 = AntDrawY2 = AntDrawZ2 = 0.0;
+	AntDrawSnapVisible = FALSE;
+	AntDrawSnapX = AntDrawSnapY = AntDrawSnapZ = 0.0;
 	AntGizmoDrag = FALSE;
 	AntGizmoEndpoint = 0;
 	AntGizmoAxis = ANT_GIZMO_AXIS_X;
@@ -156,8 +158,11 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	InitQuadLayout();
 	Grid2->Options = Grid2->Options << goAlwaysShowEditor;
 	Grid2->OnSelectCell = Grid2SelectCell;
+	Grid2->OnMouseDown = GridEditMouseDown;
 	Grid3->Options = Grid3->Options << goAlwaysShowEditor;
+	Grid3->OnMouseDown = GridEditMouseDown;
 	Grid4->Options = Grid4->Options << goAlwaysShowEditor;
+	Grid4->OnMouseDown = GridEditMouseDown;
 	Application->OnIdle = OnIdle;
 	Application->OnMessage = OnAppMessage;
 	PBoxAntLastX = PBoxAntLastY = 0;
@@ -505,10 +510,25 @@ void __fastcall TMainWnd::OnIdle(TObject *Sender, bool &Done)
 	KMMANAWebW1->Enabled = WebRef.IsHTML();
 }
 //---------------------------------------------------------------------------
+static int IsEditControlMessage(tagMSG &Msg)
+{
+	TWinControl *Control = FindControl(Msg.hwnd);
+	if( Control == NULL ) return FALSE;
+	if( Control->InheritsFrom(__classid(TCustomEdit)) ) return TRUE;
+	if( Control->InheritsFrom(__classid(TCustomComboBox)) ) return TRUE;
+	return FALSE;
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
 {
 	if( Msg.message == WM_KEYDOWN ){
 		bool ctrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
+		if( (Msg.wParam == VK_ESCAPE) && AntDrawMode ){
+			AntDrawCancelClick(NULL);
+			Handled = TRUE;
+			return;
+		}
+		if( ctrl && IsEditControlMessage(Msg) ) return;
 		if( ctrl && (Msg.wParam == 'Z') ){
 			UndoAntEdit();
 			Handled = TRUE;
@@ -1724,6 +1744,22 @@ void __fastcall TMainWnd::Grid4GetEditText(TObject *Sender, int ACol,
 		Value = bf;
 	}
 }
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::GridEditMouseDown(TObject *Sender, TMouseButton Button,
+	TShiftState Shift, int X, int Y)
+{
+	if( Button != mbRight ) return;
+	TStringGrid *Grid = (TStringGrid *)Sender;
+	TGridCoord Pos = Grid->MouseCoord(X, Y);
+	if( Pos.Y <= 0 ) return;
+	if( Pos.Y >= Grid->RowCount ) return;
+	Grid->Row = Pos.Y;
+	Grid->SetFocus();
+	if( Grid == Grid2 ){
+		ClearAntWireSelection();
+		PBoxAnt->Invalidate();
+	}
+}
 // ポップアップ 「この行を削除」
 void __fastcall TMainWnd::K7Click(TObject *Sender)
 {
@@ -1731,6 +1767,7 @@ void __fastcall TMainWnd::K7Click(TObject *Sender)
 	int	Row, i;
 	if( ActiveControl == Grid2 ){		// ワイヤ
 		if( Grid2->Row && (Grid2->Row <= ant.wmax) ){
+			PushAntUndo();
 			Row = Grid2->Row - 1;
 			for( i = Row; i < (ant.wmax - 1); i++ ){
 				memcpy(&ant.wdef[i], &ant.wdef[i+1], sizeof(WDEF));
@@ -1739,7 +1776,10 @@ void __fastcall TMainWnd::K7Click(TObject *Sender)
 			ant.wmax--;
 			UpdateCount();
 			Grid2->RowCount = ant.wmax + 2;
+			Grid2->Row = ant.wmax ? ((Row < ant.wmax) ? Row + 1 : ant.wmax) : 1;
+			ClearAntWireSelection();
 			Grid2->Invalidate();
+			UpdateAntPreview();
 		}
 	}
 	else if( ActiveControl == Grid3 ){	// 給電
@@ -1782,6 +1822,7 @@ void __fastcall TMainWnd::K9Click(TObject *Sender)
 	int	Row, i;
 	if( ActiveControl == Grid2 ){		// ワイヤ
 		if( Grid2->Row && (Grid2->Row <= ant.wmax) && (ant.wmax < (WMAX-1)) ){
+			PushAntUndo();
 			Row = Grid2->Row - 1;
 			for( i = ant.wmax; i > Row; i-- ){
 				memcpy(&ant.wdef[i], &ant.wdef[i-1], sizeof(WDEF));
@@ -1802,7 +1843,10 @@ void __fastcall TMainWnd::K9Click(TObject *Sender)
 			ant.wmax++;
 			UpdateCount();
 			Grid2->RowCount = ant.wmax + 2;
+			Grid2->Row = Row + 1;
+			ClearAntWireSelection();
 			Grid2->Invalidate();
+			UpdateAntPreview();
 		}
 	}
 	else if( ActiveControl == Grid3 ){	// 給電
@@ -2466,6 +2510,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	PaintAntEditGizmo();
 	PaintAntSnapVertices();
 	PaintAntDrawPreview();
+	PaintAntDrawSnapPoint();
 	double	cx, cy, cz;
 	if( pCalAnt->wmax && DspPlus->Checked ){		// セグメント分割の表示
 		PBoxAnt->Canvas->Pen->Color = clGreen;
@@ -3047,6 +3092,7 @@ void __fastcall TMainWnd::SetAntDrawPlane(int Plane)
 	if( AntDrawPlane != Plane ){
 		AntDrawPlane = Plane;
 		AntDrawActive = FALSE;
+		AntDrawSnapVisible = FALSE;
 	}
 	UpdateAntDrawControls();
 	PBoxAnt->Invalidate();
@@ -3063,6 +3109,7 @@ void __fastcall TMainWnd::AntDrawCancelClick(TObject *Sender)
 {
 	if( AntDrawActive ){
 		AntDrawActive = FALSE;
+		AntDrawSnapVisible = FALSE;
 		PBoxAnt->Invalidate();
 	}
 	else {
@@ -3079,6 +3126,7 @@ void __fastcall TMainWnd::SetAntDrawMode(int Enabled)
 	}
 	AntDrawMode = Enabled ? TRUE : FALSE;
 	AntDrawActive = FALSE;
+	AntDrawSnapVisible = FALSE;
 	PBoxAntDragButton = -1;
 	PBoxAntDragAction = ANT_MOUSE_NONE;
 	PBoxAnt->Cursor = AntDrawMode ? crCross : crDefault;
@@ -3158,31 +3206,67 @@ void __fastcall TMainWnd::AntWorldToScreen(double WX, double WY, double WZ, int 
 int __fastcall TMainWnd::SnapAntDrawPoint(int X, int Y, double &WX, double &WY, double &WZ)
 {
 	int found = FALSE;
-	int best = (8 * 8) + 1;
+	double best = (10.0 * 10.0) + 1.0;
+	AntDrawSnapVisible = FALSE;
 	for( int i = 0; i < ant.wmax; i++ ){
-		int sx, sy;
-		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, sx, sy);
-		int dx = sx - X;
-		int dy = sy - Y;
-		int d = (dx * dx) + (dy * dy);
-		if( d < best ){
-			best = d;
-			WX = ant.wdef[i].X1;
-			WY = ant.wdef[i].Y1;
-			WZ = ant.wdef[i].Z1;
-			found = TRUE;
+		WDEF *wp = &ant.wdef[i];
+		for( int p = 0; p < 3; p++ ){
+			double tx = wp->X1;
+			double ty = wp->Y1;
+			double tz = wp->Z1;
+			if( p == 1 ){
+				tx = wp->X2;
+				ty = wp->Y2;
+				tz = wp->Z2;
+			}
+			else if( p == 2 ){
+				tx = (wp->X1 + wp->X2) / 2.0;
+				ty = (wp->Y1 + wp->Y2) / 2.0;
+				tz = (wp->Z1 + wp->Z2) / 2.0;
+			}
+			int sx, sy;
+			AntWorldToScreen(tx, ty, tz, sx, sy);
+			double dx = double(sx - X);
+			double dy = double(sy - Y);
+			double d = (dx * dx) + (dy * dy);
+			if( d < best ){
+				best = d;
+				WX = tx;
+				WY = ty;
+				WZ = tz;
+				found = TRUE;
+			}
 		}
-		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, sx, sy);
-		dx = sx - X;
-		dy = sy - Y;
-		d = (dx * dx) + (dy * dy);
-		if( d < best ){
-			best = d;
-			WX = ant.wdef[i].X2;
-			WY = ant.wdef[i].Y2;
-			WZ = ant.wdef[i].Z2;
-			found = TRUE;
+
+		int x1, y1, x2, y2;
+		AntWorldToScreen(wp->X1, wp->Y1, wp->Z1, x1, y1);
+		AntWorldToScreen(wp->X2, wp->Y2, wp->Z2, x2, y2);
+		double vx = double(x2 - x1);
+		double vy = double(y2 - y1);
+		double len2 = (vx * vx) + (vy * vy);
+		if( len2 > 0.0 ){
+			double t = ((double(X - x1) * vx) + (double(Y - y1) * vy)) / len2;
+			if( t < 0.0 ) t = 0.0;
+			else if( t > 1.0 ) t = 1.0;
+			double px = double(x1) + (vx * t);
+			double py = double(y1) + (vy * t);
+			double dx = px - double(X);
+			double dy = py - double(Y);
+			double d = (dx * dx) + (dy * dy);
+			if( d < best ){
+				best = d;
+				WX = wp->X1 + ((wp->X2 - wp->X1) * t);
+				WY = wp->Y1 + ((wp->Y2 - wp->Y1) * t);
+				WZ = wp->Z1 + ((wp->Z2 - wp->Z1) * t);
+				found = TRUE;
+			}
 		}
+	}
+	if( found ){
+		AntDrawSnapVisible = TRUE;
+		AntDrawSnapX = WX;
+		AntDrawSnapY = WY;
+		AntDrawSnapZ = WZ;
 	}
 	return found;
 }
@@ -3314,6 +3398,35 @@ void __fastcall TMainWnd::PaintAntSnapVertices(void)
 	}
 	PBoxAnt->Canvas->Pen->Color = oldColor;
 	PBoxAnt->Canvas->Brush->Color = oldBrush;
+	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PaintAntDrawSnapPoint(void)
+{
+	if( !AntDrawMode || !AntDrawSnapVisible ) return;
+	int x, y;
+	AntWorldToScreen(AntDrawSnapX, AntDrawSnapY, AntDrawSnapZ, x, y);
+	TColor oldPen = PBoxAnt->Canvas->Pen->Color;
+	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
+	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
+	int oldWidth = PBoxAnt->Canvas->Pen->Width;
+	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
+
+	PBoxAnt->Canvas->Pen->Color = clBlue;
+	PBoxAnt->Canvas->Pen->Style = psSolid;
+	PBoxAnt->Canvas->Pen->Width = 2;
+	PBoxAnt->Canvas->Brush->Color = clAqua;
+	PBoxAnt->Canvas->Brush->Style = bsSolid;
+	PBoxAnt->Canvas->Ellipse(x-5, y-5, x+6, y+6);
+	PBoxAnt->Canvas->MoveTo(x-8, y);
+	PBoxAnt->Canvas->LineTo(x+9, y);
+	PBoxAnt->Canvas->MoveTo(x, y-8);
+	PBoxAnt->Canvas->LineTo(x, y+9);
+
+	PBoxAnt->Canvas->Pen->Color = oldPen;
+	PBoxAnt->Canvas->Brush->Color = oldBrush;
+	PBoxAnt->Canvas->Pen->Style = oldStyle;
+	PBoxAnt->Canvas->Pen->Width = oldWidth;
 	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
@@ -3807,6 +3920,7 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 		PBoxAntDragAction = ANT_MOUSE_NONE;
 		if( Button == mbRight ){
 			AntDrawActive = FALSE;
+			AntDrawSnapVisible = FALSE;
 			PBoxAnt->Invalidate();
 			return;
 		}
@@ -3849,16 +3963,19 @@ void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, i
 		return;
 	}
 	if( AntDrawMode ){
-		if( AntDrawActive ){
-			double wx, wy, wz;
-			if( AntViewPointToXY(X, Y, wx, wy, wz) == TRUE ){
-				SnapAntDrawPoint(X, Y, wx, wy, wz);
+		double wx, wy, wz;
+		if( AntViewPointToXY(X, Y, wx, wy, wz) == TRUE ){
+			SnapAntDrawPoint(X, Y, wx, wy, wz);
+			if( AntDrawActive ){
 				AntDrawX2 = wx;
 				AntDrawY2 = wy;
 				AntDrawZ2 = wz;
-				PBoxAnt->Invalidate();
 			}
 		}
+		else {
+			AntDrawSnapVisible = FALSE;
+		}
+		PBoxAnt->Invalidate();
 		return;
 	}
 	if( PBoxAntDragAction == ANT_MOUSE_NONE ) return;
