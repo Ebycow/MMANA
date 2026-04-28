@@ -55,7 +55,7 @@ __published:
 	void __fastcall FormPaint(TObject *Sender);
 private:
 	int		InitFlag;
-	LPCSTR	ap;
+	UnicodeString	EditText;
 
 	CAlignList	AlignList;
 	void __fastcall EntryAlignControl(void);
@@ -63,6 +63,7 @@ public:
 	virtual __fastcall TTextEditDlg(TComponent* AOwner);
 
 	int __fastcall Execute(AnsiString &as, int flag, LPCSTR pTitle = NULL);
+	int __fastcall Execute(UnicodeString &as, int flag, LPCSTR pTitle = NULL);
 };
 //----------------------------------------------------------------------------
 extern TTextEditDlg *TextEditDlg;

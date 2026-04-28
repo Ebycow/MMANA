@@ -28,15 +28,26 @@ TTextEditDlg *TextEditDlg;
 __fastcall TTextEditDlg::TTextEditDlg(TComponent* AOwner)
 	: TForm(AOwner)
 {
-	ap = NULL;
+	InitFlag = FALSE;
 	Memo->Font->Pitch = System::Uitypes::TFontPitch::fpFixed;       //ja7ude 1.0, @10.4
 	EntryAlignControl();
 }
 //---------------------------------------------------------------------
 int __fastcall TTextEditDlg::Execute(AnsiString &as, int flag, LPCSTR pTitle /* = NULL*/)
 {
+	UnicodeString us = as;
+	int r = Execute(us, flag, pTitle);
+	if( (r == TRUE)&&(flag == TRUE) ){
+		as = AnsiString(us);
+	}
+	return r;
+}
+//---------------------------------------------------------------------
+int __fastcall TTextEditDlg::Execute(UnicodeString &as, int flag, LPCSTR pTitle /* = NULL*/)
+{
 	CWaitCursor tw;
-	ap = as.c_str();
+	EditText = as;
+	InitFlag = TRUE;
 	if( flag != TRUE ){
 		OKBtn->Visible = FALSE;
 		CancelBtn->Caption = "閉じる";
@@ -105,10 +116,10 @@ void __fastcall TTextEditDlg::FormResize(TObject *Sender)
 //---------------------------------------------------------------------------
 void __fastcall TTextEditDlg::FormPaint(TObject *Sender)
 {
-	if( ap == NULL ) return;
+	if( InitFlag != TRUE ) return;
 	CWaitCursor tw;
-	Memo->Text = ap;
-	ap = NULL;
+	Memo->Text = EditText;
+	InitFlag = FALSE;
 	Memo->Update();
 }
 //---------------------------------------------------------------------------

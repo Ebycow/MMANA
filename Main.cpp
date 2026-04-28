@@ -2295,27 +2295,20 @@ void __fastcall TMainWnd::KC1Click(TObject *Sender)
 // テキストヘルプの表示
 void __fastcall TMainWnd::ShowHelp(LPCSTR pName)
 {
-	char	bf[2048];
 	char	Name[256];
-	AnsiString	in;
-	FILE	*fp;
+	UnicodeString	in;
 
 	sprintf(Name, "%s%s", BgnDir, pName);
 	SetWaitCursor();
-	if( (fp = fopen(Name, "rt"))!=NULL ){
-		while(!feof(fp)){
-			if( fgets(bf, 2048, fp) != NULL ){
-				ClipLF(bf);
-				in += bf;
-				in += "\r\n";
-			}
-		}
-		fclose(fp);
-	}
-	else {
+	if( !FileExists(Name) ){
+		Screen->Cursor = crDefault;
 		ErrorMB("'%s'が見つかりません.", Name);
 		return;
 	}
+	TStringList *Text = new TStringList;
+	Text->LoadFromFile(Name, TEncoding::UTF8);
+	in = Text->Text;
+	delete Text;
 	TTextEditDlg *Box = new TTextEditDlg(this);
 	Screen->Cursor = crDefault;
 	Box->Execute(in, FALSE, pName);
