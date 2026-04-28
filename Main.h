@@ -440,6 +440,7 @@ private:	// ÉÜÅ[ÉUÅ[êÈåæ
 	void __fastcall RedoAntEdit(void);
 	void __fastcall CopyAntWires(void);
 	void __fastcall PasteAntWires(void);
+	void __fastcall DeleteSelectedAntWires(void);
 	void __fastcall ClearAntWireSelection(void);
 	void __fastcall DeselectAntWireSelection(void);
 	void __fastcall SelectOnlyAntWire(int Wire);

@@ -528,7 +528,14 @@ void __fastcall TMainWnd::OnAppMessage(tagMSG &Msg, bool &Handled)
 			Handled = TRUE;
 			return;
 		}
-		if( ctrl && IsEditControlMessage(Msg) ) return;
+		if( IsEditControlMessage(Msg) ){
+			if( ctrl || (Msg.wParam == VK_DELETE) ) return;
+		}
+		if( (Msg.wParam == VK_DELETE) && !ctrl && !AntDrawMode && (ActiveControl == Grid2) ){
+			DeleteSelectedAntWires();
+			Handled = TRUE;
+			return;
+		}
 		if( ctrl && (Msg.wParam == 'Z') ){
 			UndoAntEdit();
 			Handled = TRUE;
@@ -2825,6 +2832,44 @@ void __fastcall TMainWnd::RedoAntEdit(void)
 	if( RestoreAntSnapshot(AntRedoList, AntUndoList) != TRUE ) ::MessageBeep(MB_ICONEXCLAMATION);
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::DeleteSelectedAntWires(void)
+{
+	if( GetAntSelectionCount() <= 0 ){
+		::MessageBeep(MB_ICONEXCLAMATION);
+		return;
+	}
+	PushAntUndo();
+	int oldMax = ant.wmax;
+	int firstDeleted = -1;
+	int dst = 0;
+	for( int i = 0; i < oldMax; i++ ){
+		if( IsAntWireSelected(i) ){
+			if( firstDeleted < 0 ) firstDeleted = i;
+			continue;
+		}
+		if( dst != i ) memcpy(&ant.wdef[dst], &ant.wdef[i], sizeof(WDEF));
+		dst++;
+	}
+	for( int i = dst; i < oldMax; i++ ){
+		memset(&ant.wdef[i], 0, sizeof(WDEF));
+	}
+	ant.wmax = dst;
+	ant.Edit = ant.Flag = 1;
+	UpdateCount();
+	Grid2->RowCount = ant.wmax + 2;
+	ClearAntWireSelection();
+	if( ant.wmax ){
+		if( firstDeleted >= ant.wmax ) firstDeleted = ant.wmax - 1;
+		Grid2->Row = firstDeleted + 1;
+	}
+	else {
+		Grid2->Row = 1;
+	}
+	Grid2->Invalidate();
+	PBoxAnt->Invalidate();
+	UpdateAntPreview();
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::ClearAntWireSelection(void)
 {
 	memset(AntWireSelected, 0, sizeof(AntWireSelected));
@@ -2845,6 +2890,7 @@ void __fastcall TMainWnd::SelectOnlyAntWire(int Wire)
 		AntWireSelected[Wire] = TRUE;
 		AntWireSelectionCount = 1;
 		Grid2->Row = Wire + 1;
+		Grid2->SetFocus();
 	}
 	PBoxAnt->Invalidate();
 }
@@ -2870,6 +2916,7 @@ void __fastcall TMainWnd::ToggleAntWireSelection(int Wire)
 		AntWireSelected[Wire] = TRUE;
 		AntWireSelectionCount++;
 		Grid2->Row = Wire + 1;
+		Grid2->SetFocus();
 	}
 	PBoxAnt->Invalidate();
 }
@@ -2880,6 +2927,7 @@ void __fastcall TMainWnd::SelectAllAntWires(void)
 	for( int i = 0; i < ant.wmax; i++ ) AntWireSelected[i] = TRUE;
 	AntWireSelectionCount = ant.wmax;
 	Grid2->Row = 1;
+	Grid2->SetFocus();
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
@@ -3238,29 +3286,7 @@ int __fastcall TMainWnd::SnapAntDrawPoint(int X, int Y, double &WX, double &WY, 
 			}
 		}
 
-		int x1, y1, x2, y2;
-		AntWorldToScreen(wp->X1, wp->Y1, wp->Z1, x1, y1);
-		AntWorldToScreen(wp->X2, wp->Y2, wp->Z2, x2, y2);
-		double vx = double(x2 - x1);
-		double vy = double(y2 - y1);
-		double len2 = (vx * vx) + (vy * vy);
-		if( len2 > 0.0 ){
-			double t = ((double(X - x1) * vx) + (double(Y - y1) * vy)) / len2;
-			if( t < 0.0 ) t = 0.0;
-			else if( t > 1.0 ) t = 1.0;
-			double px = double(x1) + (vx * t);
-			double py = double(y1) + (vy * t);
-			double dx = px - double(X);
-			double dy = py - double(Y);
-			double d = (dx * dx) + (dy * dy);
-			if( d < best ){
-				best = d;
-				WX = wp->X1 + ((wp->X2 - wp->X1) * t);
-				WY = wp->Y1 + ((wp->Y2 - wp->Y1) * t);
-				WZ = wp->Z1 + ((wp->Z2 - wp->Z1) * t);
-				found = TRUE;
-			}
-		}
+
 	}
 	if( found ){
 		AntDrawSnapVisible = TRUE;
