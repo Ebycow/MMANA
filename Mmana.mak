@@ -20,19 +20,19 @@ RESDEPEN = $(RESFILES) Main.dfm TextEdit.dfm VerDsp.dfm MediaDlg.dfm \
 LIBFILES = 
 DEFFILE = 
 # ---------------------------------------------------------------------------
-CFLAG1 = -O2 -Hc -w -d -k- -r -vi -c -a4 -b- -w-par -w-inl -Vx -Ve -x
-CFLAG2 = -I$(BCB)\include;$(BCB)\include\vcl -H=$(BCB)\lib\vcl.csm 
+CFLAG1 = -O2 -Hc -w -d -k- -r -vi -c -a4 -b- -w-par -w-inl -Vx -Ve -x -CP65001
+CFLAG2 = -I$(BCB)\include;$(BCB)\include\windows\vcl;$(BCB)\include\vcl -H=$(BCB)\lib\vcl.csm
 PFLAGS = -AWinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE \
-   -U$(BCB)\lib\obj;$(BCB)\lib -I$(BCB)\include;$(BCB)\include\vcl -$L- -$D- \
+   -U$(BCB)\lib\win32\release;$(BCB)\lib\obj;$(BCB)\lib -I$(BCB)\include;$(BCB)\include\windows\vcl;$(BCB)\include\vcl -$L- -$D- \
    -JPHNV -M     
-RFLAGS = -i$(BCB)\include;$(BCB)\include\vcl 
-LFLAGS = -L$(BCB)\lib\obj;$(BCB)\lib -S:0x200000 -aa -Tpe -x -V4.0 
+RFLAGS = -i$(BCB)\include;$(BCB)\include\windows\vcl;$(BCB)\include\vcl -c65001
+LFLAGS = -L$(BCB)\lib\win32\release;$(BCB)\lib\obj;$(BCB)\lib -S:0x200000 -aa -Tpe -x -V4.0
 IFLAGS = 
 LINKER = ilink32
 # ---------------------------------------------------------------------------
-ALLOBJ = c0w32.obj $(OBJFILES)
+ALLOBJ = c0w32.obj sysinit.obj $(OBJFILES)
 ALLRES = $(RESFILES)
-ALLLIB = $(LIBFILES) vcl.lib import32.lib cp32mt.lib 
+ALLLIB = $(LIBFILES) rtl.lib vcl.lib vclx.lib import32.lib cp32mt.lib
 # ---------------------------------------------------------------------------
 .autodepend
 

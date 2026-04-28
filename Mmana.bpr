@@ -18,8 +18,8 @@
       WireCad.dfm WireEdit.dfm ACalInfo.dfm StackDlg.dfm WComb.dfm WcombDsp.dfm 
       ACalEle.dfm FreqSet.dfm Print.dfm"/>
     <LIBFILES value=""/>
-    <LIBRARIES value="vcldbx50.lib vclbde50.lib vcldb50.lib vclx50.lib vcl50.lib"/>
-    <SPARELIBS value="vcl50.lib vclx50.lib vcldb50.lib vclbde50.lib vcldbx50.lib"/>
+    <LIBRARIES value="rtl.lib vcl.lib vclx.lib"/>
+    <SPARELIBS value="vclx.lib vcl.lib rtl.lib"/>
     <PACKAGES value=""/>
     <PATHCPP value=".;"/>
     <PATHPAS value=".;"/>
@@ -31,19 +31,19 @@
     <USERDEFINES value=""/>
     <SYSDEFINES value="NO_STRICT"/>
     <MAINSOURCE value="Mmana.cpp"/>
-    <INCLUDEPATH value="$(BCB)\include;$(BCB)\include\vcl"/>
-    <LIBPATH value="$(BCB)\lib\obj;$(BCB)\lib"/>
+    <INCLUDEPATH value="$(BCB)\include;$(BCB)\include\windows\vcl;$(BCB)\include\vcl"/>
+    <LIBPATH value="$(BCB)\lib\win32\release;$(BCB)\lib\obj;$(BCB)\lib"/>
     <WARNINGS value="-w-par -w-8027 -w-8026"/>
     <WARNOPTSTR value=""/>
   </MACROS>
   <OPTIONS>
-    <CFLAG1 value="-O2 -H=c:\PROGRA~2\borland\CBUILD~1\lib\vcl.csm -Hc -Vx -Ve -X- -a4 -b- -d 
-      -k- -vi -c -tWM"/>
+    <CFLAG1 value="-O2 -H=$(BCB)\lib\vcl.csm -Hc -Vx -Ve -X- -a4 -b- -d
+      -k- -vi -c -tWM -CP65001"/>
     <CFLAG2 value=""/>
     <CFLAG3 value=""/>
     <PFLAGS value="-AWinTypes=Windows;WinProcs=Windows;DbiTypes=BDE;DbiProcs=BDE;DbiErrs=BDE 
       -$YD -$L- -$D- -JPHNV -M -JPHNE"/>
-    <RFLAGS value=""/>
+    <RFLAGS value="-i$(BCB)\include;$(BCB)\include\windows\vcl;$(BCB)\include\vcl -c65001"/>
     <AFLAGS value="/mx /w2 /zd"/>
     <LFLAGS value="-D&quot;&quot; -S:0x200000 -aa -Tpe -x"/>
     <IFLAGS value=""/>
