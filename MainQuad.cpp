@@ -184,6 +184,7 @@ void __fastcall TMainWnd::LayoutQuadPanels(void)
 	AlignList.NewAlign(PanelTopLeft);
 	AlignGrid[0].NewAlign(Grid1);
 	AlignGrid[1].NewAlign(Grid2);
+	FitWireGridColumns();
 	AlignGrid[2].NewAlign(Grid3);
 	AlignGrid[3].NewAlign(Grid4);
 
@@ -272,6 +273,7 @@ void __fastcall TMainWnd::SwitchToTabMode(void)
 	AlignList.NewAlign(Page->ActivePage);
 	AlignGrid[0].NewAlign(Grid1);
 	AlignGrid[1].NewAlign(Grid2);
+	FitWireGridColumns();
 	AlignGrid[2].NewAlign(Grid3);
 	AlignGrid[3].NewAlign(Grid4);
 	LayoutAntDrawControls();

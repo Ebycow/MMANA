@@ -395,6 +395,7 @@ private:	// ユーザー宣言
 
 	void __fastcall Grid2GetText(LPSTR t, long Col, long Row);
 	int __fastcall Grid2NewLine(int Row);
+	void __fastcall FitWireGridColumns(void);
 	void __fastcall Grid3GetText(LPSTR t, long Col, long Row);
 	void __fastcall Grid3NewLine(int Row);
 	void __fastcall Grid4GetText(LPSTR t, long Col, long Row);

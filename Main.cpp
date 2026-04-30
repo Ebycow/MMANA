@@ -102,6 +102,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	memset(AntWireSelected, 0, sizeof(AntWireSelected));
 	AntGizmoShowSnapVertices = FALSE;
 	CreateAntDrawControls();
+	Grid2->ColCount = 10;
+	FitWireGridColumns();
 	EntryAlignControl();
 	pACal = NULL;
 	pCalAnt = &ant;
@@ -109,8 +111,6 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	QuadSwitching = false;
 	QuadSavedClientWidth = QuadSavedClientHeight = 0;
 	InitQuadLayout();
-	Grid2->ColCount = 10;
-	Grid2->ColWidths[9] = 120;
 	Grid2->Options = Grid2->Options << goAlwaysShowEditor;
 	Grid2->OnSelectCell = Grid2SelectCell;
 	Grid2->OnMouseDown = GridEditMouseDown;
@@ -1068,6 +1068,34 @@ void __fastcall TMainWnd::Grid2GetText(LPSTR t, long Col, long Row)
 
 //---------------------------------------------------------------------------
 // 給電定義のセル位置のテキストを返す
+void __fastcall TMainWnd::FitWireGridColumns(void)
+{
+	if( Grid2 == NULL ) return;
+	if( Grid2->ColCount < 10 ) Grid2->ColCount = 10;
+
+	int avail = Grid2->ClientWidth - ::GetSystemMetrics(SM_CXVSCROLL) - 4;
+	if( avail <= 0 ) avail = Grid2->Width - 4;
+	if( avail <= 0 ) return;
+
+	const int weight[10] = {45, 80, 80, 80, 80, 80, 80, 70, 60, 110};
+	const int minw[10] = {40, 60, 60, 60, 60, 60, 60, 55, 50, 80};
+	int sumWeight = 0;
+	for( int i = 0; i < 10; i++ ) sumWeight += weight[i];
+
+	int used = 0;
+	for( int i = 0; i < 10; i++ ){
+		int w = (avail * weight[i]) / sumWeight;
+		if( w < minw[i] ) w = minw[i];
+		Grid2->ColWidths[i] = w;
+		used += w;
+	}
+	if( used < avail ){
+		Grid2->ColWidths[9] += avail - used;
+	}
+}
+
+//---------------------------------------------------------------------------
+// 邨ｦ髮ｻ螳夂ｾｩ縺ｮ繧ｻ繝ｫ菴咲ｽｮ縺ｮ繝・く繧ｹ繝医ｒ霑斐☆
 void __fastcall TMainWnd::Grid3GetText(LPSTR t, long Col, long Row)
 {
 	if( Row ){
@@ -2372,6 +2400,7 @@ void __fastcall TMainWnd::FormResize(TObject *Sender)
 		AlignList.NewAlign(Page->ActivePage);
 		AlignGrid[0].NewAlign(Grid1);
 		AlignGrid[1].NewAlign(Grid2);
+		FitWireGridColumns();
 		AlignGrid[2].NewAlign(Grid3);
 		AlignGrid[3].NewAlign(Grid4);
 	} else {
