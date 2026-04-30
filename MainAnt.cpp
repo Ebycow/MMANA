@@ -459,7 +459,8 @@ int __fastcall TMainWnd::SelectWire(int X, int Y)
 	}
 	if( mw != 9 ){
 		if( mi >= ant.wmax ) mi %= ant.wmax;
-		if( PBoxAntClickCtrl ) ToggleAntWireSelection(mi);
+		if( PBoxAntClickCtrl && PBoxAntClickShift ) ToggleAntElementSelection(mi);
+		else if( PBoxAntClickCtrl ) ToggleAntWireSelection(mi);
 		else SelectOnlyAntWire(mi);
 		r = TRUE;
 	}
@@ -723,6 +724,83 @@ void __fastcall TMainWnd::ToggleAntWireSelection(int Wire)
 		Grid2->Row = Wire + 1;
 		Grid2->SetFocus();
 	}
+	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::ToggleAntElementSelection(int Wire)
+{
+	if( (Wire < 0) || (Wire >= ant.wmax) ) return;
+
+	CWGroupList list;
+	list.SetWire(&ant);
+	CWGroup *gp = list.GetCW(Wire);
+	if( (gp == NULL) || (gp->bcnt <= 0) ){
+		ToggleAntWireSelection(Wire);
+		return;
+	}
+
+	int cur = Grid2->Row - 1;
+	int curInElement = FALSE;
+	WREF *rp;
+	int n;
+	for( rp = gp->pB, n = gp->bcnt; n; n--, rp++ ){
+		if( rp->ref == cur ){
+			curInElement = TRUE;
+			break;
+		}
+	}
+
+	if( AntWireSelectionCount < 0 ){
+		AntWireSelectionCount = 0;
+	}
+	else if( AntWireSelectionCount == 0 ){
+		if( (cur >= 0) && (cur < ant.wmax) && !curInElement ){
+			AntWireSelected[cur] = TRUE;
+			AntWireSelectionCount = 1;
+		}
+	}
+
+	int allSelected = TRUE;
+	for( rp = gp->pB, n = gp->bcnt; n; n--, rp++ ){
+		int w = rp->ref;
+		if( (w < 0) || (w >= ant.wmax) ) continue;
+		if( !AntWireSelected[w] ){
+			allSelected = FALSE;
+			break;
+		}
+	}
+
+	if( allSelected ){
+		for( rp = gp->pB, n = gp->bcnt; n; n--, rp++ ){
+			int w = rp->ref;
+			if( (w < 0) || (w >= ant.wmax) ) continue;
+			if( AntWireSelected[w] ){
+				AntWireSelected[w] = FALSE;
+				if( AntWireSelectionCount > 0 ) AntWireSelectionCount--;
+			}
+		}
+		if( AntWireSelectionCount <= 0 ){
+			DeselectAntWireSelection();
+			Grid2->EditorMode = FALSE;
+		}
+	}
+	else {
+		int first = -1;
+		for( rp = gp->pB, n = gp->bcnt; n; n--, rp++ ){
+			int w = rp->ref;
+			if( (w < 0) || (w >= ant.wmax) ) continue;
+			if( !AntWireSelected[w] ){
+				AntWireSelected[w] = TRUE;
+				AntWireSelectionCount++;
+			}
+			if( first < 0 ) first = w;
+		}
+		if( first >= 0 ){
+			Grid2->Row = first + 1;
+			Grid2->SetFocus();
+		}
+	}
+	Grid2->Invalidate();
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
@@ -1790,6 +1868,7 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 	PBoxAntMX = X;
 	PBoxAntMY = Y;
 	PBoxAntClickCtrl = Shift.Contains(ssCtrl) ? TRUE : FALSE;
+	PBoxAntClickShift = Shift.Contains(ssShift) ? TRUE : FALSE;
 	if( (Button == mbLeft) && BeginAntGizmoDrag(X, Y) == TRUE ){
 		PBoxAntIgnoreClick = TRUE;
 		PBoxAntDragButton = -1;
@@ -1924,6 +2003,10 @@ void __fastcall TMainWnd::PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 		PBoxAntDragMoved = FALSE;
 		if( moved ){
 			SelectWiresInRect(PBoxAntMX, PBoxAntMY, X, Y);
+			PBoxAntIgnoreClick = TRUE;
+		}
+		else if( Button == mbLeft ){
+			SelectAntWireClick(PBoxAntMX, PBoxAntMY);
 			PBoxAntIgnoreClick = TRUE;
 		}
 		PBoxAnt->Invalidate();

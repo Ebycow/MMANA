@@ -101,6 +101,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntWireClipboardCount = 0;
 	AntWireSelectionCount = 0;
 	PBoxAntClickCtrl = FALSE;
+	PBoxAntClickShift = FALSE;
 	memset(AntWireSelected, 0, sizeof(AntWireSelected));
 	AntGizmoShowSnapVertices = FALSE;
 	CreateAntDrawControls();

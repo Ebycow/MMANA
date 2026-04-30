@@ -458,6 +458,7 @@ private:	// ユーザー宣言
 	void __fastcall DeselectAntWireSelection(void);
 	void __fastcall SelectOnlyAntWire(int Wire);
 	void __fastcall ToggleAntWireSelection(int Wire);
+	void __fastcall ToggleAntElementSelection(int Wire);
 	void __fastcall SelectAntWireClick(int X, int Y);
 	void __fastcall SelectAllAntWires(void);
 	int __fastcall GetAntSelectionCount(void);
@@ -551,6 +552,7 @@ private:	// ユーザー宣言
 	int	AntWireSelected[WMAX];
 	int	AntWireSelectionCount;
 	int	PBoxAntClickCtrl;
+	int	PBoxAntClickShift;
 	WDEF	AntGizmoOldSelected[WMAX];
 	int	AntGizmoShowSnapVertices;
 	TMenuItem	*KAutoCalc;
