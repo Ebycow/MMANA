@@ -8,6 +8,47 @@
 #include "AntEditor.h"
 
 //---------------------------------------------------------------------------
+static void FormatAntLengthText(char *bf, LPCSTR Label, double Len)
+{
+	sprintf(bf, "%s:%s %s", Label, StrDbl(GetRmdVal(Len)), GetLenUnitText());
+}
+//---------------------------------------------------------------------------
+static void PaintAntLengthLabel(TCanvas *Canvas, int Width, int Height, int X, int Y, LPCSTR Text)
+{
+	int tw = Canvas->TextWidth(Text);
+	int th = Canvas->TextHeight(Text);
+	int tx = X + 12;
+	int ty = Y + 12;
+	if( tx + tw + 8 > Width ) tx = X - tw - 12;
+	if( ty + th + 6 > Height ) ty = Y - th - 12;
+	if( tx < 0 ) tx = 0;
+	if( ty < 0 ) ty = 0;
+
+	TColor oldPen = Canvas->Pen->Color;
+	TColor oldBrush = Canvas->Brush->Color;
+	TColor oldFont = Canvas->Font->Color;
+	TPenStyle oldPenStyle = Canvas->Pen->Style;
+	TBrushStyle oldBrushStyle = Canvas->Brush->Style;
+	TRect rc;
+	rc.Left = tx - 3;
+	rc.Top = ty - 2;
+	rc.Right = tx + tw + 5;
+	rc.Bottom = ty + th + 4;
+	Canvas->Pen->Color = clBlack;
+	Canvas->Pen->Style = psSolid;
+	Canvas->Brush->Color = clInfoBk;
+	Canvas->Brush->Style = bsSolid;
+	Canvas->Rectangle(rc.Left, rc.Top, rc.Right, rc.Bottom);
+	Canvas->Font->Color = clBlack;
+	Canvas->TextOut(tx, ty, Text);
+	Canvas->Pen->Color = oldPen;
+	Canvas->Brush->Color = oldBrush;
+	Canvas->Font->Color = oldFont;
+	Canvas->Pen->Style = oldPenStyle;
+	Canvas->Brush->Style = oldBrushStyle;
+}
+
+//---------------------------------------------------------------------------
 // アンテナ形状の表示イベント
 void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 {
@@ -1425,43 +1466,8 @@ void __fastcall TMainWnd::PaintAntGizmoMoveDistance(void)
 	AntWorldToScreen(cx, cy, cz, sx, sy);
 
 	char bf[160];
-	char mm[64];
-	char m[64];
-	strcpy(mm, StrDbl(dist * 1000.0));
-	strcpy(m, StrDbl(dist));
-	sprintf(bf, "Move:%s mm (%s m)", mm, m);
-
-	int tw = PBoxAnt->Canvas->TextWidth(bf);
-	int th = PBoxAnt->Canvas->TextHeight(bf);
-	int tx = sx + 12;
-	int ty = sy + 12;
-	if( tx + tw + 8 > PBoxAnt->Width ) tx = sx - tw - 12;
-	if( ty + th + 6 > PBoxAnt->Height ) ty = sy - th - 12;
-	if( tx < 0 ) tx = 0;
-	if( ty < 0 ) ty = 0;
-
-	TColor oldPen = PBoxAnt->Canvas->Pen->Color;
-	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
-	TColor oldFont = PBoxAnt->Canvas->Font->Color;
-	TPenStyle oldPenStyle = PBoxAnt->Canvas->Pen->Style;
-	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
-	TRect rc;
-	rc.Left = tx - 3;
-	rc.Top = ty - 2;
-	rc.Right = tx + tw + 5;
-	rc.Bottom = ty + th + 4;
-	PBoxAnt->Canvas->Pen->Color = clBlack;
-	PBoxAnt->Canvas->Pen->Style = psSolid;
-	PBoxAnt->Canvas->Brush->Color = clInfoBk;
-	PBoxAnt->Canvas->Brush->Style = bsSolid;
-	PBoxAnt->Canvas->Rectangle(rc.Left, rc.Top, rc.Right, rc.Bottom);
-	PBoxAnt->Canvas->Font->Color = clBlack;
-	PBoxAnt->Canvas->TextOut(tx, ty, bf);
-	PBoxAnt->Canvas->Pen->Color = oldPen;
-	PBoxAnt->Canvas->Brush->Color = oldBrush;
-	PBoxAnt->Canvas->Font->Color = oldFont;
-	PBoxAnt->Canvas->Pen->Style = oldPenStyle;
-	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+	FormatAntLengthText(bf, "Move", dist);
+	PaintAntLengthLabel(PBoxAnt->Canvas, PBoxAnt->Width, PBoxAnt->Height, sx, sy, bf);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntDrawPreview(void)
@@ -1485,6 +1491,14 @@ void __fastcall TMainWnd::PaintAntDrawPreview(void)
 	PBoxAnt->Canvas->Pen->Color = oldColor;
 	PBoxAnt->Canvas->Pen->Style = oldStyle;
 	PBoxAnt->Canvas->Pen->Width = oldWidth;
+
+	double dx = AntDrawX2 - AntDrawX1;
+	double dy = AntDrawY2 - AntDrawY1;
+	double dz = AntDrawZ2 - AntDrawZ1;
+	double dist = sqrt((dx * dx) + (dy * dy) + (dz * dz));
+	char bf[160];
+	FormatAntLengthText(bf, "Length", dist);
+	PaintAntLengthLabel(PBoxAnt->Canvas, PBoxAnt->Width, PBoxAnt->Height, (X1 + X2) / 2, (Y1 + Y2) / 2, bf);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2)
