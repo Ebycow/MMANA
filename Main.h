@@ -427,6 +427,7 @@ private:	// ユーザー宣言
     DWORD	EndTime;
 	void __fastcall AllRoundUp(double sc);
 	int __fastcall SelectWire(int X, int Y);
+	int __fastcall SelectWiresInRect(int X1, int Y1, int X2, int Y2);
 	void __fastcall UpdateAntData(void);
 	int __fastcall GetAntMouseAction(TMouseButton Button);
 	void __fastcall SetTrackBarPosition(TTrackBar *Bar, int Pos);
@@ -457,6 +458,7 @@ private:	// ユーザー宣言
 	void __fastcall DeselectAntWireSelection(void);
 	void __fastcall SelectOnlyAntWire(int Wire);
 	void __fastcall ToggleAntWireSelection(int Wire);
+	void __fastcall SelectAntWireClick(int X, int Y);
 	void __fastcall SelectAllAntWires(void);
 	int __fastcall GetAntSelectionCount(void);
 	int __fastcall IsAntWireSelected(int Wire);
@@ -486,6 +488,7 @@ private:	// ユーザー宣言
 	void __fastcall PaintAntEditGizmo(void);
 	void __fastcall PaintAntSnapVertices(void);
 	void __fastcall PaintAntDrawSnapPoint(void);
+	void __fastcall PaintAntSelectionRect(void);
 	int __fastcall FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ);
 	int __fastcall FindAntSnapEdge(int X, int Y, double &WX, double &WY, double &WZ);
 	int __fastcall HitAntEditGizmo(int X, int Y, int &Endpoint, int &Axis);
@@ -513,6 +516,9 @@ private:	// ユーザー宣言
 	int		PBoxAntDragAction;
 	int		PBoxAntDragMoved;
 	int		PBoxAntIgnoreClick;
+	int		PBoxAntSelectRect;
+	int		PBoxAntRectX;
+	int		PBoxAntRectY;
 	TTimer	*AutoCalcTimer;
 	int		AutoCalcPending;
 	int		AutoCalcRunning;

@@ -128,6 +128,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	PBoxAntDragAction = ANT_MOUSE_NONE;
 	PBoxAntDragMoved = FALSE;
 	PBoxAntIgnoreClick = FALSE;
+	PBoxAntSelectRect = FALSE;
+	PBoxAntRectX = PBoxAntRectY = 0;
 	AntViewTrackBarChanging = FALSE;
 	AutoCalcTimer = new TTimer(this);
 	AutoCalcTimer->Enabled = FALSE;
@@ -139,6 +141,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	PBoxAnt->OnMouseDown = PBoxAntMouseDown;
 	PBoxAnt->OnMouseMove = PBoxAntMouseMove;
 	PBoxAnt->OnMouseUp = PBoxAntMouseUp;
+	PBoxAnt->OnClick = NULL;
 	OnMouseWheel = PBoxAntMouseWheel;
 	TabSheet2->DoubleBuffered = true;
 	OldTabSheet2WindowProc = TabSheet2->WindowProc;

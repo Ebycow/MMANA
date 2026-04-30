@@ -66,6 +66,58 @@ static TColor AntGizmoAxisColor(int Axis, int Muted)
 	return clBlack;
 }
 
+static int AntRectContainsPoint(int L, int T, int R, int B, int X, int Y)
+{
+	return (X >= L) && (X <= R) && (Y >= T) && (Y <= B);
+}
+
+static double AntSegmentCross(int AX, int AY, int BX, int BY, int CX, int CY)
+{
+	return double(BX - AX) * double(CY - AY) - double(BY - AY) * double(CX - AX);
+}
+
+static int AntValueBetween(int A, int B, int C)
+{
+	return ((A <= C) && (C <= B)) || ((B <= C) && (C <= A));
+}
+
+static int AntPointOnSegment(int AX, int AY, int BX, int BY, int PX, int PY)
+{
+	if( AntSegmentCross(AX, AY, BX, BY, PX, PY) != 0.0 ) return FALSE;
+	return AntValueBetween(AX, BX, PX) && AntValueBetween(AY, BY, PY);
+}
+
+static int AntSegmentsIntersect(int A1X, int A1Y, int A2X, int A2Y,
+	int B1X, int B1Y, int B2X, int B2Y)
+{
+	double c1 = AntSegmentCross(A1X, A1Y, A2X, A2Y, B1X, B1Y);
+	double c2 = AntSegmentCross(A1X, A1Y, A2X, A2Y, B2X, B2Y);
+	double c3 = AntSegmentCross(B1X, B1Y, B2X, B2Y, A1X, A1Y);
+	double c4 = AntSegmentCross(B1X, B1Y, B2X, B2Y, A2X, A2Y);
+
+	if( (c1 == 0.0) && AntPointOnSegment(A1X, A1Y, A2X, A2Y, B1X, B1Y) ) return TRUE;
+	if( (c2 == 0.0) && AntPointOnSegment(A1X, A1Y, A2X, A2Y, B2X, B2Y) ) return TRUE;
+	if( (c3 == 0.0) && AntPointOnSegment(B1X, B1Y, B2X, B2Y, A1X, A1Y) ) return TRUE;
+	if( (c4 == 0.0) && AntPointOnSegment(B1X, B1Y, B2X, B2Y, A2X, A2Y) ) return TRUE;
+
+	return (((c1 < 0) && (c2 > 0)) || ((c1 > 0) && (c2 < 0))) &&
+		(((c3 < 0) && (c4 > 0)) || ((c3 > 0) && (c4 < 0)));
+}
+
+static int AntSegmentIntersectsRect(int X1, int Y1, int X2, int Y2,
+	int L, int T, int R, int B)
+{
+	if( AntRectContainsPoint(L, T, R, B, X1, Y1) ) return TRUE;
+	if( AntRectContainsPoint(L, T, R, B, X2, Y2) ) return TRUE;
+	if( ((X1 < L) && (X2 < L)) || ((X1 > R) && (X2 > R)) ||
+		((Y1 < T) && (Y2 < T)) || ((Y1 > B) && (Y2 > B)) ) return FALSE;
+	if( AntSegmentsIntersect(X1, Y1, X2, Y2, L, T, R, T) ) return TRUE;
+	if( AntSegmentsIntersect(X1, Y1, X2, Y2, R, T, R, B) ) return TRUE;
+	if( AntSegmentsIntersect(X1, Y1, X2, Y2, R, B, L, B) ) return TRUE;
+	if( AntSegmentsIntersect(X1, Y1, X2, Y2, L, B, L, T) ) return TRUE;
+	return FALSE;
+}
+
 static TCanvas *AntPaintBufferCanvas = NULL;
 
 //---------------------------------------------------------------------------
@@ -360,6 +412,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 		PBoxAnt->Canvas->TextOut(X-2, 0+2, bf);
 		PBoxAnt->Canvas->Font->Color = clBlack;
 	}
+	PaintAntSelectionRect();
 	::SetBkMode(PBoxAnt->Canvas->Handle, Sop);
 	AntPaintBufferCanvas = OldAntPaintCanvas;
 	this->PBoxAnt->Canvas->Draw(0, 0, AntPaintBitmap);
@@ -413,7 +466,59 @@ int __fastcall TMainWnd::SelectWire(int X, int Y)
 	return r;
 }
 //---------------------------------------------------------------------------
-// アンテナ形状表示のマウス操作設定
+// Rect selection in antenna view
+int __fastcall TMainWnd::SelectWiresInRect(int X1, int Y1, int X2, int Y2)
+{
+	int L = (X1 < X2) ? X1 : X2;
+	int R = (X1 < X2) ? X2 : X1;
+	int T = (Y1 < Y2) ? Y1 : Y2;
+	int B = (Y1 < Y2) ? Y2 : Y1;
+
+	AntEditorClearSelection(AntWireSelected, AntWireSelectionCount);
+	AntGizmoShowSnapVertices = FALSE;
+
+	double sc = double(TBarSC->Position) / 20.0;
+	sc = sc * sc * sc * sc;
+	int	Xc = int(PBoxAnt->Width/2 + (exeenv.AntXc * sc));
+	int	Yc = int(PBoxAnt->Height/2 + (exeenv.AntYc * sc));
+	double x, y;
+	double deg = double(TBarDeg->Position);
+	deg *= (PAI / 180.0);
+	double zdeg = double(TBarZDeg->Position);
+	zdeg *= (PAI / 180.0);
+
+	int first = -1;
+	for( int i = 0; i < pCalAnt->wmax; i++ ){
+		CalcAntViewXY(x, y, deg, zdeg, pCalAnt->wdef[i].X1, pCalAnt->wdef[i].Y1, pCalAnt->wdef[i].Z1);
+		int sx1 = int((x * sc)) + Xc;
+		int sy1 = Yc - int((y * sc));
+		CalcAntViewXY(x, y, deg, zdeg, pCalAnt->wdef[i].X2, pCalAnt->wdef[i].Y2, pCalAnt->wdef[i].Z2);
+		int sx2 = int((x * sc)) + Xc;
+		int sy2 = Yc - int((y * sc));
+		if( AntSegmentIntersectsRect(sx1, sy1, sx2, sy2, L, T, R, B) ){
+			int sw = ant.wmax ? (i % ant.wmax) : i;
+			if( (sw >= 0) && (sw < ant.wmax) && !AntWireSelected[sw] ){
+				AntWireSelected[sw] = TRUE;
+				AntWireSelectionCount++;
+				if( first < 0 ) first = sw;
+			}
+		}
+	}
+
+	if( AntWireSelectionCount > 0 ){
+		Grid2->Row = first + 1;
+		Grid2->SetFocus();
+	}
+	else {
+		AntEditorDeselectSelection(AntWireSelected, AntWireSelectionCount);
+		Grid2->EditorMode = FALSE;
+	}
+	Grid2->Invalidate();
+	PBoxAnt->Invalidate();
+	return (AntWireSelectionCount > 0) ? TRUE : FALSE;
+}
+//---------------------------------------------------------------------------
+// Antenna view mouse action setting
 int __fastcall TMainWnd::GetAntMouseAction(TMouseButton Button)
 {
 	if( Button == mbLeft ) return exeenv.AntMouseLeft;
@@ -619,6 +724,19 @@ void __fastcall TMainWnd::ToggleAntWireSelection(int Wire)
 		Grid2->SetFocus();
 	}
 	PBoxAnt->Invalidate();
+}
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::SelectAntWireClick(int X, int Y)
+{
+	if( SelectWire(X, Y) == TRUE ){
+		PBoxAnt->Invalidate();
+	}
+	else {
+		DeselectAntWireSelection();
+		Grid2->EditorMode = FALSE;
+		Grid2->Invalidate();
+		PBoxAnt->Invalidate();
+	}
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::SelectAllAntWires(void)
@@ -1154,6 +1272,31 @@ void __fastcall TMainWnd::PaintAntDrawSnapPoint(void)
 	Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::PaintAntSelectionRect(void)
+{
+	if( !PBoxAntSelectRect || !PBoxAntDragMoved ) return;
+
+	int L = (PBoxAntMX < PBoxAntRectX) ? PBoxAntMX : PBoxAntRectX;
+	int R = (PBoxAntMX < PBoxAntRectX) ? PBoxAntRectX : PBoxAntMX;
+	int T = (PBoxAntMY < PBoxAntRectY) ? PBoxAntMY : PBoxAntRectY;
+	int B = (PBoxAntMY < PBoxAntRectY) ? PBoxAntRectY : PBoxAntMY;
+
+	TCanvas *Canvas = AntPaintCanvas();
+	TColor oldPen = Canvas->Pen->Color;
+	TPenStyle oldStyle = Canvas->Pen->Style;
+	int oldWidth = Canvas->Pen->Width;
+	TBrushStyle oldBrushStyle = Canvas->Brush->Style;
+	Canvas->Pen->Color = (TColor)RGB(40, 110, 210);
+	Canvas->Pen->Style = psDot;
+	Canvas->Pen->Width = 1;
+	Canvas->Brush->Style = bsClear;
+	Canvas->Rectangle(L, T, R + 1, B + 1);
+	Canvas->Pen->Color = oldPen;
+	Canvas->Pen->Style = oldStyle;
+	Canvas->Pen->Width = oldWidth;
+	Canvas->Brush->Style = oldBrushStyle;
+}
+//---------------------------------------------------------------------------
 int __fastcall TMainWnd::FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ)
 {
 	TAntViewParams view;
@@ -1648,6 +1791,7 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 	PBoxAntMY = Y;
 	PBoxAntClickCtrl = Shift.Contains(ssCtrl) ? TRUE : FALSE;
 	if( (Button == mbLeft) && BeginAntGizmoDrag(X, Y) == TRUE ){
+		PBoxAntIgnoreClick = TRUE;
 		PBoxAntDragButton = -1;
 		PBoxAntDragAction = ANT_MOUSE_NONE;
 		return;
@@ -1685,6 +1829,17 @@ void __fastcall TMainWnd::PBoxAntMouseDown(TObject *Sender, TMouseButton Button,
 		}
 		return;
 	}
+	if( (Button == mbLeft) && Shift.Contains(ssShift) ){
+		PBoxAntSelectRect = TRUE;
+		PBoxAntRectX = X;
+		PBoxAntRectY = Y;
+		PBoxAntLastX = X;
+		PBoxAntLastY = Y;
+		PBoxAntDragButton = int(Button);
+		PBoxAntDragAction = ANT_MOUSE_NONE;
+		PBoxAntDragMoved = FALSE;
+		return;
+	}
 	PBoxAntLastX = X;
 	PBoxAntLastY = Y;
 	PBoxAntStartDeg = TBarDeg->Position;
@@ -1716,12 +1871,21 @@ void __fastcall TMainWnd::PBoxAntMouseMove(TObject *Sender, TShiftState Shift, i
 		PBoxAnt->Invalidate();
 		return;
 	}
-	if( PBoxAntDragAction == ANT_MOUSE_NONE ) return;
+	if( PBoxAntSelectRect ){
+		PBoxAntRectX = X;
+		PBoxAntRectY = Y;
+		if( !PBoxAntDragMoved && (ABS(X - PBoxAntMX) < 3) && (ABS(Y - PBoxAntMY) < 3) ) return;
+		PBoxAntDragMoved = TRUE;
+		PBoxAnt->Invalidate();
+		return;
+	}
+	if( PBoxAntDragButton < 0 ) return;
 	int dx = X - PBoxAntLastX;
 	int dy = Y - PBoxAntLastY;
 	if( !dx && !dy ) return;
 	if( !PBoxAntDragMoved && (ABS(X - PBoxAntMX) < 3) && (ABS(Y - PBoxAntMY) < 3) ) return;
 	PBoxAntDragMoved = TRUE;
+	if( PBoxAntDragAction == ANT_MOUSE_NONE ) return;
 	switch( PBoxAntDragAction ){
 		case ANT_MOUSE_PAN:
 			AntViewPan(dx, dy);
@@ -1742,6 +1906,7 @@ void __fastcall TMainWnd::PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 {
 	if( AntGizmoDrag ){
 		EndAntGizmoDrag();
+		PBoxAntIgnoreClick = TRUE;
 		return;
 	}
 	if( AntDrawMode ){
@@ -1749,10 +1914,34 @@ void __fastcall TMainWnd::PBoxAntMouseUp(TObject *Sender, TMouseButton Button,
 		PBoxAntDragAction = ANT_MOUSE_NONE;
 		return;
 	}
-	if( int(Button) == PBoxAntDragButton ){
+	if( PBoxAntSelectRect ){
+		int moved = PBoxAntDragMoved || (ABS(X - PBoxAntMX) >= 3) || (ABS(Y - PBoxAntMY) >= 3);
+		PBoxAntRectX = X;
+		PBoxAntRectY = Y;
+		PBoxAntSelectRect = FALSE;
 		PBoxAntDragButton = -1;
 		PBoxAntDragAction = ANT_MOUSE_NONE;
-		if( PBoxAntDragMoved ) PBoxAntIgnoreClick = TRUE;
+		PBoxAntDragMoved = FALSE;
+		if( moved ){
+			SelectWiresInRect(PBoxAntMX, PBoxAntMY, X, Y);
+			PBoxAntIgnoreClick = TRUE;
+		}
+		PBoxAnt->Invalidate();
+		return;
+	}
+	if( int(Button) == PBoxAntDragButton ){
+		if( (ABS(X - PBoxAntMX) >= 3) || (ABS(Y - PBoxAntMY) >= 3) ) PBoxAntDragMoved = TRUE;
+		int moved = PBoxAntDragMoved;
+		PBoxAntDragButton = -1;
+		PBoxAntDragAction = ANT_MOUSE_NONE;
+		PBoxAntDragMoved = FALSE;
+		if( moved ){
+			PBoxAntIgnoreClick = TRUE;
+		}
+		else if( Button == mbLeft ){
+			SelectAntWireClick(PBoxAntMX, PBoxAntMY);
+			PBoxAntIgnoreClick = TRUE;
+		}
 	}
 }
 //---------------------------------------------------------------------------
@@ -1784,15 +1973,7 @@ void __fastcall TMainWnd::PBoxAntClick(TObject *Sender)
 		PBoxAntIgnoreClick = FALSE;
 		return;
 	}
-	if( SelectWire(PBoxAntMX, PBoxAntMY) == TRUE ){
-		PBoxAnt->Invalidate();
-	}
-	else {
-		DeselectAntWireSelection();
-		Grid2->EditorMode = FALSE;
-		Grid2->Invalidate();
-		PBoxAnt->Invalidate();
-	}
+	SelectAntWireClick(PBoxAntMX, PBoxAntMY);
 }
 //---------------------------------------------------------------------------
 // アンテナ形状表示のダブルクリック
