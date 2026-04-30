@@ -128,6 +128,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	PBoxAntDragAction = ANT_MOUSE_NONE;
 	PBoxAntDragMoved = FALSE;
 	PBoxAntIgnoreClick = FALSE;
+	AntViewTrackBarChanging = FALSE;
 	AutoCalcTimer = new TTimer(this);
 	AutoCalcTimer->Enabled = FALSE;
 	AutoCalcTimer->Interval = 600;
@@ -139,6 +140,12 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	PBoxAnt->OnMouseMove = PBoxAntMouseMove;
 	PBoxAnt->OnMouseUp = PBoxAntMouseUp;
 	OnMouseWheel = PBoxAntMouseWheel;
+	TabSheet2->DoubleBuffered = true;
+	OldTabSheet2WindowProc = TabSheet2->WindowProc;
+	TabSheet2->WindowProc = TabSheet2WindowProc;
+	PanelTopRight->DoubleBuffered = true;
+	OldPanelTopRightWindowProc = PanelTopRight->WindowProc;
+	PanelTopRight->WindowProc = PanelTopRightWindowProc;
 
 	for( int i = 0; FreqTbl[i] != NULL; i++ ){
 		Freq->Items->Add(FreqTbl[i]);
@@ -251,6 +258,12 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 // 終了時のデストラクタ
 __fastcall TMainWnd::~TMainWnd(void)
 {
+	if( TabSheet2 != NULL ){
+		TabSheet2->WindowProc = OldTabSheet2WindowProc;
+	}
+	if( PanelTopRight != NULL ){
+		PanelTopRight->WindowProc = OldPanelTopRightWindowProc;
+	}
 	if( pACal != NULL ) delete pACal;
 	if( pCalAnt != &ant ) delete pCalAnt;
 	delete AntUndoList;

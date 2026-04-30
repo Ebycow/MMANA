@@ -2152,49 +2152,61 @@ void FormCenter(TForm *tp, int XW, int YW)
 	tp->Left = left;
 }
 
-void DrawWirePara(TPaintBox *tp, WDEF *wp, int w)
+void DrawWirePara(TCanvas *cp, int Width, int Height, WDEF *wp, int w)
 {
 	char	bf[64], bf2[32];
 
 	double	WL, XYD, YZD;
 	GetWirePoll(WL, XYD, YZD, wp);
-	int RW = tp->Canvas->TextWidth("W")*22;
-	int FH = tp->Canvas->TextHeight("W");
+	int RW = cp->TextWidth("W")*22;
+	int FH = cp->TextHeight("W");
 	TRect rc;
-	rc.Top = tp->Height - (FH * 12);
-	rc.Bottom = tp->Height - 3;
-	rc.Left = tp->Width - RW - 9;
+	rc.Top = Height - (FH * 12);
+	rc.Bottom = Height - 3;
+	rc.Left = Width - RW - 9;
 	rc.Right = rc.Left + RW + 6;
 	int Y = rc.Top + (FH/2);
 	int X = rc.Left + 3;
-	tp->Canvas->Pen->Width = 1;
-	tp->Canvas->Pen->Color = clBlack;
-	tp->Canvas->Rectangle(rc.Left, rc.Top, rc.Right, rc.Bottom);
+	cp->Pen->Width = 1;
+	cp->Pen->Color = clBlack;
+	cp->Rectangle(rc.Left, rc.Top, rc.Right, rc.Bottom);
 
 	sprintf(bf, "Wire No.%d", w + 1);
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "X1   : %s %s", StrDbl(GetRmdVal(wp->X1)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "Y1   : %s %s", StrDbl(GetRmdVal(wp->Y1)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "Z1   : %s %s", StrDbl(GetRmdVal(wp->Z1)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "X2   : %s %s", StrDbl(GetRmdVal(wp->X2)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "Y2   : %s %s", StrDbl(GetRmdVal(wp->Y2)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "Z2   : %s %s", StrDbl(GetRmdVal(wp->Z2)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	strcpy(bf2, wp->R < 0 ? "(組合せ)" : wp->R ? "mm" : "(絶縁)");
 	sprintf(bf, "R    : %s %s", StrDbl(wp->R*1000.0), bf2);
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 
 	sprintf(bf, "長さ : %s %s", StrDbl(GetRmdVal(WL)), GetLenUnitText());
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "動径 : %s °", StrDbl(XYD));
-	tp->Canvas->TextOut(X, Y, bf); Y+=FH;
+	cp->TextOut(X, Y, bf); Y+=FH;
 	sprintf(bf, "天頂 : %s °", StrDbl(YZD));
-	tp->Canvas->TextOut(X, Y, bf);
+	cp->TextOut(X, Y, bf);
+}
+
+void DrawWirePara(TPaintBox *tp, WDEF *wp, int w)
+{
+	DrawWirePara(tp->Canvas, tp->Width, tp->Height, wp, w);
+}
+
+void DrawWirePara(TCanvas *cp, int Width, int Height, ANTDEF *ap, int w)
+{
+	if( (w >= 0) && (w < ap->wmax) ){
+		DrawWirePara(cp, Width, Height, &ap->wdef[w], w);
+    }
 }
 
 void DrawWirePara(TPaintBox *tp, ANTDEF *ap, int w)

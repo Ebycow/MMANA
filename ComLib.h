@@ -321,6 +321,8 @@ void ClipXY(int &x, int &y);
 double GetWireRoss(ANTDEF *ap, WDEF *wp);
 double GetWireRoss(double f, WDEF *wp);
 void FormCenter(TForm *tp, int XW, int YW);
+void DrawWirePara(TCanvas *cp, int Width, int Height, WDEF *wp, int w);
+void DrawWirePara(TCanvas *cp, int Width, int Height, ANTDEF *ap, int w);
 void DrawWirePara(TPaintBox *tp, WDEF *wp, int w);
 void DrawWirePara(TPaintBox *tp, ANTDEF *ap, int w);
 void AdjPdef(ANTDEF *ap);

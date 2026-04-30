@@ -438,6 +438,13 @@ private:	// ユーザー宣言
 	void __fastcall AntViewPan(int DX, int DY);
 	void __fastcall AntViewRotate(int DX, int DY);
 	void __fastcall AntViewRotateDrag(int X, int Y);
+	TWndMethod OldTabSheet2WindowProc;
+	TWndMethod OldPanelTopRightWindowProc;
+	int AntViewTrackBarChanging;
+	void __fastcall AntViewParentWindowProc(TMessage &Message, TWndMethod OldWindowProc, TWinControl *ParentControl);
+	void __fastcall TabSheet2WindowProc(TMessage &Message);
+	void __fastcall PanelTopRightWindowProc(TMessage &Message);
+	TCanvas *__fastcall AntPaintCanvas(void);
 	void __fastcall PushAntUndo(void);
 	void __fastcall ClearAntRedo(void);
 	int __fastcall RestoreAntSnapshot(TStringList *From, TStringList *To);

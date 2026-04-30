@@ -66,10 +66,73 @@ static TColor AntGizmoAxisColor(int Axis, int Muted)
 	return clBlack;
 }
 
+static TCanvas *AntPaintBufferCanvas = NULL;
+
+//---------------------------------------------------------------------------
+TCanvas *__fastcall TMainWnd::AntPaintCanvas(void)
+{
+	return (AntPaintBufferCanvas != NULL) ? AntPaintBufferCanvas : PBoxAnt->Canvas;
+}
+
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::AntViewParentWindowProc(TMessage &Message, TWndMethod OldWindowProc, TWinControl *ParentControl)
+{
+	if( (Message.Msg == WM_ERASEBKGND) && (PBoxAnt != NULL) &&
+		(PBoxAnt->Parent == ParentControl) && PBoxAnt->Visible ){
+		HDC dc = (HDC)Message.WParam;
+		if( dc != NULL ){
+			int save = ::SaveDC(dc);
+			if( save ){
+				::ExcludeClipRect(dc, PBoxAnt->Left, PBoxAnt->Top,
+					PBoxAnt->Left + PBoxAnt->Width, PBoxAnt->Top + PBoxAnt->Height);
+				OldWindowProc(Message);
+				::RestoreDC(dc, save);
+				return;
+			}
+		}
+	}
+	OldWindowProc(Message);
+}
+
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::TabSheet2WindowProc(TMessage &Message)
+{
+	AntViewParentWindowProc(Message, OldTabSheet2WindowProc, TabSheet2);
+}
+
+//---------------------------------------------------------------------------
+void __fastcall TMainWnd::PanelTopRightWindowProc(TMessage &Message)
+{
+	AntViewParentWindowProc(Message, OldPanelTopRightWindowProc, PanelTopRight);
+}
+
 //---------------------------------------------------------------------------
 // アンテナ形状の表示イベント
 void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 {
+	int AntPaintWidth = PBoxAnt->Width;
+	int AntPaintHeight = PBoxAnt->Height;
+	if( (AntPaintWidth <= 0) || (AntPaintHeight <= 0) ) return;
+
+	TBitmap *AntPaintBitmap = new TBitmap;
+	TCanvas *OldAntPaintCanvas = AntPaintBufferCanvas;
+	try {
+		AntPaintBitmap->PixelFormat = pf24bit;
+		AntPaintBitmap->Width = AntPaintWidth;
+		AntPaintBitmap->Height = AntPaintHeight;
+		AntPaintBitmap->Canvas->Font->Assign(this->PBoxAnt->Canvas->Font);
+		AntPaintBitmap->Canvas->Pen->Assign(this->PBoxAnt->Canvas->Pen);
+		AntPaintBitmap->Canvas->Brush->Assign(this->PBoxAnt->Canvas->Brush);
+		AntPaintBufferCanvas = AntPaintBitmap->Canvas;
+
+		struct TAntPaintBoxProxy {
+			TCanvas *Canvas;
+			int Width;
+			int Height;
+		};
+		TAntPaintBoxProxy AntPaintBox = { AntPaintBitmap->Canvas, AntPaintWidth, AntPaintHeight };
+		TAntPaintBoxProxy *PBoxAnt = &AntPaintBox;
+
 	TRect	rc;
 
 	rc.Left = 0;
@@ -287,7 +350,7 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 	}
 	int SelWire = Grid2->Row - 1;
 	if( (GetAntSelectionCount() > 0) && (SelWire >= 0) && (SelWire < ant.wmax) ){
-		DrawWirePara(PBoxAnt, &ant, SelWire);
+		DrawWirePara(PBoxAnt->Canvas, PBoxAnt->Width, PBoxAnt->Height, &ant, SelWire);
 	}
 	if( (ant.StackH > 1)||(ant.StackV > 1) ){
 		char bf[32];
@@ -298,6 +361,13 @@ void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 		PBoxAnt->Canvas->Font->Color = clBlack;
 	}
 	::SetBkMode(PBoxAnt->Canvas->Handle, Sop);
+	AntPaintBufferCanvas = OldAntPaintCanvas;
+	this->PBoxAnt->Canvas->Draw(0, 0, AntPaintBitmap);
+	}
+	__finally {
+		AntPaintBufferCanvas = OldAntPaintCanvas;
+		delete AntPaintBitmap;
+	}
 }
 //---------------------------------------------------------------------------
 // マウスによるワイヤの選択
@@ -396,10 +466,12 @@ void __fastcall TMainWnd::AntViewPan(int DX, int DY)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AntViewRotate(int DX, int DY)
 {
+	AntViewTrackBarChanging = TRUE;
 	SetTrackBarPositionWrapped(TBarDeg, TBarDeg->Position + DX);
 	if( exeenv.Ant3D ){
 		SetTrackBarPosition(TBarZDeg, TBarZDeg->Position - DY);
 	}
+	AntViewTrackBarChanging = FALSE;
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
@@ -408,11 +480,13 @@ void __fastcall TMainWnd::AntViewRotateDrag(int X, int Y)
 	int dx = X - PBoxAntMX;
 	int dy = Y - PBoxAntMY;
 	int deg = PBoxAntStartDeg + AntViewRoundMouseAngle(AntViewMouseDragToAngle(dx, PBoxAnt->Width));
+	AntViewTrackBarChanging = TRUE;
 	SetTrackBarPositionWrapped(TBarDeg, deg);
 	if( exeenv.Ant3D ){
 		int zdeg = PBoxAntStartZDeg - AntViewRoundMouseAngle(AntViewMouseDragToAngle(dy, PBoxAnt->Height));
 		SetTrackBarPosition(TBarZDeg, zdeg);
 	}
+	AntViewTrackBarChanging = FALSE;
 	PBoxAnt->Invalidate();
 }
 //---------------------------------------------------------------------------
@@ -948,41 +1022,42 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 	int SelCount = GetAntSelectionCount();
 	if( SelCount <= 0 ) return;
 
-	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
-	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
-	int oldWidth = PBoxAnt->Canvas->Pen->Width;
-	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
-	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
+	TCanvas *Canvas = AntPaintCanvas();
+	TColor oldColor = Canvas->Pen->Color;
+	TPenStyle oldStyle = Canvas->Pen->Style;
+	int oldWidth = Canvas->Pen->Width;
+	TColor oldBrush = Canvas->Brush->Color;
+	TBrushStyle oldBrushStyle = Canvas->Brush->Style;
 
 	if( SelCount > 1 ){
 		double wx, wy, wz;
 		if( GetAntSelectionCenter(wx, wy, wz) != TRUE ) return;
 		int sx, sy;
 		AntWorldToScreen(wx, wy, wz, sx, sy);
-		PBoxAnt->Canvas->Pen->Color = clBlack;
-		PBoxAnt->Canvas->Pen->Style = psSolid;
-		PBoxAnt->Canvas->Pen->Width = 1;
-		PBoxAnt->Canvas->Brush->Style = bsClear;
-		PBoxAnt->Canvas->Rectangle(sx-5, sy-5, sx+6, sy+6);
+		Canvas->Pen->Color = clBlack;
+		Canvas->Pen->Style = psSolid;
+		Canvas->Pen->Width = 1;
+		Canvas->Brush->Style = bsClear;
+		Canvas->Rectangle(sx-5, sy-5, sx+6, sy+6);
 		for( int axis = 0; axis < 3; axis++ ){
 			int x1, y1, x2, y2;
 			double dx, dy;
 			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 46, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
 			switch( axis ){
-				case ANT_GIZMO_AXIS_X: PBoxAnt->Canvas->Pen->Color = clRed; break;
-				case ANT_GIZMO_AXIS_Y: PBoxAnt->Canvas->Pen->Color = clGreen; break;
-				case ANT_GIZMO_AXIS_Z: PBoxAnt->Canvas->Pen->Color = clBlue; break;
+				case ANT_GIZMO_AXIS_X: Canvas->Pen->Color = clRed; break;
+				case ANT_GIZMO_AXIS_Y: Canvas->Pen->Color = clGreen; break;
+				case ANT_GIZMO_AXIS_Z: Canvas->Pen->Color = clBlue; break;
 			}
-			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoEndpoint == 3) && (AntGizmoAxis == axis)) ? 3 : 2;
-			AntViewDrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
+			Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoEndpoint == 3) && (AntGizmoAxis == axis)) ? 3 : 2;
+			AntViewDrawScreenArrow(Canvas, x1, y1, x2, y2);
 		}
 		PaintAntGizmoMoveDistance();
 
-		PBoxAnt->Canvas->Pen->Color = oldColor;
-		PBoxAnt->Canvas->Pen->Style = oldStyle;
-		PBoxAnt->Canvas->Pen->Width = oldWidth;
-		PBoxAnt->Canvas->Brush->Color = oldBrush;
-		PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+		Canvas->Pen->Color = oldColor;
+		Canvas->Pen->Style = oldStyle;
+		Canvas->Pen->Width = oldWidth;
+		Canvas->Brush->Color = oldBrush;
+		Canvas->Brush->Style = oldBrushStyle;
 		return;
 	}
 
@@ -1000,52 +1075,53 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 		}
 		int sx, sy;
 		AntWorldToScreen(wx, wy, wz, sx, sy);
-		PBoxAnt->Canvas->Pen->Color = (endp == 2) ? clGray : clBlack;
-		PBoxAnt->Canvas->Pen->Style = psSolid;
-		PBoxAnt->Canvas->Pen->Width = 1;
-		PBoxAnt->Canvas->Brush->Style = bsClear;
-		PBoxAnt->Canvas->Ellipse(sx-4, sy-4, sx+5, sy+5);
+		Canvas->Pen->Color = (endp == 2) ? clGray : clBlack;
+		Canvas->Pen->Style = psSolid;
+		Canvas->Pen->Width = 1;
+		Canvas->Brush->Style = bsClear;
+		Canvas->Ellipse(sx-4, sy-4, sx+5, sy+5);
 
 		for( int axis = 0; axis < 3; axis++ ){
 			int x1, y1, x2, y2;
 			double dx, dy;
 			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
-			PBoxAnt->Canvas->Pen->Color = AntGizmoAxisColor(axis, endp == 2);
-			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoWire == w) &&
+			Canvas->Pen->Color = AntGizmoAxisColor(axis, endp == 2);
+			Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoWire == w) &&
 				(AntGizmoEndpoint == endp) && (AntGizmoAxis == axis)) ? 3 : 2;
-			AntViewDrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
+			AntViewDrawScreenArrow(Canvas, x1, y1, x2, y2);
 		}
 	}
 
 	PaintAntGizmoMoveDistance();
 
-	PBoxAnt->Canvas->Pen->Color = oldColor;
-	PBoxAnt->Canvas->Pen->Style = oldStyle;
-	PBoxAnt->Canvas->Pen->Width = oldWidth;
-	PBoxAnt->Canvas->Brush->Color = oldBrush;
-	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+	Canvas->Pen->Color = oldColor;
+	Canvas->Pen->Style = oldStyle;
+	Canvas->Pen->Width = oldWidth;
+	Canvas->Brush->Color = oldBrush;
+	Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntSnapVertices(void)
 {
 	if( !AntGizmoShowSnapVertices ) return;
-	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
-	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
-	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
-	PBoxAnt->Canvas->Pen->Color = clFuchsia;
-	PBoxAnt->Canvas->Brush->Color = clFuchsia;
-	PBoxAnt->Canvas->Brush->Style = bsSolid;
+	TCanvas *Canvas = AntPaintCanvas();
+	TColor oldColor = Canvas->Pen->Color;
+	TColor oldBrush = Canvas->Brush->Color;
+	TBrushStyle oldBrushStyle = Canvas->Brush->Style;
+	Canvas->Pen->Color = clFuchsia;
+	Canvas->Brush->Color = clFuchsia;
+	Canvas->Brush->Style = bsSolid;
 	for( int i = 0; i < ant.wmax; i++ ){
 		if( IsAntWireSelected(i) ) continue;
 		int x, y;
 		AntWorldToScreen(ant.wdef[i].X1, ant.wdef[i].Y1, ant.wdef[i].Z1, x, y);
-		PBoxAnt->Canvas->Ellipse(x-3, y-3, x+4, y+4);
+		Canvas->Ellipse(x-3, y-3, x+4, y+4);
 		AntWorldToScreen(ant.wdef[i].X2, ant.wdef[i].Y2, ant.wdef[i].Z2, x, y);
-		PBoxAnt->Canvas->Ellipse(x-3, y-3, x+4, y+4);
+		Canvas->Ellipse(x-3, y-3, x+4, y+4);
 	}
-	PBoxAnt->Canvas->Pen->Color = oldColor;
-	PBoxAnt->Canvas->Brush->Color = oldBrush;
-	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+	Canvas->Pen->Color = oldColor;
+	Canvas->Brush->Color = oldBrush;
+	Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntDrawSnapPoint(void)
@@ -1053,28 +1129,29 @@ void __fastcall TMainWnd::PaintAntDrawSnapPoint(void)
 	if( !AntDrawMode || !AntDrawSnapVisible ) return;
 	int x, y;
 	AntWorldToScreen(AntDrawSnapX, AntDrawSnapY, AntDrawSnapZ, x, y);
-	TColor oldPen = PBoxAnt->Canvas->Pen->Color;
-	TColor oldBrush = PBoxAnt->Canvas->Brush->Color;
-	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
-	int oldWidth = PBoxAnt->Canvas->Pen->Width;
-	TBrushStyle oldBrushStyle = PBoxAnt->Canvas->Brush->Style;
+	TCanvas *Canvas = AntPaintCanvas();
+	TColor oldPen = Canvas->Pen->Color;
+	TColor oldBrush = Canvas->Brush->Color;
+	TPenStyle oldStyle = Canvas->Pen->Style;
+	int oldWidth = Canvas->Pen->Width;
+	TBrushStyle oldBrushStyle = Canvas->Brush->Style;
 
-	PBoxAnt->Canvas->Pen->Color = clBlue;
-	PBoxAnt->Canvas->Pen->Style = psSolid;
-	PBoxAnt->Canvas->Pen->Width = 2;
-	PBoxAnt->Canvas->Brush->Color = clAqua;
-	PBoxAnt->Canvas->Brush->Style = bsSolid;
-	PBoxAnt->Canvas->Ellipse(x-5, y-5, x+6, y+6);
-	PBoxAnt->Canvas->MoveTo(x-8, y);
-	PBoxAnt->Canvas->LineTo(x+9, y);
-	PBoxAnt->Canvas->MoveTo(x, y-8);
-	PBoxAnt->Canvas->LineTo(x, y+9);
+	Canvas->Pen->Color = clBlue;
+	Canvas->Pen->Style = psSolid;
+	Canvas->Pen->Width = 2;
+	Canvas->Brush->Color = clAqua;
+	Canvas->Brush->Style = bsSolid;
+	Canvas->Ellipse(x-5, y-5, x+6, y+6);
+	Canvas->MoveTo(x-8, y);
+	Canvas->LineTo(x+9, y);
+	Canvas->MoveTo(x, y-8);
+	Canvas->LineTo(x, y+9);
 
-	PBoxAnt->Canvas->Pen->Color = oldPen;
-	PBoxAnt->Canvas->Brush->Color = oldBrush;
-	PBoxAnt->Canvas->Pen->Style = oldStyle;
-	PBoxAnt->Canvas->Pen->Width = oldWidth;
-	PBoxAnt->Canvas->Brush->Style = oldBrushStyle;
+	Canvas->Pen->Color = oldPen;
+	Canvas->Brush->Color = oldBrush;
+	Canvas->Pen->Style = oldStyle;
+	Canvas->Pen->Width = oldWidth;
+	Canvas->Brush->Style = oldBrushStyle;
 }
 //---------------------------------------------------------------------------
 int __fastcall TMainWnd::FindAntSnapVertex(int X, int Y, double &WX, double &WY, double &WZ)
@@ -1481,7 +1558,7 @@ void __fastcall TMainWnd::PaintAntGizmoMoveDistance(void)
 
 	char bf[160];
 	FormatAntLengthText(bf, "Move", dist);
-	PaintAntLengthLabel(PBoxAnt->Canvas, PBoxAnt->Width, PBoxAnt->Height, sx, sy, bf);
+	PaintAntLengthLabel(AntPaintCanvas(), PBoxAnt->Width, PBoxAnt->Height, sx, sy, bf);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::PaintAntDrawPreview(void)
@@ -1491,20 +1568,21 @@ void __fastcall TMainWnd::PaintAntDrawPreview(void)
 	AntWorldToScreen(AntDrawX1, AntDrawY1, AntDrawZ1, X1, Y1);
 	AntWorldToScreen(AntDrawX2, AntDrawY2, AntDrawZ2, X2, Y2);
 
-	TColor oldColor = PBoxAnt->Canvas->Pen->Color;
-	TPenStyle oldStyle = PBoxAnt->Canvas->Pen->Style;
-	int oldWidth = PBoxAnt->Canvas->Pen->Width;
-	PBoxAnt->Canvas->Pen->Color = clRed;
-	PBoxAnt->Canvas->Pen->Style = psDash;
-	PBoxAnt->Canvas->Pen->Width = 1;
-	PBoxAnt->Canvas->MoveTo(X1, Y1);
-	PBoxAnt->Canvas->LineTo(X2, Y2);
-	PBoxAnt->Canvas->Pen->Style = psSolid;
-	PBoxAnt->Canvas->Ellipse(X1-3, Y1-3, X1+4, Y1+4);
-	PBoxAnt->Canvas->Ellipse(X2-3, Y2-3, X2+4, Y2+4);
-	PBoxAnt->Canvas->Pen->Color = oldColor;
-	PBoxAnt->Canvas->Pen->Style = oldStyle;
-	PBoxAnt->Canvas->Pen->Width = oldWidth;
+	TCanvas *Canvas = AntPaintCanvas();
+	TColor oldColor = Canvas->Pen->Color;
+	TPenStyle oldStyle = Canvas->Pen->Style;
+	int oldWidth = Canvas->Pen->Width;
+	Canvas->Pen->Color = clRed;
+	Canvas->Pen->Style = psDash;
+	Canvas->Pen->Width = 1;
+	Canvas->MoveTo(X1, Y1);
+	Canvas->LineTo(X2, Y2);
+	Canvas->Pen->Style = psSolid;
+	Canvas->Ellipse(X1-3, Y1-3, X1+4, Y1+4);
+	Canvas->Ellipse(X2-3, Y2-3, X2+4, Y2+4);
+	Canvas->Pen->Color = oldColor;
+	Canvas->Pen->Style = oldStyle;
+	Canvas->Pen->Width = oldWidth;
 
 	double dx = AntDrawX2 - AntDrawX1;
 	double dy = AntDrawY2 - AntDrawY1;
@@ -1512,7 +1590,7 @@ void __fastcall TMainWnd::PaintAntDrawPreview(void)
 	double dist = sqrt((dx * dx) + (dy * dy) + (dz * dz));
 	char bf[160];
 	FormatAntLengthText(bf, "Length", dist);
-	PaintAntLengthLabel(PBoxAnt->Canvas, PBoxAnt->Width, PBoxAnt->Height, (X1 + X2) / 2, (Y1 + Y2) / 2, bf);
+	PaintAntLengthLabel(Canvas, PBoxAnt->Width, PBoxAnt->Height, (X1 + X2) / 2, (Y1 + Y2) / 2, bf);
 }
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::AddAntDrawWire(double X1, double Y1, double Z1, double X2, double Y2, double Z2)
@@ -1550,7 +1628,9 @@ void __fastcall TMainWnd::AntViewZoom(int Delta, int X, int Y)
 {
 	double oldSc = GetAntViewScale();
 	int oldPos = TBarSC->Position;
+	AntViewTrackBarChanging = TRUE;
 	SetTrackBarPosition(TBarSC, TBarSC->Position + Delta);
+	AntViewTrackBarChanging = FALSE;
 	if( oldPos == TBarSC->Position ) return;
 	double newSc = GetAntViewScale();
 	if( (oldSc > 0.0) && (newSc > 0.0) ){
@@ -1819,5 +1899,6 @@ void __fastcall TMainWnd::AllViewBtnClick(TObject *Sender)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::TBarDegChange(TObject *Sender)
 {
+	if( AntViewTrackBarChanging ) return;
 	PBoxAnt->Invalidate();
 }
