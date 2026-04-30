@@ -109,6 +109,8 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	QuadSwitching = false;
 	QuadSavedClientWidth = QuadSavedClientHeight = 0;
 	InitQuadLayout();
+	Grid2->ColCount = 10;
+	Grid2->ColWidths[9] = 120;
 	Grid2->Options = Grid2->Options << goAlwaysShowEditor;
 	Grid2->OnSelectCell = Grid2SelectCell;
 	Grid2->OnMouseDown = GridEditMouseDown;
@@ -1055,6 +1057,11 @@ void __fastcall TMainWnd::Grid2GetText(LPSTR t, long Col, long Row)
 					strcpy(t, Seg2Str(ant.wdef[Row].SEG));
 				}
 				break;
+			case 9:		// Memo
+				if( Row < ant.wmax ){
+					strcpy(t, ant.wdef[Row].NOTE);
+				}
+				break;
 		}
 	}
 }
@@ -1304,6 +1311,9 @@ void __fastcall TMainWnd::Grid2DrawCell(TObject *Sender, int Col,     //JA7UDE 1
 		else if( Col == 7 ){
 			sprintf(bf, "R(%s)", exeenv.RmdSel ? "λ" : "mm");
 		}
+		else if( Col == 9 ){
+			strcpy(bf, "Memo");
+		}
 		else {
 			LPCSTR p[]={"","X1","Y1","Z1","X2","Y2","Z2"};
 			sprintf(bf, "%s(%s)", p[Col], GetLenUnitText());
@@ -1429,13 +1439,15 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 	WDEF	OldW;
 	int		OldWmax;
 	char	bf[64];
+	int		NoteEdit = (ACol == 9);
 
 	if( (ARow > 0) && (AntWireSelectionCount < 0) ) AntWireSelectionCount = 0;
 	if( ARow ){
 		Grid2GetText(bf, ACol, ARow);
 		if( !strcmp(AnsiString(Value).c_str(), bf) ) return;
-		PushAntUndo();
 		ARow--;
+		if( ARow >= WMAX ) return;
+		PushAntUndo();
 		OldWmax = ant.wmax;
 		memcpy(&OldW, &ant.wdef[ARow], sizeof(WDEF));
 		switch(ACol){
@@ -1505,10 +1517,25 @@ void __fastcall TMainWnd::Grid2SetEditText(TObject *Sender, int ACol,
 					Grid2NewLine(ARow);
 				}
 				break;
+			case 9:		// Memo
+				strncpy(ant.wdef[ARow].NOTE, AnsiString(Value).c_str(), WNOTE_MAX - 1);
+				ant.wdef[ARow].NOTE[WNOTE_MAX - 1] = 0;
+				if( ARow >= ant.wmax ){
+					Grid2NewLine(ARow);
+				}
+				else {
+					ant.Edit = 1;
+				}
+				break;
 		}
 		if( (OldWmax != ant.wmax) || memcmp(&OldW, &ant.wdef[ARow], sizeof(WDEF)) ){
-			UpdateAntPreview();
-			RequestAutoCalc(FALSE);
+			if( NoteEdit && (OldWmax == ant.wmax) ){
+				Grid2->Invalidate();
+			}
+			else {
+				UpdateAntPreview();
+				RequestAutoCalc(FALSE);
+			}
 		}
 	}
 }

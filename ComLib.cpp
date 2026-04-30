@@ -1310,13 +1310,59 @@ void AdjPlusNo(ANTDEF *ap)
 
 //---------------------------------------------------------------------------
 //アンテナ定義をバイナリイメージで保存
+typedef struct {
+	double	X1;
+	double	Y1;
+	double	Z1;
+	double	X2;
+	double	Y2;
+	double	Z2;
+	double	R;
+	int		SEG;
+	int		PNo;
+	int		PMax;
+} WDEFIO;
+
+static void WDefToIO(WDEFIO *tp, const WDEF *sp)
+{
+	tp->X1 = sp->X1;
+	tp->Y1 = sp->Y1;
+	tp->Z1 = sp->Z1;
+	tp->X2 = sp->X2;
+	tp->Y2 = sp->Y2;
+	tp->Z2 = sp->Z2;
+	tp->R = sp->R;
+	tp->SEG = sp->SEG;
+	tp->PNo = sp->PNo;
+	tp->PMax = sp->PMax;
+}
+
+static void IOToWDef(WDEF *tp, const WDEFIO *sp)
+{
+	tp->X1 = sp->X1;
+	tp->Y1 = sp->Y1;
+	tp->Z1 = sp->Z1;
+	tp->X2 = sp->X2;
+	tp->Y2 = sp->Y2;
+	tp->Z2 = sp->Z2;
+	tp->R = sp->R;
+	tp->SEG = sp->SEG;
+	tp->NOTE[0] = 0;
+	tp->PNo = sp->PNo;
+	tp->PMax = sp->PMax;
+}
+
 int WriteAntToFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 {
 	fwrite(ap->Name, 1, sizeof(ap->Name), fp);
 	fwrite(&ap->fq, 1, sizeof(ap->fq), fp);
 	fwrite(&ap->wmax, 1, sizeof(ap->wmax), fp);
 	if( ap->wmax ){
-		fwrite(ap->wdef, 1, sizeof(WDEF) * ap->wmax, fp);
+		WDEFIO wio;
+		for( int i = 0; i < ap->wmax; i++ ){
+			WDefToIO(&wio, &ap->wdef[i]);
+			fwrite(&wio, 1, sizeof(wio), fp);
+		}
 	}
 	fwrite(&ap->cfq, 1, sizeof(ap->cfq), fp);
 	fwrite(&ap->cmax, 1, sizeof(ap->cmax), fp);
@@ -1350,10 +1396,13 @@ int WriteAntToFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 	fwrite(&ap->pmax, 1, sizeof(ap->pmax), fp);
 	fwrite(&ap->pdef, 1, sizeof(ap->pdef), fp);
 
-	int len = strlen(rem.c_str());
+	AnsiString outRem = rem;
+	StripWireNotes(NULL, outRem);
+	AppendWireNotes(ap, outRem);
+	int len = strlen(outRem.c_str());
 	fwrite(&len, 1, sizeof(len), fp);
 	if( len ){
-		fwrite(rem.c_str(), 1, len, fp);
+		fwrite(outRem.c_str(), 1, len, fp);
 	}
 	return ferror(fp) ? FALSE : TRUE;
 }
@@ -1365,7 +1414,11 @@ int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 	fread(&ap->fq, 1, sizeof(ap->fq), fp);
 	fread(&ap->wmax, 1, sizeof(ap->wmax), fp);
 	if( ap->wmax ){
-		fread(ap->wdef, 1, sizeof(WDEF) * ap->wmax, fp);
+		WDEFIO wio;
+		for( int i = 0; i < ap->wmax; i++ ){
+			fread(&wio, 1, sizeof(wio), fp);
+			IOToWDef(&ap->wdef[i], &wio);
+		}
 	}
 	fread(&ap->cfq, 1, sizeof(ap->cfq), fp);
 	fread(&ap->cmax, 1, sizeof(ap->cmax), fp);
@@ -1409,6 +1462,7 @@ int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 		rem = bp;
 		delete[] bp;
 	}
+	StripWireNotes(ap, rem);
 	return ferror(fp) ? FALSE : TRUE;
 }
 

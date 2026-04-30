@@ -26,6 +26,7 @@
 #include <values.h>
 #include <math.h>
 #include <mbstring.h>
+#define	WNOTE_MAX	64
 //---------------------------------------------------------------------------
 #define	WMAX	512		// ワイヤの数
 #define	WZMAX	4096	// 展開ワイヤの数
@@ -66,6 +67,7 @@ typedef struct {		// ワイヤーの定義
 	double	Z2;
 	double	R;
 	int		SEG;			// セグメント数
+	char	NOTE[WNOTE_MAX];	// User memo for this wire
 
 	int		PNo;			// ワイヤの開始パルス番号
 	int		PMax;			// パルスの数
@@ -140,6 +142,9 @@ typedef struct {		// アンテナの定義
 	double	StackHW;
 	double	StackVW;
 }ANTDEF;
+
+void StripWireNotes(ANTDEF *ap, AnsiString &rem);
+void AppendWireNotes(ANTDEF *ap, AnsiString &rem);
 
 typedef struct {		// 計算環境
 	int		type;			// 0-自由空間, 1-完全大地, 2-リアルグランド

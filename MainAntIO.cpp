@@ -4,6 +4,125 @@
 
 #include "Main.h"
 
+static const char WIRE_NOTE_BEGIN[] = "[MMANA-WIRE-NOTES]";
+static const char WIRE_NOTE_END[] = "[/MMANA-WIRE-NOTES]";
+
+static int HexVal(int c)
+{
+	if( (c >= '0') && (c <= '9') ) return c - '0';
+	if( (c >= 'A') && (c <= 'F') ) return c - 'A' + 10;
+	if( (c >= 'a') && (c <= 'f') ) return c - 'a' + 10;
+	return -1;
+}
+
+static void AppendHexByte(AnsiString &out, unsigned char c)
+{
+	static const char hx[] = "0123456789ABCDEF";
+	char bf[4];
+	bf[0] = '%';
+	bf[1] = hx[(c >> 4) & 15];
+	bf[2] = hx[c & 15];
+	bf[3] = 0;
+	out += bf;
+}
+
+static AnsiString EncodeWireNote(LPCSTR p)
+{
+	AnsiString out;
+	for( ; *p; p++ ){
+		unsigned char c = (unsigned char)*p;
+		if( ((c >= 'A') && (c <= 'Z')) || ((c >= 'a') && (c <= 'z')) ||
+			((c >= '0') && (c <= '9')) || (c == ' ') || (c == '.') ||
+			(c == '_') || (c == '-') || (c == '/') || (c == ':') ||
+			(c == '(') || (c == ')') || (c == '[') || (c == ']') ){
+			char bf[2];
+			bf[0] = c;
+			bf[1] = 0;
+			out += bf;
+		}
+		else {
+			AppendHexByte(out, c);
+		}
+	}
+	return out;
+}
+
+static void DecodeWireNote(LPSTR out, int outSize, LPCSTR p)
+{
+	int n = 0;
+	if( outSize <= 0 ) return;
+	while( *p && (n < (outSize - 1)) ){
+		if( (p[0] == '%') && p[1] && p[2] ){
+			int h1 = HexVal((unsigned char)p[1]);
+			int h2 = HexVal((unsigned char)p[2]);
+			if( (h1 >= 0) && (h2 >= 0) ){
+				out[n++] = char((h1 << 4) | h2);
+				p += 3;
+				continue;
+			}
+		}
+		out[n++] = *p++;
+	}
+	out[n] = 0;
+}
+
+void StripWireNotes(ANTDEF *ap, AnsiString &rem)
+{
+	if( ap != NULL ){
+		for( int i = 0; i < WMAX; i++ ) ap->wdef[i].NOTE[0] = 0;
+	}
+
+	CTextString cs(rem);
+	AnsiString clean;
+	char bf[1024];
+	int inBlock = FALSE;
+	while( cs.LoadText(bf, 1023) == TRUE ){
+		if( !strcmp(bf, WIRE_NOTE_BEGIN) ){
+			inBlock = TRUE;
+			continue;
+		}
+		if( inBlock ){
+			if( !strcmp(bf, WIRE_NOTE_END) ){
+				inBlock = FALSE;
+			}
+			else if( ap != NULL ){
+				char *eq = strchr(bf, '=');
+				if( eq != NULL ){
+					*eq++ = 0;
+					int w = atoi(bf);
+					if( (w > 0) && (w <= ap->wmax) ){
+						DecodeWireNote(ap->wdef[w-1].NOTE, WNOTE_MAX, eq);
+					}
+				}
+			}
+			continue;
+		}
+		clean += bf;
+		clean += "\r\n";
+	}
+	rem = clean;
+}
+
+void AppendWireNotes(ANTDEF *ap, AnsiString &rem)
+{
+	AnsiString notes;
+	for( int i = 0; i < ap->wmax; i++ ){
+		if( !ap->wdef[i].NOTE[0] ) continue;
+		char bf[32];
+		sprintf(bf, "%d=", i + 1);
+		notes += bf;
+		notes += EncodeWireNote(ap->wdef[i].NOTE);
+		notes += "\r\n";
+	}
+	if( notes.IsEmpty() ) return;
+	if( !rem.IsEmpty() && (LastC(rem.c_str()) != '\n') ) rem += "\r\n";
+	rem += WIRE_NOTE_BEGIN;
+	rem += "\r\n";
+	rem += notes;
+	rem += WIRE_NOTE_END;
+	rem += "\r\n";
+}
+
 //---------------------------------------------------------------------------
 //現在のアンテナ定義を文字列に変換
 int __fastcall TMainWnd::SaveAntFile(LPCSTR pName)
@@ -173,9 +292,12 @@ void __fastcall TMainWnd::SaveAntStrings(AnsiString &out)
 			out += bf;
 		}
 	}
-	if( *antRem.c_str() ){
+	AnsiString rem = antRem;
+	StripWireNotes(NULL, rem);
+	AppendWireNotes(&ant, rem);
+	if( *rem.c_str() ){
 		out += "### コメント ###\r\n";
-		out += antRem;
+		out += rem;
 	}
 }
 
@@ -389,6 +511,7 @@ void __fastcall TMainWnd::LoadAntStrings(AnsiString &in)
 		}
 	}
 _ex:;
+	StripWireNotes(&ant, antRem);
 	if( ant.fq ){
 		sprintf( bf, "%.3lf", ant.fq );
 	}
