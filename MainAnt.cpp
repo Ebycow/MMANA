@@ -49,6 +49,24 @@ static void PaintAntLengthLabel(TCanvas *Canvas, int Width, int Height, int X, i
 }
 
 //---------------------------------------------------------------------------
+static TColor AntGizmoAxisColor(int Axis, int Muted)
+{
+	if( Muted ){
+		switch( Axis ){
+			case ANT_GIZMO_AXIS_X: return (TColor)RGB(255, 150, 150);
+			case ANT_GIZMO_AXIS_Y: return (TColor)RGB(150, 205, 150);
+			case ANT_GIZMO_AXIS_Z: return (TColor)RGB(150, 170, 255);
+		}
+	}
+	switch( Axis ){
+		case ANT_GIZMO_AXIS_X: return clRed;
+		case ANT_GIZMO_AXIS_Y: return clGreen;
+		case ANT_GIZMO_AXIS_Z: return clBlue;
+	}
+	return clBlack;
+}
+
+//---------------------------------------------------------------------------
 // アンテナ形状の表示イベント
 void __fastcall TMainWnd::PBoxAntPaint(TObject *Sender)
 {
@@ -982,7 +1000,7 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 		}
 		int sx, sy;
 		AntWorldToScreen(wx, wy, wz, sx, sy);
-		PBoxAnt->Canvas->Pen->Color = clBlack;
+		PBoxAnt->Canvas->Pen->Color = (endp == 2) ? clGray : clBlack;
 		PBoxAnt->Canvas->Pen->Style = psSolid;
 		PBoxAnt->Canvas->Pen->Width = 1;
 		PBoxAnt->Canvas->Brush->Style = bsClear;
@@ -992,11 +1010,7 @@ void __fastcall TMainWnd::PaintAntEditGizmo(void)
 			int x1, y1, x2, y2;
 			double dx, dy;
 			if( GetAntGizmoAxisScreen(wx, wy, wz, axis, 42, x1, y1, x2, y2, dx, dy) != TRUE ) continue;
-			switch( axis ){
-				case ANT_GIZMO_AXIS_X: PBoxAnt->Canvas->Pen->Color = clRed; break;
-				case ANT_GIZMO_AXIS_Y: PBoxAnt->Canvas->Pen->Color = clGreen; break;
-				case ANT_GIZMO_AXIS_Z: PBoxAnt->Canvas->Pen->Color = clBlue; break;
-			}
+			PBoxAnt->Canvas->Pen->Color = AntGizmoAxisColor(axis, endp == 2);
 			PBoxAnt->Canvas->Pen->Width = (AntGizmoDrag && (AntGizmoWire == w) &&
 				(AntGizmoEndpoint == endp) && (AntGizmoAxis == axis)) ? 3 : 2;
 			AntViewDrawScreenArrow(PBoxAnt->Canvas, x1, y1, x2, y2);
