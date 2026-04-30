@@ -19,6 +19,7 @@
 	MININEC3 Convert by JE3HHT (Makoto.Mori) 1999.
 *********************************************************************/
 #include <vcl.h>
+#include <stdio.h>
 #pragma hdrstop
 
 #include <except.h>
@@ -217,8 +218,9 @@ static void Print(char *ct, ...)
 	char	bf[256];
 
 	va_start(pp, ct);
-	vsprintf( bf, ct, pp );
+	vsnprintf( bf, sizeof(bf), ct, pp );
 	va_end(pp);
+	bf[sizeof(bf)-1] = 0;
 	MainWnd->CalMemo->Lines->Add(bf);
 }
 

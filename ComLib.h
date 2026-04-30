@@ -298,7 +298,7 @@ int Str2PlusNo(ANTDEF *ap, LPCSTR s);
 void AdjPlusNo(ANTDEF *ap);
 
 int WriteAntToFp(ANTDEF *ap, AnsiString &rem, FILE *fp);
-int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp);
+int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp, int AllowNoRem = FALSE);
 void AdjWireChen(WDEF *wp, double ox, double oy, double oz, double nx, double ny, double nz);
 void AdjWireChen(WDEF *wp, int wmax, double ox, double oy, double oz, double nx, double ny, double nz);
 void AdjWireChen(WDEF *wp, int wmax, WDEF *np, WDEF *op);
@@ -358,19 +358,32 @@ class StrText{
 public:
 	char	*Bp;
 	char	*Wp;
+	int		Max;
 	inline StrText(int max){
+		if( max <= 0 ) max = 1;
+		Max = max;
 		Bp = new char[max];
 		Wp = Bp;
+		if( Bp != NULL ) *Bp = 0;
 	};
 	inline ~StrText(){
 		delete[] Bp;
 	};
 	inline char *Printf(char *ct, ...){
 		va_list	pp;
+		if( Bp == NULL ) return NULL;
+		size_t off = size_t(Wp - Bp);
+		if( off >= size_t(Max) ){
+			Wp = Bp + Max - 1;
+			*Wp = 0;
+			return Wp;
+		}
+		size_t rem = size_t(Max) - off;
 
 		va_start(pp, ct);
-		vsprintf(Wp, ct, pp );
+		vsnprintf(Wp, rem, ct, pp );
 		va_end(pp);
+		Wp[rem-1] = 0;
 		ct = Wp;
 		Wp += strlen(Wp);
 		return(ct);

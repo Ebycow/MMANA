@@ -17,6 +17,7 @@
 
 //---------------------------------------------------------------------------
 #include <vcl.h>
+#include <stdio.h>
 #pragma hdrstop
 
 #include "ComLib.h"
@@ -604,8 +605,9 @@ void ErrorMB(LPCSTR fmt, ...)
 	char	bf[1024];
 
 	va_start(pp, fmt);
-	vsprintf( bf, fmt, pp );
+	vsnprintf( bf, sizeof(bf), fmt, pp );
 	va_end(pp);
+	bf[sizeof(bf)-1] = 0;
 
 	HWND hd = Screen->ActiveForm->Handle;
 	if( hd == NULL ) hd = Application->Handle;
@@ -623,8 +625,9 @@ void WarningMB(LPCSTR fmt, ...)
 	char	bf[1024];
 
 	va_start(pp, fmt);
-	vsprintf( bf, fmt, pp );
+	vsnprintf( bf, sizeof(bf), fmt, pp );
 	va_end(pp);
+	bf[sizeof(bf)-1] = 0;
 
 	HWND hd = Screen->ActiveForm->Handle;
 	if( hd == NULL ) hd = Application->Handle;
@@ -642,8 +645,9 @@ int YesNoMB(LPCSTR fmt, ...)
 	char	bf[1024];
 
 	va_start(pp, fmt);
-	vsprintf( bf, fmt, pp );
+	vsnprintf( bf, sizeof(bf), fmt, pp );
 	va_end(pp);
+	bf[sizeof(bf)-1] = 0;
 
 	HWND hd = Screen->ActiveForm->Handle;
 	if( hd == NULL ) hd = Application->Handle;
@@ -1352,6 +1356,11 @@ static void IOToWDef(WDEF *tp, const WDEFIO *sp)
 	tp->PMax = sp->PMax;
 }
 
+static int ReadBlock(FILE *fp, void *bp, size_t len)
+{
+	return (len == 0) || (fread(bp, 1, len, fp) == len);
+}
+
 int WriteAntToFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 {
 	fwrite(ap->Name, 1, sizeof(ap->Name), fp);
@@ -1408,56 +1417,71 @@ int WriteAntToFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
 }
 //---------------------------------------------------------------------------
 //アンテナ定義をバイナリイメージで保存
-int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp)
+int ReadAntFromFp(ANTDEF *ap, AnsiString &rem, FILE *fp, int AllowNoRem)
 {
-	fread(ap->Name, 1, sizeof(ap->Name), fp);
-	fread(&ap->fq, 1, sizeof(ap->fq), fp);
-	fread(&ap->wmax, 1, sizeof(ap->wmax), fp);
+	rem = "";
+	if( !ReadBlock(fp, ap->Name, sizeof(ap->Name)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->fq, sizeof(ap->fq)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->wmax, sizeof(ap->wmax)) ) return FALSE;
+	if( (ap->wmax < 0) || (ap->wmax > WMAX) ) return FALSE;
 	if( ap->wmax ){
 		WDEFIO wio;
 		for( int i = 0; i < ap->wmax; i++ ){
-			fread(&wio, 1, sizeof(wio), fp);
+			if( !ReadBlock(fp, &wio, sizeof(wio)) ) return FALSE;
 			IOToWDef(&ap->wdef[i], &wio);
 		}
 	}
-	fread(&ap->cfq, 1, sizeof(ap->cfq), fp);
-	fread(&ap->cmax, 1, sizeof(ap->cmax), fp);
-	fread(&ap->cauto, 1, sizeof(ap->cauto), fp);
+	if( !ReadBlock(fp, &ap->cfq, sizeof(ap->cfq)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->cmax, sizeof(ap->cmax)) ) return FALSE;
+	if( (ap->cmax < 0) || (ap->cmax > CMAX) ) return FALSE;
+	if( !ReadBlock(fp, &ap->cauto, sizeof(ap->cauto)) ) return FALSE;
 	if( ap->cmax ){
-		fread(ap->cdef, 1, sizeof(CDEF) * ap->cmax, fp);
+		if( !ReadBlock(fp, ap->cdef, sizeof(CDEF) * ap->cmax) ) return FALSE;
 	}
-	fread(&ap->lenb, 1, sizeof(ap->lenb), fp);
-	fread(&ap->lmax, 1, sizeof(ap->lmax), fp);
+	if( !ReadBlock(fp, &ap->lenb, sizeof(ap->lenb)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->lmax, sizeof(ap->lmax)) ) return FALSE;
+	if( (ap->lmax < 0) || (ap->lmax > LMAX) ) return FALSE;
 	if( ap->lmax ){
-		fread(ap->ldef, 1, sizeof(LDEF) * ap->lmax, fp);
+		if( !ReadBlock(fp, ap->ldef, sizeof(LDEF) * ap->lmax) ) return FALSE;
 	}
 
-	fread(&ap->DM1, 1, sizeof(ap->DM1), fp);
-	fread(&ap->DM2, 1, sizeof(ap->DM2), fp);
-	fread(&ap->SC, 1, sizeof(ap->SC), fp);
-	fread(&ap->EC, 1, sizeof(ap->EC), fp);
+	if( !ReadBlock(fp, &ap->DM1, sizeof(ap->DM1)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->DM2, sizeof(ap->DM2)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->SC, sizeof(ap->SC)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->EC, sizeof(ap->EC)) ) return FALSE;
 
-	fread(&ap->StackVT, 1, sizeof(ap->StackVT), fp);
-	fread(&ap->StackV, 1, sizeof(ap->StackV), fp);
-	fread(&ap->StackH, 1, sizeof(ap->StackH), fp);
-	fread(&ap->StackVW, 1, sizeof(ap->StackVW), fp);
-	fread(&ap->StackHW, 1, sizeof(ap->StackHW), fp);
+	if( !ReadBlock(fp, &ap->StackVT, sizeof(ap->StackVT)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->StackV, sizeof(ap->StackV)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->StackH, sizeof(ap->StackH)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->StackVW, sizeof(ap->StackVW)) ) return FALSE;
+	if( !ReadBlock(fp, &ap->StackHW, sizeof(ap->StackHW)) ) return FALSE;
 
-	fread(&env.type, 1, sizeof(env.type), fp);
-	fread(&env.antheight, 1, sizeof(env.antheight), fp);
-	fread(&env.WireRoss, 1, sizeof(env.WireRoss), fp);
-	fread(&env.RO, 1, sizeof(env.RO), fp);
-	fread(&env.JXO, 1, sizeof(env.JXO), fp);
-	fread(&env.fbr, 1, sizeof(env.fbr), fp);
+	if( !ReadBlock(fp, &env.type, sizeof(env.type)) ) return FALSE;
+	if( !ReadBlock(fp, &env.antheight, sizeof(env.antheight)) ) return FALSE;
+	if( !ReadBlock(fp, &env.WireRoss, sizeof(env.WireRoss)) ) return FALSE;
+	if( !ReadBlock(fp, &env.RO, sizeof(env.RO)) ) return FALSE;
+	if( !ReadBlock(fp, &env.JXO, sizeof(env.JXO)) ) return FALSE;
+	if( !ReadBlock(fp, &env.fbr, sizeof(env.fbr)) ) return FALSE;
 
-	fread(&ap->pmax, 1, sizeof(ap->pmax), fp);
-	fread(&ap->pdef, 1, sizeof(ap->pdef), fp);
+	if( !ReadBlock(fp, &ap->pmax, sizeof(ap->pmax)) ) return FALSE;
+	if( (ap->pmax < 0) || (ap->pmax > PTMAX) ) return FALSE;
+	if( !ReadBlock(fp, &ap->pdef, sizeof(ap->pdef)) ) return FALSE;
 
-	int len;
-	fread(&len, 1, sizeof(len), fp);
+	int len = 0;
+	size_t n = fread(&len, 1, sizeof(len), fp);
+	if( n != sizeof(len) ){
+		if( (n != 0) || !AllowNoRem ) return FALSE;
+	}
+	if( ferror(fp) ) return FALSE;
 	if( len ){
+		const int REM_MAX = 16 * 1024 * 1024;
+		if( (len < 0) || (len > REM_MAX) ) return FALSE;
 		LPSTR bp = new char[len+1];
-		fread(bp, 1, len, fp);
+		if( bp == NULL ) return FALSE;
+		if( !ReadBlock(fp, bp, len) ){
+			delete[] bp;
+			return FALSE;
+		}
 		bp[len] = 0;
 		rem = bp;
 		delete[] bp;
@@ -5795,8 +5819,9 @@ void CGraph::DrawInfoL(int n, LPCSTR fmt, ...)
 	char	bf[1024];
 
 	va_start(pp, fmt);
-	vsprintf( bf, fmt, pp );
+	vsnprintf( bf, sizeof(bf), fmt, pp );
 	va_end(pp);
+	bf[sizeof(bf)-1] = 0;
 
 	int FW = cp->TextWidth("L");
 	int FH = cp->TextHeight(bf);

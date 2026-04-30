@@ -17,6 +17,7 @@
 
 //---------------------------------------------------------------------------
 //#include <vcl.h>
+#include <stdio.h>
 #pragma hdrstop
 
 #include "Main.h"
@@ -56,8 +57,9 @@ static void LogPrint(char *ct, ...)
 	char	bf[256];
 
 	va_start(pp, ct);
-	vsprintf( bf, ct, pp );
+	vsnprintf( bf, sizeof(bf), ct, pp );
 	va_end(pp);
+	bf[sizeof(bf)-1] = 0;
 	MainWnd->CalMemo->Lines->Add(bf);
 }
 
@@ -904,7 +906,7 @@ void __fastcall TMainWnd::SetAntDef(void)
 	else {
 		bf[0] = 0;
 	}
-	exeenv.rmd = 299.8/ant.fq;
+	exeenv.rmd = ant.fq ? 299.8/ant.fq : 0.0;
 	Freq->Text = bf;
 	DoFreq->Text = bf;
 	sprintf(bf, "%u", ant.DM1);
@@ -1177,12 +1179,14 @@ void __fastcall TMainWnd::Grid4GetText(LPSTR t, long Col, long Row)
 			case 6:		// B1
 				if( Row < ant.lmax ){
 					switch(ant.ldef[Row].TYPE){
-						case 0:		// L,C,Q - Freq
-							if( ant.ldef[Row].A[0] && ant.ldef[Row].B[0] ){
-								double f = 1.0 / (PAI2 * sqrt(ant.ldef[Row].A[0] * ant.ldef[Row].B[0] * 1.0e-18));
+						case 0: {	// L,C,Q - Freq
+							double lc = ant.ldef[Row].A[0] * ant.ldef[Row].B[0];
+							if( lc > 0.0 ){
+								double f = 1.0 / (PAI2 * sqrt(lc * 1.0e-18));
 								strcpy(t, StrDblE(f*1.0e-6));
 							}
 							break;
+						}
 						case 1:
 							break;
 						case 2:		// S-DOMAIN
@@ -2231,7 +2235,11 @@ int __fastcall TMainWnd::LoadResFile(LPCSTR pName)
 			return FALSE;// フォーマット異常
 		}
 		InitAntDef();
-		ReadAntFromFp(&ant, antRem, fp);
+		if( ReadAntFromFp(&ant, antRem, fp, Ver == 115) != TRUE ){
+			ErrorMB(ILLFMT, pName);
+			fclose(fp);
+			return FALSE;
+		}
 		strcpy(bf, pName);
 		SetEXT(bf, ".maa");
 		antFname = bf;
@@ -3022,7 +3030,11 @@ int __fastcall TMainWnd::LoadACalFile(LPCSTR pName)
 			return FALSE;// フォーマット異常
 		}
 		InitAntDef();
-		ReadAntFromFp(&ant, antRem, fp);
+		if( ReadAntFromFp(&ant, antRem, fp) != TRUE ){
+			ErrorMB(ILLFMT, pName);
+			fclose(fp);
+			return FALSE;
+		}
 		strcpy(bf, pName);
 		SetEXT(bf, ".maa");
 		antFname = bf;

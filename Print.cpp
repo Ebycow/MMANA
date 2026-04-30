@@ -33,6 +33,8 @@ __fastcall TPrintDlgBox::TPrintDlgBox(TComponent* Owner)
 	mRowCount = 0;
     mColCount = 0;
     mbp = NULL;
+    memset(mWidthP, 0, sizeof(mWidthP));
+    memset(mTitle, 0, sizeof(mTitle));
 }
 //---------------------------------------------------------------------------
 __fastcall TPrintDlgBox::~TPrintDlgBox()
@@ -43,6 +45,7 @@ __fastcall TPrintDlgBox::~TPrintDlgBox()
 // 文字列の確保
 LPSTR __fastcall TPrintDlgBox::StrDup(LPCSTR p)
 {
+	if( p == NULL ) p = "";
 	LPSTR t = new char[strlen(p)+1];
 	if( t != NULL ) strcpy(t, p);
     return t;
@@ -52,35 +55,47 @@ LPSTR __fastcall TPrintDlgBox::StrDup(LPCSTR p)
 void __fastcall TPrintDlgBox::Delete(void)
 {
 	int i;
+	int colCount = mColCount;
+	int rowCount = mRowCount;
 
-	for( i = 0; i < mColCount; i++ ){
+	for( i = 0; i < colCount; i++ ){
 		delete[] mTitle[i];
+		mTitle[i] = NULL;
     }
-    mColCount = 0;
 	if( mbp != NULL ){
-		for( i = 0; i < mRowCount*mColCount; i++ ){
+		for( i = 0; i < rowCount*colCount; i++ ){
 			delete[] mbp[i];
         }
-        mRowCount = mColCount = 0;
 	    delete[] mbp;
 	    mbp = NULL;
     }
+    mRowCount = mColCount = mMaxRow = 0;
 }
 //---------------------------------------------------------------------------
 // １つの行を確保する
 void __fastcall TPrintDlgBox::AllocRow(int row)
 {
+	if( (row < 0) || (mColCount <= 0) ) return;
 	if( (mbp==NULL)||(row >= mMaxRow) ){
-		mMaxRow = mMaxRow ? mMaxRow * 2 : 32;
-		LPCSTR	*np = new LPCSTR[mMaxRow*mColCount];
-        memset(np, 0, mMaxRow*mColCount*sizeof(LPCSTR));
+		int newMaxRow = mMaxRow ? mMaxRow : 32;
+		while( row >= newMaxRow ){
+			if( newMaxRow > 0x3fffffff ) return;
+			newMaxRow *= 2;
+		}
+		if( size_t(newMaxRow) > (size_t(-1) / size_t(mColCount)) ) return;
+		size_t count = size_t(newMaxRow) * size_t(mColCount);
+		if( count > (size_t(-1) / sizeof(LPCSTR)) ) return;
+		LPCSTR	*np = new LPCSTR[count];
+		if( np == NULL ) return;
+        memset(np, 0, count*sizeof(LPCSTR));
         if( mbp != NULL ){
-			memcpy(np, mbp, mRowCount*mColCount*sizeof(LPCSTR));
+			memcpy(np, mbp, size_t(mRowCount)*size_t(mColCount)*sizeof(LPCSTR));
             delete[] mbp;
         }
         mbp = np;
+		mMaxRow = newMaxRow;
     }
-	if( row <= mRowCount ) mRowCount = row + 1;
+	if( row >= mRowCount ) mRowCount = row + 1;
 }
 //---------------------------------------------------------------------------
 // 列比率の設定
@@ -95,7 +110,7 @@ void __fastcall TPrintDlgBox::SetMargin(int left, int top, int right, int bottom
 // 列比率の設定
 void __fastcall TPrintDlgBox::SetWidth(int col, int w)
 {
-	if( col >= COLMAX ) return;
+	if( (col < 0) || (col >= COLMAX) ) return;
 	if( col >= mColCount ) mColCount = col + 1;
 	mWidthP[col] = w;
 }
@@ -103,7 +118,8 @@ void __fastcall TPrintDlgBox::SetWidth(int col, int w)
 // タイトルの設定
 void __fastcall TPrintDlgBox::SetTitle(int col, LPCSTR p)
 {
-	if( col >= COLMAX ) return;
+	if( (col < 0) || (col >= COLMAX) ) return;
+	if( p == NULL ) p = "";
 	if( col >= mColCount ) mColCount = col + 1;
 	mTitle[col] = StrDup(p);
     if( mWidthP[col] < int(strlen(p)) ) mWidthP[col] = strlen(p);
@@ -112,8 +128,9 @@ void __fastcall TPrintDlgBox::SetTitle(int col, LPCSTR p)
 // アイテムの設定
 void __fastcall TPrintDlgBox::SetString(int row, int col, LPCSTR p)
 {
-	if( col >= mColCount ) return;
+	if( (row < 0) || (col < 0) || (col >= mColCount) ) return;
 	AllocRow(row);
+	if( (mbp == NULL) || (row >= mMaxRow) ) return;
 	mbp[row * mColCount + col] = StrDup(p);
 }
 //---------------------------------------------------------------------------
