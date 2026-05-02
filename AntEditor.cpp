@@ -159,7 +159,8 @@ int AntEditorAlignSelectedWiresToOrigin(ANTDEF *ap, const int *Selected, int Sel
 
 	double dx = (Axis == ANT_GIZMO_AXIS_X) ? -cx : 0.0;
 	double dy = (Axis == ANT_GIZMO_AXIS_Y) ? -cy : 0.0;
-	if( (dx == 0.0) && (dy == 0.0) ) return TRUE;
+	double dz = (Axis == ANT_GIZMO_AXIS_Z) ? -cz : 0.0;
+	if( (dx == 0.0) && (dy == 0.0) && (dz == 0.0) ) return TRUE;
 
 	for( int i = 0; i < ap->wmax; i++ ){
 		if( !AntEditorIsWireSelected(ap, Selected, SelectionCount, CurrentRow, i) ) continue;
@@ -168,6 +169,8 @@ int AntEditorAlignSelectedWiresToOrigin(ANTDEF *ap, const int *Selected, int Sel
 		wp->X2 += dx;
 		wp->Y1 += dy;
 		wp->Y2 += dy;
+		wp->Z1 += dz;
+		wp->Z2 += dz;
 	}
 	ap->Edit = ap->Flag = 1;
 	return TRUE;

@@ -939,6 +939,11 @@ void __fastcall TMainWnd::AlignSelectedY0Click(TObject *Sender)
 	AlignSelectedWiresToOrigin(ANT_GIZMO_AXIS_Y);
 }
 //---------------------------------------------------------------------------
+void __fastcall TMainWnd::AlignSelectedZ0Click(TObject *Sender)
+{
+	AlignSelectedWiresToOrigin(ANT_GIZMO_AXIS_Z);
+}
+//---------------------------------------------------------------------------
 void __fastcall TMainWnd::RotateSelected90Click(TObject *Sender)
 {
 	RotateSelectedWires90();
@@ -994,6 +999,14 @@ void __fastcall TMainWnd::CreateAntDrawControls(void)
 	AntAlignY0Btn->ShowHint = true;
 	AntAlignY0Btn->OnClick = AlignSelectedY0Click;
 
+	AntAlignZ0Btn = new TButton(this);
+	AntAlignZ0Btn->Parent = TabSheet2;
+	AntAlignZ0Btn->Caption = "Z0";
+	AntAlignZ0Btn->TabStop = false;
+	AntAlignZ0Btn->Hint = "Move selected wires to Z=0";
+	AntAlignZ0Btn->ShowHint = true;
+	AntAlignZ0Btn->OnClick = AlignSelectedZ0Click;
+
 	AntRotate90Btn = new TButton(this);
 	AntRotate90Btn->Parent = TabSheet2;
 	AntRotate90Btn->Caption = "R90";
@@ -1008,7 +1021,7 @@ void __fastcall TMainWnd::CreateAntDrawControls(void)
 //---------------------------------------------------------------------------
 void __fastcall TMainWnd::LayoutAntDrawControls(void)
 {
-	if( (AntDrawBtn == NULL) || (AntAlignX0Btn == NULL) || (AllViewBtn == NULL) || (OrgBtn == NULL) ) return;
+	if( (AntDrawBtn == NULL) || (AntAlignX0Btn == NULL) || (AntAlignZ0Btn == NULL) || (AllViewBtn == NULL) || (OrgBtn == NULL) ) return;
 
 	const int gap = 4;
 	const int drawW = 54;
@@ -1036,11 +1049,12 @@ void __fastcall TMainWnd::LayoutAntDrawControls(void)
 		AntDrawCancelBtn->Font->Assign(Font);
 		AntAlignX0Btn->Font->Assign(Font);
 		AntAlignY0Btn->Font->Assign(Font);
+		AntAlignZ0Btn->Font->Assign(Font);
 		AntRotate90Btn->Font->Assign(Font);
 	}
 
 	int total = drawW + gap + planeW + gap + planeW + gap + planeW + gap +
-		cancelW + gap + alignW + gap + alignW + gap + rotateW;
+		cancelW + gap + alignW + gap + alignW + gap + alignW + gap + rotateW;
 	int left = AllViewBtn->Left - gap - total;
 	if( left < 2 ) left = 2;
 
@@ -1058,6 +1072,8 @@ void __fastcall TMainWnd::LayoutAntDrawControls(void)
 	left += alignW + gap;
 	AntAlignY0Btn->SetBounds(left, top, alignW, h);
 	left += alignW + gap;
+	AntAlignZ0Btn->SetBounds(left, top, alignW, h);
+	left += alignW + gap;
 	AntRotate90Btn->SetBounds(left, top, rotateW, h);
 }
 //---------------------------------------------------------------------------
@@ -1074,6 +1090,7 @@ void __fastcall TMainWnd::UpdateAntDrawControls(void)
 	AntDrawCancelBtn->Enabled = enabled && AntDrawMode;
 	AntAlignX0Btn->Enabled = selected;
 	AntAlignY0Btn->Enabled = selected;
+	AntAlignZ0Btn->Enabled = selected;
 	AntRotate90Btn->Enabled = selected;
 
 	AntDrawBtn->Caption = AntDrawMode ? "[Draw]" : "Draw";

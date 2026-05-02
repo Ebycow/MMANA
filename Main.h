@@ -472,6 +472,7 @@ private:	// ユーザー宣言
 	void __fastcall RotateSelectedWires90(void);
 	void __fastcall AlignSelectedX0Click(TObject *Sender);
 	void __fastcall AlignSelectedY0Click(TObject *Sender);
+	void __fastcall AlignSelectedZ0Click(TObject *Sender);
 	void __fastcall RotateSelected90Click(TObject *Sender);
 	void __fastcall CreateAntDrawControls(void);
 	void __fastcall LayoutAntDrawControls(void);
@@ -587,6 +588,7 @@ private:	// ユーザー宣言
 	TButton			*AntDrawCancelBtn;
 	TButton			*AntAlignX0Btn;
 	TButton			*AntAlignY0Btn;
+	TButton			*AntAlignZ0Btn;
 	TButton			*AntRotate90Btn;
 
 	bool            QuadMode;

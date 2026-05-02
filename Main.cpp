@@ -81,6 +81,7 @@ __fastcall TMainWnd::TMainWnd(TComponent* Owner)
 	AntDrawCancelBtn = NULL;
 	AntAlignX0Btn = NULL;
 	AntAlignY0Btn = NULL;
+	AntAlignZ0Btn = NULL;
 	AntRotate90Btn = NULL;
 	AntDrawMode = FALSE;
 	AntDrawActive = FALSE;
@@ -2501,6 +2502,7 @@ void __fastcall TMainWnd::EntryAlignControl(void)
 	AlignList.EntryControl(AntDrawCancelBtn, BasicControl, AntDrawCancelBtn->Font);
 	AlignList.EntryControl(AntAlignX0Btn, BasicControl, AntAlignX0Btn->Font);
 	AlignList.EntryControl(AntAlignY0Btn, BasicControl, AntAlignY0Btn->Font);
+	AlignList.EntryControl(AntAlignZ0Btn, BasicControl, AntAlignZ0Btn->Font);
 	AlignList.EntryControl(AntRotate90Btn, BasicControl, AntRotate90Btn->Font);
 	AlignList.EntryControl(ACalBtn, BasicControl, ACalBtn->Font);
 	AlignList.EntryControl(EleEditBtn, BasicControl, EleEditBtn->Font);
