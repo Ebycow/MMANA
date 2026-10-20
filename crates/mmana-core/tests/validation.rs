@@ -52,6 +52,24 @@ fn rejects_custom_taper_out_of_range() {
 }
 
 #[test]
+fn rejects_fixed_counts_below_one() {
+    // 0 would run as auto, -1..-3 as tapering, and -2147483248 as DM1 = 400
+    // with DM2 = 0, which never finishes
+    for count in [0, -1, -5, -2147483248, i32::MIN] {
+        let mut p = dp20();
+        p.antenna.wires[0].segmentation = Segmentation::Fixed { count };
+        assert_eq!(calc(p), Err(CalcError::InvalidSegmentCount { wire: 1, count }), "{count}");
+    }
+    // a disabled wire is not expanded, so its count does not matter
+    let mut p = dp20();
+    let mut off = p.antenna.wires[0].clone();
+    off.radius = 0.0;
+    off.segmentation = Segmentation::Fixed { count: -2147483248 };
+    p.antenna.wires.push(off);
+    calc(p).unwrap();
+}
+
+#[test]
 fn accepts_settings_in_range() {
     let mut p = dp20();
     p.antenna.auto_segmentation.sc = 3.0;

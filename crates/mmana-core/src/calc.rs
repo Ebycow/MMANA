@@ -204,14 +204,23 @@ fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
         return Err(CalcError::InvalidAutoSegmentation("EC must be at least 1"));
     }
     for (i, w) in ant.wires.iter().enumerate() {
+        // wires with R = 0 are not expanded
+        if w.radius == 0.0 {
+            continue;
+        }
         // the SEG code packs each DM into 15 bits; a bare DM1 above 10000
         // would be read back as a packed pair
         let (values, max) = match w.segmentation {
+            // a count below 1 would be read as SEG 0 or a tapering code
+            // (-2147483248 is DM1 = 400 with DM2 = 0, which never finishes)
+            Segmentation::Fixed { count } if count < 1 => {
+                return Err(CalcError::InvalidSegmentCount { wire: i + 1, count });
+            }
             Segmentation::TaperCustom { dm1, dm2: Some(dm2) } => ([dm1, dm2], 0x7fff),
             Segmentation::TaperCustom { dm1, dm2: None } => ([dm1, dm1], 10000),
             _ => continue,
         };
-        if w.radius != 0.0 && values.iter().any(|v| !(1..=max).contains(&v.unsigned_abs())) {
+        if values.iter().any(|v| !(1..=max).contains(&v.unsigned_abs())) {
             return Err(CalcError::InvalidWireSegmentation { wire: i + 1, max: max as i32 });
         }
     }

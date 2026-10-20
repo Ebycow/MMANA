@@ -21,6 +21,8 @@ pub enum CalcError {
     NoPulses,
     #[error("auto-segmentation: {0}")]
     InvalidAutoSegmentation(&'static str),
+    #[error("wire {wire}: the segment count must be at least 1 (got {count})")]
+    InvalidSegmentCount { wire: usize, count: i32 },
     #[error("wire {wire}: custom tapering DM values must be between 1 and {max}")]
     InvalidWireSegmentation { wire: usize, max: i32 },
     #[error("{what} pulse '{name}' does not exist (valid pulses: 1-{max})")]
