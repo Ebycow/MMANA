@@ -651,7 +651,7 @@ export interface components {
             x: number;
         };
         /** @enum {string} */
-        IssueCode: "noVariables" | "tooManyVariables" | "missingTarget" | "zeroValue" | "sDomainLoad" | "heightInFreeSpace" | "duplicate" | "missingVariable" | "linkLoop" | "tooManyBands" | "bandWithoutSources" | "linkValueDiffers";
+        IssueCode: "noVariables" | "tooManyVariables" | "missingTarget" | "zeroValue" | "sDomainLoad" | "heightInFreeSpace" | "duplicate" | "missingVariable" | "linkLoop" | "tooManyBands" | "bandWithoutSources" | "bandMissingSource" | "linkValueDiffers";
         /**
          * @description How a variable follows another one (連携). `variable` is the 0-based
          *     index of the variable it follows; a chain of links ends at an independent

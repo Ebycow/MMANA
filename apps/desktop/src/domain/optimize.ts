@@ -307,6 +307,8 @@ export function issueMessage(i: SetupIssue): string {
       return 'バンドは 10 個までです。';
     case 'bandWithoutSources':
       return `バンド ${other} に給電点がありません。`;
+    case 'bandMissingSource':
+      return `${v}バンド ${other} にはこの給電点がありません（バンドごとに給電点が設定し直されるため、すべてのバンドに必要です）。`;
     case 'linkValueDiffers':
       return `${v}連携先の変数 ${other} と初期値が異なります。実行すると連携先の値に合わせます。`;
   }

@@ -529,6 +529,8 @@ pub enum IssueCode {
     TooManyBands,
     /// Band `other` has no source.
     BandWithoutSources,
+    /// The source the variable varies does not exist in band `other`.
+    BandMissingSource,
     /// Warning: the value differs from what its link gives (the link wins).
     LinkValueDiffers,
 }
@@ -559,6 +561,9 @@ impl SetupIssue {
             IssueCode::LinkLoop => format!("variable {}: its links never reach an independent variable", v(variable)),
             IssueCode::TooManyBands => format!("at most {MAX_BANDS} bands"),
             IssueCode::BandWithoutSources => format!("band {} has no source", v(other)),
+            IssueCode::BandMissingSource => {
+                format!("variable {}: band {} has no such source", v(variable), v(other))
+            }
             IssueCode::LinkValueDiffers => {
                 format!("variable {}: its value differs from variable {}'s; the link sets it", v(variable), v(other))
             }
@@ -754,10 +759,12 @@ impl Model {
             }
             T::Height => self.environment.height,
             T::Frequency => self.frequency,
-            T::Source { source, part } => {
-                let s = &self.antenna.sources[source];
-                if part == SourcePart::Voltage { s.voltage } else { s.phase_deg }
-            }
+            // (a band may have fewer sources; `Check` refuses variables on those)
+            T::Source { source, part } => self
+                .antenna
+                .sources
+                .get(source)
+                .map_or(0.0, |s| if part == SourcePart::Voltage { s.voltage } else { s.phase_deg }),
             T::Stack { part } => {
                 let s = &self.antenna.stack;
                 if part == StackPart::Vertical { s.vertical_spacing } else { s.horizontal_spacing }
@@ -878,11 +885,12 @@ impl Model {
                 }
             }
             T::Source { source, part } => {
-                let s = &mut self.antenna.sources[source];
-                if part == SourcePart::Voltage {
-                    s.voltage = d;
-                } else {
-                    s.phase_deg = d;
+                if let Some(s) = self.antenna.sources.get_mut(source) {
+                    if part == SourcePart::Voltage {
+                        s.voltage = d;
+                    } else {
+                        s.phase_deg = d;
+                    }
                 }
             }
             T::Stack { part } => {
@@ -906,8 +914,7 @@ impl Model {
         }
         let b = &self.bands[n];
         self.frequency = b.frequency_mhz;
-        self.antenna.sources =
-            b.sources.iter().take_while(|s| !s.pulse.trim().is_empty()).take(BAND_SOURCES).cloned().collect();
+        self.antenna.sources = band_sources(b).cloned().collect();
     }
 
     /// `WList.Update`: writes the element table's wires back.
@@ -976,6 +983,11 @@ fn last_in_chain(vars: &[Variable], n: usize) -> Result<usize, (IssueCode, Optio
     Err((IssueCode::LinkLoop, None))
 }
 
+/// The sources `SetBand` gives the antenna: up to the first blank pulse, at most four.
+fn band_sources(b: &Band) -> impl Iterator<Item = &Source> {
+    b.sources.iter().take_while(|s| !s.pulse.trim().is_empty()).take(BAND_SOURCES)
+}
+
 /// Whether the bands of the setup are scored (`bmax` > 1).
 fn uses_bands(antenna: &Antenna, setup: &OptimizerSetup) -> bool {
     !setup.sweep_only && antenna.sources.len() <= BAND_SOURCES && setup.bands.len() >= 2
@@ -1000,8 +1012,18 @@ fn check(model: &mut Model, setup: &OptimizerSetup) -> (Vec<SetupIssue>, Vec<Set
             errors.push(SetupIssue::new(IssueCode::TooManyBands, None, None));
         }
         for (b, band) in setup.bands.iter().enumerate() {
-            if band.sources.first().is_none_or(|s| s.pulse.trim().is_empty()) {
+            let count = band_sources(band).count();
+            if count == 0 {
                 errors.push(SetupIssue::new(IssueCode::BandWithoutSources, None, Some(b)));
+            }
+            // each band sets the antenna's sources, so a source variable must
+            // exist in every band (the original writes past the last one)
+            for (i, v) in vars.iter().enumerate() {
+                if let VariableTarget::Source { source, .. } = v.target
+                    && source >= count
+                {
+                    errors.push(issue(IssueCode::BandMissingSource, i, Some(b)));
+                }
             }
         }
     }
@@ -2354,6 +2376,26 @@ mod tests {
         let edit =
             edit_setup(&project, &opts, &percent, &[SetupOp::SetTarget { index: 1, target: VariableTarget::Height }]);
         assert_eq!(edit.applied, vec![false]);
+    }
+
+    #[test]
+    fn source_variables_need_the_source_in_every_band() {
+        let project = sample("HB9CV.MAA");
+        let mut setup = OptimizerSetup::default();
+        let mut v = Variable::new(VariableTarget::Source { source: 1, part: SourcePart::Phase });
+        (v.pitch, v.min, v.max) = (1.0, -360.1, 360.1);
+        setup.variables.push(v);
+        let one = |f| Band { frequency_mhz: f, sources: vec![project.antenna.sources[0].clone()] };
+        setup.bands = vec![one(14.0), Band { frequency_mhz: 14.2, sources: project.antenna.sources.clone() }];
+        let err = optimize(&project, &CalcOptions::default(), &setup, Some(5), |_| true).unwrap_err();
+        let OptimizeError::Setup(issues) = err else { panic!("{err:?}") };
+        assert_eq!(
+            issues.iter().map(|i| (i.code, i.other)).collect::<Vec<_>>(),
+            vec![(IssueCode::BandMissingSource, Some(0))]
+        );
+        // with the source in every band it runs
+        setup.bands[0] = Band { frequency_mhz: 14.0, sources: project.antenna.sources.clone() };
+        assert!(optimize(&project, &CalcOptions::default(), &setup, Some(5), |_| true).is_ok());
     }
 
     #[test]
