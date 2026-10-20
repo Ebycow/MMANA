@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 use crate::engine::antdef::AntDef;
 use crate::engine::{EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec};
 use crate::error::CalcError;
-use crate::model::{GroundKind, Point3, Project};
+use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation};
 use crate::pattern::{self, PatternState};
 
 /// Angular resolution of the stored pattern cuts.
@@ -189,6 +189,35 @@ fn engine_config(project: &Project, opts: &CalcOptions) -> EngineConfig {
     }
 }
 
+/// Rejects segmentation settings the tapering loops never finish with
+/// (`SC <= 1`, `DM2 <= 0`). MMANA's dialogs and the .maa reader keep them in
+/// range; project JSON and API requests do not.
+fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
+    let s = &ant.auto_segmentation;
+    if s.dm1 < 1 || s.dm2 < 1 {
+        return Err(CalcError::InvalidAutoSegmentation("DM1 and DM2 must be at least 1"));
+    }
+    if !(s.sc > 1.0 && s.sc <= 3.0) {
+        return Err(CalcError::InvalidAutoSegmentation("SC must be greater than 1 and at most 3"));
+    }
+    if s.ec < 1 {
+        return Err(CalcError::InvalidAutoSegmentation("EC must be at least 1"));
+    }
+    for (i, w) in ant.wires.iter().enumerate() {
+        // the SEG code packs each DM into 15 bits; a bare DM1 above 10000
+        // would be read back as a packed pair
+        let (values, max) = match w.segmentation {
+            Segmentation::TaperCustom { dm1, dm2: Some(dm2) } => ([dm1, dm2], 0x7fff),
+            Segmentation::TaperCustom { dm1, dm2: None } => ([dm1, dm1], 10000),
+            _ => continue,
+        };
+        if w.radius != 0.0 && values.iter().any(|v| !(1..=max).contains(&v.unsigned_abs())) {
+            return Err(CalcError::InvalidWireSegmentation { wire: i + 1, max: max as i32 });
+        }
+    }
+    Ok(())
+}
+
 /// Builds the geometry and solves for the currents at one frequency.
 pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError> {
     let ant = &project.antenna;
@@ -199,6 +228,7 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
     if ant.wires.is_empty() {
         return Err(CalcError::NoWires);
     }
+    check_segmentation(ant)?;
     let mut ap = AntDef::from_model(ant, cfq);
     let cfg = engine_config(project, opts);
     let mut engine = Mininec::new(&mut ap, &cfg)?;

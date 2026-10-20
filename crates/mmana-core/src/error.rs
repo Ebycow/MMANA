@@ -19,6 +19,10 @@ pub enum CalcError {
     TooManyPulses { max: usize },
     #[error("the model has no pulses (every wire is a single unconnected segment)")]
     NoPulses,
+    #[error("auto-segmentation: {0}")]
+    InvalidAutoSegmentation(&'static str),
+    #[error("wire {wire}: custom tapering DM values must be between 1 and {max}")]
+    InvalidWireSegmentation { wire: usize, max: i32 },
     #[error("{what} pulse '{name}' does not exist (valid pulses: 1-{max})")]
     PulseOutOfRange { what: &'static str, name: String, max: usize },
 }
