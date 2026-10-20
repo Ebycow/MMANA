@@ -206,10 +206,12 @@ pub struct EditedWires {
     pub wires: Vec<Wire>,
     /// Element (row) of each wire.
     pub elements: Vec<usize>,
-    /// Slot of each wire in the editor's wire table. Slots below the original
-    /// wire count started as the original wires; a slot freed by a deletion
-    /// may be reused by a wire the editor creates.
+    /// Slot of each wire in the editor's wire table. A slot freed by a
+    /// deletion may be reused by a wire the editor creates.
     pub slots: Vec<usize>,
+    /// The original wire (index into the wires the editor opened with) each
+    /// wire still is, or `None` for wires the editor created.
+    pub origins: Vec<Option<usize>>,
 }
 
 /// `RoundUp(d, s)`: rounds half away from zero to a multiple of 1/s.
@@ -242,6 +244,10 @@ fn coord(p: &mut Point3, axis: usize) -> &mut f64 {
 struct Slot {
     wire: Wire,
     live: bool,
+    /// The original wire this slot holds. Not part of the original: it lets
+    /// sources and loads follow their wire, and is cleared when the wire is
+    /// deleted so that a new wire reusing the slot does not inherit them.
+    origin: Option<usize>,
 }
 
 /// `WREF`: a wire of an element and the values `AnaType` derives from it.
@@ -749,7 +755,8 @@ impl ElementList {
     /// Groups the wires into elements (`SetWire`). `wavelength` is the design
     /// wavelength (λ = 299.8 / f), used for the sizes of new elements.
     pub fn new(wires: &[Wire], wavelength: f64) -> Self {
-        let slots: Vec<Slot> = wires.iter().map(|w| Slot { wire: w.clone(), live: true }).collect();
+        let slots: Vec<Slot> =
+            wires.iter().enumerate().map(|(i, w)| Slot { wire: w.clone(), live: true, origin: Some(i) }).collect();
 
         // wires joined end to end (`Connect`)
         let n = slots.len();
@@ -930,7 +937,7 @@ impl ElementList {
             segmentation: Segmentation::Auto,
             note: String::new(),
         };
-        self.slots.push(Slot { wire: blank, live: false });
+        self.slots.push(Slot { wire: blank, live: false, origin: None });
         self.slots.len() - 1
     }
 
@@ -944,6 +951,7 @@ impl ElementList {
         s.wire.radius = r;
         s.wire.segmentation = Segmentation::from_code(seg);
         s.live = true;
+        s.origin = None;
         i
     }
 
@@ -953,7 +961,7 @@ impl ElementList {
         let from: Vec<usize> = self.groups[src].refs.iter().map(|r| r.slot).collect();
         for s in from {
             let i = self.new_slot();
-            self.slots[i] = self.slots[s].clone();
+            self.slots[i] = Slot { origin: None, ..self.slots[s].clone() };
             g.add(i);
         }
         g.ana_wire(&mut self.slots);
@@ -1009,6 +1017,7 @@ impl ElementList {
     fn free_wires(&mut self, n: usize) {
         for r in &self.groups[n].refs {
             self.slots[r.slot].live = false;
+            self.slots[r.slot].origin = None;
         }
     }
 
@@ -1036,6 +1045,8 @@ impl ElementList {
         }
         let rmd = if self.wavelength != 0.0 { self.wavelength } else { 23.0 };
         let (mut z, mut round, mut width, mut height, mut rad) = (0.0, rmd, rmd / 2.0, rmd / 2.0, 0.005);
+        // the original wires the old element's wires were, in order
+        let mut freed: Vec<Option<usize>> = Vec::new();
         if n < len {
             let g = &self.groups[n];
             if kind == g.kind {
@@ -1046,6 +1057,7 @@ impl ElementList {
             width = g.width();
             height = g.height();
             rad = g.radius(&self.slots);
+            freed = g.refs.iter().map(|r| self.slots[r.slot].origin).collect();
             self.free_wires(n);
         }
         // size of the new element: the old perimeter, else twice the width or
@@ -1142,7 +1154,12 @@ impl ElementList {
             _ => unreachable!("not a template"),
         }
         let mut g = Group::new();
-        for s in wires {
+        for (k, s) in wires.into_iter().enumerate() {
+            // the rebuilt element is the same element: its k-th wire takes over
+            // the sources and loads of the old k-th wire, wherever its slot is
+            if let Some(&origin) = freed.get(k) {
+                self.slots[s].origin = origin;
+            }
             g.add(s);
         }
         g.ana_wire(&mut self.slots);
@@ -1346,7 +1363,7 @@ impl ElementList {
     /// index (new ones follow); otherwise they are renumbered element by
     /// element, from the base element backwards and then forwards.
     pub fn wires(&self) -> EditedWires {
-        let mut out = EditedWires { wires: Vec::new(), elements: Vec::new(), slots: Vec::new() };
+        let mut out = EditedWires { wires: Vec::new(), elements: Vec::new(), slots: Vec::new(), origins: Vec::new() };
         if self.groups.is_empty() {
             return out;
         }
@@ -1384,6 +1401,7 @@ impl ElementList {
             out.wires.push(w);
             out.elements.push(e);
             out.slots.push(s);
+            out.origins.push(self.slots[s].origin);
         }
         out
     }
@@ -1426,9 +1444,9 @@ pub fn edit_antenna(antenna: &Antenna, ops: &[ElementOp]) -> ElementEdit {
         let out = list.wires();
         // new index of each original wire, if it still exists
         let mut moved: Vec<Option<usize>> = vec![None; antenna.wires.len()];
-        for (i, &s) in out.slots.iter().enumerate() {
-            if s < moved.len() {
-                moved[s] = Some(i);
+        for (i, o) in out.origins.iter().enumerate() {
+            if let Some(o) = *o {
+                moved[o] = Some(i);
             }
         }
         edited.wires = out.wires;
@@ -1559,6 +1577,43 @@ mod tests {
         assert_eq!(e.antenna.sources[0].pulse, "w2c");
         assert!(e.antenna.loads.is_empty());
         assert_eq!(e.warnings.len(), 1);
+    }
+
+    #[test]
+    fn pulses_do_not_move_to_a_wire_that_reuses_a_deleted_slot() {
+        let ant = Antenna {
+            wires: vec![wire((0.0, -1.0, 0.0), (0.0, 1.0, 0.0)), wire((3.0, -1.0, 0.0), (3.0, 1.0, 0.0))],
+            sources: vec![crate::Source { pulse: "w2c".into(), phase_deg: 0.0, voltage: 1.0 }],
+            ..Antenna::default()
+        };
+        // the copy of element 1 takes the slot wire 2 left
+        let e = edit_antenna(&ant, &[ElementOp::Delete { row: 1 }, ElementOp::Insert { row: 0 }]);
+        assert_eq!(e.applied, vec![true, true]);
+        assert_eq!(e.antenna.wires.len(), 2);
+        assert!(e.antenna.sources.is_empty());
+        assert_eq!(e.warnings.len(), 1);
+    }
+
+    #[test]
+    fn pulses_stay_on_a_rebuilt_element() {
+        let mut ant = Antenna { wires: yagi_with_quad(), ..Antenna::default() };
+        ant.sources = vec![crate::Source { pulse: "w2c".into(), phase_deg: 0.0, voltage: 1.0 }];
+        ant.loads = vec![crate::Load { pulse: "w4c".into(), kind: crate::LoadKind::Impedance { r: 1.0, x: 0.0 } }];
+        // deleting the reflector frees slot 0, which the dipole replacing the
+        // quad then takes; the source on the quad's first wire goes with it
+        let e = edit_antenna(
+            &ant,
+            &[ElementOp::Delete { row: 0 }, ElementOp::SetKind { row: 0, kind: ElementKind::HorizontalDipole }],
+        );
+        assert_eq!(e.applied, vec![true, true]);
+        assert_eq!(e.antenna.wires.len(), 2);
+        assert_eq!(e.antenna.sources.len(), 1);
+        let pulse = &e.antenna.sources[0].pulse;
+        let w: usize = pulse[1..pulse.len() - 1].parse().unwrap();
+        assert_eq!(e.elements[e.wire_elements[w - 1]].kind, ElementKind::HorizontalDipole);
+        // the dipole has one wire: the load on the quad's third wire is gone
+        assert!(e.antenna.loads.is_empty());
+        assert_eq!(e.warnings, vec!["load 'w4c' was removed with its wire".to_string()]);
     }
 
     #[test]
