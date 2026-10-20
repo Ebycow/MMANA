@@ -145,7 +145,10 @@ impl Mininec {
         let nw = ap.wz.len();
         self.nw = nw;
         self.height_off = if cfg.ground != GroundKind::FreeSpace { cfg.height } else { 0.0 };
-        let max_pulses: usize = ap.wz.iter().map(|w| w.seg.max(1) as usize).sum::<usize>() + 2 * nw + 4;
+        // the loop fails before indexing past `cfg.max_pulses`, so a huge
+        // segment count must not size the arrays
+        let max_pulses: usize =
+            (ap.wz.iter().map(|w| w.seg.max(1) as usize).sum::<usize>() + 2 * nw + 4).min(cfg.max_pulses + 4);
         self.a = vec![0.0; nw + 2];
         self.ca = vec![0.0; nw + 2];
         self.cb = vec![0.0; nw + 2];
