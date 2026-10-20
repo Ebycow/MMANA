@@ -359,19 +359,20 @@ pub fn sweep(
     points: usize,
 ) -> Result<Vec<SweepPoint>, CalcError> {
     let points = points.max(1);
-    (0..points)
-        .map(|i| {
-            let f = if points == 1 { start } else { start + (stop - start) * i as f64 / (points - 1) as f64 };
-            let o = CalcOptions { frequency_mhz: Some(f), ..opts.clone() };
-            let r = calculate(project, &o)?;
-            Ok(SweepPoint {
-                frequency_mhz: f,
-                impedance: r.impedance,
-                swr: r.swr,
-                gain_dbi: r.gain_dbi,
-                fb_db: r.fb_db,
-                elevation_deg: r.elevation_deg,
-            })
+    // frequencies are independent: solve them in parallel
+    crate::par::map(points, |i| {
+        let f = if points == 1 { start } else { start + (stop - start) * i as f64 / (points - 1) as f64 };
+        let o = CalcOptions { frequency_mhz: Some(f), ..opts.clone() };
+        let r = calculate(project, &o)?;
+        Ok(SweepPoint {
+            frequency_mhz: f,
+            impedance: r.impedance,
+            swr: r.swr,
+            gain_dbi: r.gain_dbi,
+            fb_db: r.fb_db,
+            elevation_deg: r.elevation_deg,
         })
-        .collect()
+    })
+    .into_iter()
+    .collect()
 }

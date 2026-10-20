@@ -16,5 +16,10 @@ serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2.0.21"
 utoipa = { version = "6.0.0", optional = true }
 
+# Threads are not available on wasm32-unknown-unknown; `par` falls back to
+# plain loops there.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rayon = "1.12.0"
+
 [dev-dependencies]
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }

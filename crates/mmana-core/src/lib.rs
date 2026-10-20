@@ -22,6 +22,7 @@ pub mod expr;
 pub mod format;
 pub mod maa;
 pub mod model;
+mod par;
 mod pattern;
 
 pub use calc::{
