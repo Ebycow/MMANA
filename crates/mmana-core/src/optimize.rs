@@ -1633,7 +1633,10 @@ pub fn optimize(
 }
 
 /// Writes the values of a trial back (the trial list's 更新): the antenna
-/// and the calculation frequency.
+/// and the calculation frequency. `project` and `options` must be those the
+/// optimisation started from: elements are numbered by where they lie, which
+/// another trial may have changed. (MMANA analyses the antenna as it is now,
+/// and gets the wrong elements then.)
 pub fn apply_trial(
     project: &Project,
     options: &CalcOptions,
@@ -2396,6 +2399,35 @@ mod tests {
         // with the source in every band it runs
         setup.bands[0] = Band { frequency_mhz: 14.0, sources: project.antenna.sources.clone() };
         assert!(optimize(&project, &CalcOptions::default(), &setup, Some(5), |_| true).is_ok());
+    }
+
+    /// Trials are values for the antenna the search started from: elements are
+    /// numbered by where they were then, which another trial may change.
+    #[test]
+    fn trials_apply_to_the_starting_antenna() {
+        let project = sample("2EL20.MAA");
+        let opts = CalcOptions::default();
+        let mut setup = OptimizerSetup { sweep_only: true, ..Default::default() };
+        let mut v = Variable::new(VariableTarget::Element { element: 1, part: ElementPart::Interval });
+        (v.pitch, v.min, v.max) = (1.0, -5.0, 5.0);
+        setup.variables.push(v);
+        let out = optimize(&project, &opts, &setup, None, |_| true).unwrap();
+        let trial = |d: f64| out.trials.iter().find(|t| (t.values[0] - d).abs() < 1e-9).unwrap().values.clone();
+        let behind = trial(2.67 - 7.0);
+        let back = trial(2.67);
+        let (moved, _) = apply_trial(&project, &opts, &setup, &behind).unwrap();
+        // the parasitic element now lies behind the driven one: from the moved
+        // antenna, element 1 is the other element
+        let (wrong, _) = apply_trial(&moved, &opts, &setup, &back).unwrap();
+        let (again, _) = apply_trial(&project, &opts, &setup, &back).unwrap();
+        let close = |a: &Project| {
+            a.antenna.wires.iter().zip(&project.antenna.wires).all(|(w, o)| {
+                let d = [w.start.x - o.start.x, w.start.y - o.start.y, w.end.x - o.end.x, w.end.y - o.end.y];
+                d.iter().all(|d| d.abs() < 1e-12)
+            })
+        };
+        assert!(!close(&wrong));
+        assert!(close(&again));
     }
 
     #[test]

@@ -127,7 +127,10 @@ pub struct OptimizerSetupRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct ApplyTrialRequest {
+    /// The antenna the optimisation started from (the trial's values are for
+    /// its elements, which a later trial may have renumbered).
     pub project: Project,
+    /// The options the optimisation started with.
     #[serde(default)]
     pub options: CalcOptions,
     pub setup: OptimizerSetup,

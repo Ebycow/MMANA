@@ -15,48 +15,52 @@ import { describeTarget } from './OptimizerDialog';
 import { fmtZ } from './ResultsPanel';
 
 export function OptimizerResults() {
-  const open = useApp((s) => s.optimizer.resultsOpen && s.optimizer.outcome != null && s.optimizer.outcomeSetup != null);
+  const open = useApp((s) => s.optimizer.resultsOpen && s.optimizer.outcome != null && s.optimizer.outcomeSetup != null && s.optimizer.outcomeStart != null);
   return open ? <OptimizerResultsBody /> : null;
 }
 
 function OptimizerResultsBody() {
   const outcome = useApp((s) => s.optimizer.outcome)!;
   const setup = useApp((s) => s.optimizer.outcomeSetup)!;
+  const start = useApp((s) => s.optimizer.outcomeStart)!;
+  const appliedValues = useApp((s) => s.optimizer.appliedValues);
   const project = useApp((s) => s.project);
-  const options = useApp((s) => s.options);
   const setOptimizer = useApp((s) => s.setOptimizer);
   const swrRef = project.environment.swrReference.r;
   const [sort, setSort] = useState<TrialSort>('score');
   const trials = useMemo(() => sortTrials(outcome.trials, sort), [outcome.trials, sort]);
-  const [selected, setSelected] = useState<Trial | null>(null);
   const [labels, setLabels] = useState<string[]>([]);
   const best = outcome.best?.score ?? 0;
   const sweep = setup.sweepOnly;
 
-  // start at the trial the antenna is at now (`GetCurIndex`)
+  // start at the trial the antenna was last set to (`GetCurIndex`)
+  const [selected, setSelected] = useState<Trial | null>(() => {
+    const byScore = sortTrials(outcome.trials, 'score');
+    return byScore[appliedValues ? currentTrial(byScore, appliedValues) : 0] ?? null;
+  });
+
+  // the variables are named by the elements of the antenna the run started from
   useEffect(() => {
     let live = true;
-    transport.editOptimizerSetup({ project, options, setup, operations: [] }).then(
-      (e) => {
-        if (!live) return;
-        setLabels(setup.variables.map((v) => describeTarget(v.target, project, e.elements)));
-        setSelected((s) => s ?? sortTrials(outcome.trials, 'score')[currentTrial(sortTrials(outcome.trials, 'score'), e.values)] ?? null);
-      },
-      () => live && setSelected((s) => s ?? outcome.trials[0] ?? null),
+    transport.editOptimizerSetup({ ...start, setup, operations: [] }).then(
+      (e) => live && setLabels(setup.variables.map((v) => describeTarget(v.target, start.project, e.elements))),
+      () => {},
     );
     return () => {
       live = false;
     };
-    // only when the list opens
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [start, setup]);
 
   const close = () => setOptimizer({ resultsOpen: false });
   const apply = () => {
     if (!selected) return;
     modals.openConfirmModal({
       title: 'この結果を反映しますか？',
-      children: <Text size="sm">アンテナ定義がこの時の状態に更新されます（「元に戻す」で戻せます）。</Text>,
+      children: (
+        <Text size="sm">
+          アンテナ定義がこの時の状態に更新されます。最適化を始めたときのアンテナに値を当てはめるので、その後の編集は失われます（「元に戻す」で戻せます）。
+        </Text>
+      ),
       labels: { confirm: '反映', cancel: 'キャンセル' },
       onConfirm: async () => {
         try {

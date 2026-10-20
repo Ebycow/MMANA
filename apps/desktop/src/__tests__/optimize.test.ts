@@ -180,15 +180,22 @@ describe('optimisation in the store', () => {
     expect(useApp.getState().project.antenna.wires[0].end.y).not.toBe(5.5);
   });
 
-  it('writes a trial back', async () => {
+  it('writes a trial back onto the antenna the run started from', async () => {
     vi.spyOn(transport, 'calculate').mockResolvedValue({ warnings: [] } as unknown as CalcResult);
     vi.spyOn(transport, 'optimize').mockResolvedValue(outcome());
+    const start = useApp.getState().project;
+    const startOptions = useApp.getState().options;
     await useApp.getState().runOptimization();
+    expect(useApp.getState().optimizer.appliedValues).toEqual([5.5]);
     const applied = structuredClone(useApp.getState().project);
     applied.antenna.wires[0].end.y = 4.9;
     const spy = vi.spyOn(transport, 'applyTrial').mockResolvedValue({ project: applied, frequencyMhz: 14.2 });
     await useApp.getState().applyTrial([4.9]);
+    // not the optimised antenna, whose elements may be numbered differently
+    expect(spy.mock.calls[0][0].project).toBe(start);
+    expect(spy.mock.calls[0][0].options).toBe(startOptions);
     expect(spy.mock.calls[0][0].values).toEqual([4.9]);
     expect(useApp.getState().project.antenna.wires[0].end.y).toBe(4.9);
+    expect(useApp.getState().optimizer.appliedValues).toEqual([4.9]);
   });
 });

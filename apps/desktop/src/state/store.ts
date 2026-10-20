@@ -34,6 +34,14 @@ export interface OptimizerState {
   outcome: OptimizeOutcome | null;
   /** The setup the outcome's trials have values for. */
   outcomeSetup: OptimizerSetup | null;
+  /**
+   * The antenna and options the run started from. Trials are written back to
+   * these: their element numbers are those of the starting antenna, which a
+   * trial may change (moving an element past another renumbers them).
+   */
+  outcomeStart: { project: Project; options: CalcOptions } | null;
+  /** The values of the trial the antenna was last set to (the best, or one written back). */
+  appliedValues: number[] | null;
   error: EngineError | null;
 }
 
@@ -48,6 +56,8 @@ const freshOptimizer = (): OptimizerState => ({
   finishedAt: null,
   outcome: null,
   outcomeSetup: null,
+  outcomeStart: null,
+  appliedValues: null,
   error: null,
 });
 
@@ -277,7 +287,14 @@ export const useApp = create<AppState>()((set, get) => {
         });
         if (gen !== generation) return;
         if (outcome.best) applyProject(outcome.project, outcome.frequencyMhz);
-        patch({ running: false, finishedAt: performance.now(), outcome, outcomeSetup: setup });
+        patch({
+          running: false,
+          finishedAt: performance.now(),
+          outcome,
+          outcomeSetup: setup,
+          outcomeStart: { project, options },
+          appliedValues: outcome.best?.values ?? null,
+        });
         if (outcome.best) await get().calculate();
       } catch (e) {
         patch({ running: false, finishedAt: performance.now(), error: toEngineError(e) });
@@ -287,13 +304,13 @@ export const useApp = create<AppState>()((set, get) => {
     cancelOptimization: () => transport.cancelOptimize(),
 
     applyTrial: async (values) => {
-      const { project, options, optimizer } = get();
-      const setup = optimizer.outcomeSetup;
-      if (!setup) return;
+      const { outcomeSetup: setup, outcomeStart: start } = get().optimizer;
+      if (!setup || !start) return;
       const gen = generation;
-      const applied = await transport.applyTrial({ project, options, setup, values });
+      const applied = await transport.applyTrial({ ...start, setup, values });
       if (gen !== generation) return;
       applyProject(applied.project, applied.frequencyMhz);
+      get().setOptimizer({ appliedValues: values });
       await get().calculate();
     },
   };
