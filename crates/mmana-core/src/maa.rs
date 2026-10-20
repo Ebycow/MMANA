@@ -621,6 +621,14 @@ mod tests {
     }
 
     #[test]
+    fn frequency_keeps_its_precision() {
+        // MMANA rounds it to 0.001 MHz through the display (see porting notes)
+        let p = parse(&DP.replace("\r\n14.05\r\n", "\r\n14.05049\r\n")).project;
+        assert_eq!(p.antenna.frequency_mhz, 14.05049);
+        assert_eq!(reread(&p).project.antenna.frequency_mhz, 14.05049);
+    }
+
+    #[test]
     fn full_width_pulse_names_are_converted() {
         let p = parse(&DP.replace("w1c,", "ｗ１ｃ,")).project;
         assert_eq!(p.antenna.sources[0].pulse, "w1c");
