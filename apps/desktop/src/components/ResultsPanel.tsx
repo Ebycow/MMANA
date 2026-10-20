@@ -160,6 +160,7 @@ export function ResultsPanel() {
   const r = useApp((s) => s.result);
   const stale = useApp((s) => s.resultStale);
   const error = useApp((s) => s.calcError);
+  const dim = { opacity: stale ? 0.55 : 1 };
 
   return (
     <Panel
@@ -183,7 +184,7 @@ export function ResultsPanel() {
         )}
         {r ? (
           <>
-            <div style={{ opacity: stale ? 0.55 : 1 }}>
+            <div style={dim}>
               <Summary r={r} />
             </div>
             <Tabs defaultValue="pattern" keepMounted={false} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -204,17 +205,18 @@ export function ResultsPanel() {
                   給電点
                 </Tabs.Tab>
               </Tabs.List>
-              <div style={{ flex: 1, minHeight: 0, overflow: 'auto', opacity: stale ? 0.55 : 1 }}>
-                <Tabs.Panel value="pattern" h="100%">
+              {/* the sweep has its own staleness; see SweepPanel */}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+                <Tabs.Panel value="pattern" h="100%" style={dim}>
                   <Patterns r={r} />
                 </Tabs.Panel>
                 <Tabs.Panel value="sweep" h="100%">
                   <SweepPanel />
                 </Tabs.Panel>
-                <Tabs.Panel value="currents">
+                <Tabs.Panel value="currents" style={dim}>
                   <Currents r={r} />
                 </Tabs.Panel>
-                <Tabs.Panel value="sources">
+                <Tabs.Panel value="sources" style={dim}>
                   <Sources r={r} />
                 </Tabs.Panel>
               </div>

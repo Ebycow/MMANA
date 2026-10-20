@@ -1,5 +1,5 @@
-import { Button, Group, NumberInput, SegmentedControl, Stack, Table, Text } from '@mantine/core';
-import { IconPlayerPlay } from '@tabler/icons-react';
+import { Badge, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { IconAlertTriangle, IconPlayerPlay } from '@tabler/icons-react';
 import { useState } from 'react';
 import { LineChart } from '../charts/LineChart';
 import { useApp } from '../state/store';
@@ -12,6 +12,7 @@ export function SweepPanel() {
   const [hover, setHover] = useState<number | null>(null);
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const data = sweep.data;
+  const opacity = sweep.stale ? 0.55 : 1;
   const x = data?.map((p) => p.frequencyMhz) ?? [];
 
   return (
@@ -23,6 +24,13 @@ export function SweepPanel() {
         <Button leftSection={<IconPlayerPlay size={14} />} loading={sweep.running} onClick={run} disabled={!(sweep.stopMhz > sweep.startMhz)}>
           計算
         </Button>
+        {data && sweep.stale && (
+          <Tooltip label="周波数特性の計算後にアンテナや条件が変更されています">
+            <Badge color="yellow" variant="light" mb={6} leftSection={<IconAlertTriangle size={12} />}>
+              再計算が必要
+            </Badge>
+          </Tooltip>
+        )}
         <div style={{ flex: 1 }} />
         {data && (
           <SegmentedControl
@@ -40,7 +48,7 @@ export function SweepPanel() {
           範囲を指定して「計算」を押すと、SWR・インピーダンス・利得・F/B 比の周波数特性を表示します（2° 分解能で計算）。
         </Text>
       ) : view === 'chart' ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 12, flex: 1, minHeight: 280 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 12, flex: 1, minHeight: 280, opacity }}>
           <LineChart title="SWR" unit="" x={x} hover={hover} onHover={setHover} yMin={1} yMax={10} markerX={designFreq}
             series={[{ label: 'SWR', values: data.map((p) => p.swr), color: 'var(--series-1)' }]} />
           <LineChart title="インピーダンス" unit="Ω" x={x} hover={hover} onHover={setHover} markerX={designFreq}
@@ -54,7 +62,7 @@ export function SweepPanel() {
             series={[{ label: 'F/B', values: data.map((p) => p.fbDb), color: 'var(--series-1)' }]} />
         </div>
       ) : (
-        <Table striped fz="xs" className="num" stickyHeader>
+        <Table striped fz="xs" className="num" stickyHeader style={{ opacity }}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th ta="right">周波数 (MHz)</Table.Th>
