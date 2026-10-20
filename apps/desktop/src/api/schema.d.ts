@@ -126,6 +126,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/optimizations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Optimisation: varies the setup's variables one at a time while the score
+         *     of the goals rises, until a whole round improves nothing, and returns the
+         *     optimised antenna with the last trials. At most the server's calculation
+         *     limit (and `maxCalculations`) run; the best antenna so far is returned
+         *     then (`stop.kind` = `calculationLimit`).
+         */
+        post: operations["optimize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/optimizations/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Writes the values of one optimisation trial back to the antenna. */
+        post: operations["apply_trial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/optimizations/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Edits of the optimisation setup (variables, "all elements", automatic
+         *     links), and the current values, element table and problems of the result.
+         */
+        post: operations["edit_optimizer_setup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sweeps": {
         parameters: {
             query?: never;
@@ -168,6 +228,22 @@ export interface components {
             stack: components["schemas"]["Stack"];
             wires: components["schemas"]["Wire"][];
         };
+        AppliedTrial: {
+            /**
+             * Format: double
+             * @description Calculation frequency (changed by a frequency variable).
+             */
+            frequencyMhz: number;
+            project: components["schemas"]["Project"];
+        };
+        /** @description Writes the values of one trial back to the antenna. */
+        ApplyTrialRequest: {
+            options?: components["schemas"]["CalcOptions"];
+            project: components["schemas"]["Project"];
+            setup: components["schemas"]["OptimizerSetup"];
+            /** @description One value per variable (`Trial::values`). */
+            values: number[];
+        };
         /** @description Parameters for automatic segmentation (MMANA "自動分割"). */
         AutoSegmentation: {
             /**
@@ -199,6 +275,12 @@ export interface components {
             start: number;
             /** Format: double */
             step: number;
+        };
+        /** @description A band scored with the others (試行バンド): frequency and sources. */
+        Band: {
+            /** Format: double */
+            frequencyMhz: number;
+            sources: components["schemas"]["Source"][];
         };
         CalcOptions: {
             /**
@@ -297,6 +379,21 @@ export interface components {
             im: number;
             /** Format: double */
             re: number;
+        };
+        /** @enum {string} */
+        ElementAxis: "width" | "height" | "xWidth";
+        /**
+         * @description What "all elements" registers for elements that have two or more of
+         *     width, height and X width (MMANA asks once, at the first such element,
+         *     and keeps the answer for the rest).
+         */
+        ElementCombination: {
+            height: boolean;
+            heightLink?: components["schemas"]["ElementAxis"] | null;
+            width: boolean;
+            widthLink?: components["schemas"]["ElementAxis"] | null;
+            xWidth: boolean;
+            xWidthLink?: components["schemas"]["ElementAxis"] | null;
         };
         /** @description Result of [`edit_antenna`]. */
         ElementEdit: {
@@ -403,6 +500,12 @@ export interface components {
             op: "roundValues";
             scaleAll?: boolean;
         };
+        /**
+         * @description What of an element varies; the `…All` parts scale every coordinate
+         *     instead of moving only the outermost ones (エレメント編集の「全ての座標を同一比率で変更」).
+         * @enum {string}
+         */
+        ElementPart: "interval" | "width" | "height" | "perimeter" | "radius" | "position" | "widthAll" | "heightAll" | "perimeterAll";
         /** @description One line of the element table. */
         ElementRow: {
             /**
@@ -491,6 +594,44 @@ export interface components {
             /** Format: int32 */
             vertical: number;
         };
+        /** @description Limits of the goals (目標詳細設定). */
+        Goals: {
+            /**
+             * @description Pulse of the current goal (`w1c`, …).
+             * @default w1c
+             */
+            currentPulse: string;
+            /**
+             * @default {
+             *       "kind": "capacitance"
+             *     }
+             */
+            matching: components["schemas"]["Matching"];
+            /**
+             * Format: double
+             * @default 25
+             */
+            maxFbDb: number;
+            /**
+             * Format: double
+             * @description Gain above this counts little more (許容最大目標).
+             * @default 100
+             */
+            maxGainDbi: number;
+            /**
+             * Format: double
+             * @description |jX| below this counts little less.
+             * @default 0
+             */
+            minJx: number;
+            /**
+             * Format: double
+             * @default 1
+             */
+            minSwr: number;
+            /** @default false */
+            minimizeCurrent: boolean;
+        };
         /** @enum {string} */
         GroundKind: "freeSpace" | "perfect" | "real";
         GroundScreen: {
@@ -508,6 +649,49 @@ export interface components {
             r: number;
             /** Format: double */
             x: number;
+        };
+        /** @enum {string} */
+        IssueCode: "noVariables" | "tooManyVariables" | "missingTarget" | "zeroValue" | "sDomainLoad" | "heightInFreeSpace" | "duplicate" | "missingVariable" | "linkLoop" | "tooManyBands" | "bandWithoutSources" | "linkValueDiffers";
+        /**
+         * @description How a variable follows another one (連携). `variable` is the 0-based
+         *     index of the variable it follows; a chain of links ends at an independent
+         *     variable, and only the last link's arithmetic applies (as in MMANA).
+         */
+        Link: {
+            /** @enum {string} */
+            kind: "independent";
+        } | {
+            /** @enum {string} */
+            kind: "same";
+            variable: number;
+        } | {
+            /** @enum {string} */
+            kind: "negated";
+            variable: number;
+        } | {
+            /** @enum {string} */
+            kind: "offset";
+            /** Format: double */
+            offset: number;
+            variable: number;
+        } | {
+            /** @enum {string} */
+            kind: "negatedOffset";
+            /** Format: double */
+            offset: number;
+            variable: number;
+        } | {
+            /** Format: double */
+            factor: number;
+            /** @enum {string} */
+            kind: "scaled";
+            variable: number;
+        } | {
+            /** Format: double */
+            divisor: number;
+            /** @enum {string} */
+            kind: "divided";
+            variable: number;
         };
         Load: components["schemas"]["LoadKind"] & {
             pulse: string;
@@ -532,6 +716,23 @@ export interface components {
             coefficients: number[][];
             /** @enum {string} */
             kind: "sDomain";
+        };
+        /** @enum {string} */
+        LoadPart: "primary" | "secondary";
+        /** @description The matching network scored by the `matching` goal (マッチング回路). */
+        Matching: {
+            /** @enum {string} */
+            kind: "capacitance";
+        } | {
+            /** @enum {string} */
+            kind: "hairpin";
+        } | {
+            /** @enum {string} */
+            kind: "impedance";
+            /** Format: double */
+            r?: number | null;
+            /** Format: double */
+            x?: number | null;
         };
         /** @description One ground medium of a real ground. */
         Medium: {
@@ -593,6 +794,102 @@ export interface components {
             y: components["schemas"]["AxisRange"];
             z: components["schemas"]["AxisRange"];
         };
+        OptimizeOutcome: {
+            best?: components["schemas"]["Trial"] | null;
+            calculations: number;
+            /**
+             * Format: double
+             * @description Calculation frequency afterwards (changed by a frequency variable).
+             */
+            frequencyMhz: number;
+            /** @description The antenna with the best values (unchanged when no trial finished). */
+            project: components["schemas"]["Project"];
+            stop: components["schemas"]["StopReason"];
+            /** @description The last trials, newest first. */
+            trials: components["schemas"]["Trial"][];
+            warnings: components["schemas"]["SetupIssue"][];
+        };
+        /**
+         * @description Optimisation. `options` are those the antenna is normally calculated
+         *     with: their frequency is where the search starts (the setup sets the
+         *     pattern resolution).
+         */
+        OptimizeRequest: {
+            /** @description Stop after this many calculations; the best antenna so far is returned. */
+            maxCalculations?: number | null;
+            options?: components["schemas"]["CalcOptions"];
+            project: components["schemas"]["Project"];
+            setup: components["schemas"]["OptimizerSetup"];
+        };
+        /** @description MMANA's optimisation sheet (最適化シート) without its trial list. */
+        OptimizerSetup: {
+            /**
+             * @description Pitches are in the variables' units (可変ﾋﾟｯﾁは絶対値), not percent.
+             * @default true
+             */
+            absolutePitch: boolean;
+            /**
+             * @description Bands scored together. With fewer than two, the antenna is scored at
+             *     its calculation frequency with its own sources.
+             * @default []
+             */
+            bands: components["schemas"]["Band"][];
+            /**
+             * @description 2° patterns (分解能２°), about twice as fast.
+             * @default true
+             */
+            coarsePattern: boolean;
+            /**
+             * @description Band 1 counts fully and the others 1 / band count each (１番を重視);
+             *     otherwise all bands add up.
+             * @default true
+             */
+            emphasizeFirstBand: boolean;
+            /**
+             * @default {
+             *       "currentPulse": "w1c",
+             *       "matching": {
+             *         "kind": "capacitance"
+             *       },
+             *       "maxFbDb": 25,
+             *       "maxGainDbi": 100,
+             *       "minJx": 0,
+             *       "minSwr": 1,
+             *       "minimizeCurrent": false
+             *     }
+             */
+            goals: components["schemas"]["Goals"];
+            /**
+             * @description No goals (目標なし（単純スイープ）): step each variable from its value
+             *     up to its maximum and back down to its minimum, recording every trial.
+             * @default false
+             */
+            sweepOnly: boolean;
+            /** @default [] */
+            variables: components["schemas"]["Variable"][];
+            /**
+             * @default {
+             *       "current": 0,
+             *       "elevation": 0,
+             *       "fb": 50,
+             *       "gain": 50,
+             *       "jx": 50,
+             *       "matching": 0,
+             *       "swr": 0
+             *     }
+             */
+            weights: components["schemas"]["Weights"];
+        };
+        /**
+         * @description Edits of the optimisation setup, replayed on the setup as sent, and a
+         *     description of the result (current values, element table, problems).
+         */
+        OptimizerSetupRequest: {
+            operations?: components["schemas"]["SetupOp"][];
+            options?: components["schemas"]["CalcOptions"];
+            project: components["schemas"]["Project"];
+            setup?: components["schemas"]["OptimizerSetup"];
+        };
         ParsedProject: {
             project: components["schemas"]["Project"];
             /** @description Non-fatal problems found while reading the file. */
@@ -637,6 +934,16 @@ export interface components {
             /** Format: double */
             z: number;
         };
+        /**
+         * @description Which point of the wire stays put when its polar form changes.
+         * @enum {string}
+         */
+        PolarAnchor: "start" | "end" | "center";
+        /**
+         * @description A wire in polar form (ワイヤ（極座標）): length, azimuth or zenith angle.
+         * @enum {string}
+         */
+        PolarQuantity: "length" | "azimuth" | "zenith";
         /** @description RFC 9457 problem details. */
         Problem: {
             detail: string;
@@ -645,6 +952,39 @@ export interface components {
             title: string;
             /** @description Stable identifier of the error kind, e.g. `calculation-failed`. */
             type: string;
+        };
+        /** @description One calculation of the search (a line of MMANA's optimisation log). */
+        Progress: {
+            band: number;
+            /** @description 1-based count of calculations so far. */
+            calculation: number;
+            /**
+             * Format: float
+             * @description |I| (A) at the current goal's pulse, when that goal is weighted.
+             */
+            current?: number | null;
+            /** Format: float */
+            elevationDeg: number;
+            /** Format: float */
+            fbDb: number;
+            /** Format: double */
+            frequencyMhz: number;
+            /** Format: float */
+            gainDbi: number;
+            impedance: components["schemas"]["Complex"];
+            /** @description The trial scored better than any before (after its last band). */
+            improved: boolean;
+            /**
+             * Format: double
+             * @description The trial's score, after its last band.
+             */
+            score?: number | null;
+            /** Format: float */
+            swr: number;
+            /** @description Current value of every variable. */
+            values: number[];
+            /** @description The variable being varied (0-based). */
+            variable: number;
         };
         /**
          * @description An antenna together with the environment it is evaluated in; this is what
@@ -702,6 +1042,62 @@ export interface components {
             start: components["schemas"]["Point3"];
             wire: number;
         };
+        /** @description Result of [`edit_setup`]. */
+        SetupEdit: {
+            /** @description Whether each operation was applied (false: not allowed, nothing changed). */
+            applied: boolean[];
+            base: number;
+            /** @description The element table the element variables refer to. */
+            elements: components["schemas"]["ElementRow"][];
+            /** @description What stops a run. */
+            errors: components["schemas"]["SetupIssue"][];
+            /** @description For linked variables, the value the link gives. */
+            linkedValues: (number | null)[];
+            setup: components["schemas"]["OptimizerSetup"];
+            /** @description Value of what each variable varies now (`null` when it does not exist). */
+            values: (number | null)[];
+            warnings: components["schemas"]["SetupIssue"][];
+        };
+        /** @description Something in the setup that stops a run, or a warning. */
+        SetupIssue: {
+            code: components["schemas"]["IssueCode"];
+            message: string;
+            other?: number | null;
+            variable?: number | null;
+        };
+        /** @description An edit of the variable table (the setup dialog's buttons and menus). */
+        SetupOp: {
+            index: number;
+            /** @enum {string} */
+            op: "setTarget";
+            target: components["schemas"]["VariableTarget"];
+        } | {
+            index: number;
+            /** @enum {string} */
+            op: "insert";
+        } | {
+            index: number;
+            /** @enum {string} */
+            op: "delete";
+        } | {
+            /** @enum {string} */
+            op: "clear";
+        } | {
+            combination?: components["schemas"]["ElementCombination"] | null;
+            /** @description Intervals (間隔表記) rather than positions. */
+            intervals: boolean;
+            /** @enum {string} */
+            op: "allElements";
+            /** @description The `…All` parts (全ての座標を同一比率で変更). */
+            scaleAll: boolean;
+        } | {
+            index: number;
+            /** @enum {string} */
+            op: "linkSame";
+        } | {
+            /** @enum {string} */
+            op: "linkElements";
+        };
         /**
          * @description Voltage source. `pulse` uses MMANA's notation: `w1c` (centre of wire 1),
          *     `w2b` / `w2e` (begin / end), optional offset `w2b3`, or a raw pulse number.
@@ -713,6 +1109,8 @@ export interface components {
             /** Format: double */
             voltage: number;
         };
+        /** @enum {string} */
+        SourcePart: "phase" | "voltage";
         SourceResult: {
             current: components["schemas"]["Complex"];
             impedance: components["schemas"]["Complex"];
@@ -740,6 +1138,22 @@ export interface components {
         };
         /** @enum {string} */
         StackDirection: "centered" | "up" | "down";
+        /** @enum {string} */
+        StackPart: "both" | "horizontal" | "vertical";
+        StopReason: {
+            /** @enum {string} */
+            kind: "converged";
+        } | {
+            /** @enum {string} */
+            kind: "cancelled";
+        } | {
+            /** @enum {string} */
+            kind: "calculationLimit";
+        } | {
+            /** @enum {string} */
+            kind: "failed";
+            message: string;
+        };
         /** @description One point of a frequency sweep. */
         SweepPoint: {
             /** Format: float */
@@ -766,6 +1180,123 @@ export interface components {
         SweepResponse: {
             points: components["schemas"]["SweepPoint"][];
         };
+        /** @description A remembered trial (`MVAL`). Figures are of band 1. */
+        Trial: {
+            /** Format: float */
+            elevationDeg: number;
+            /** Format: float */
+            fbDb: number;
+            /** Format: float */
+            gainDbi: number;
+            /** @description Total gain (dBi) every 2° of azimuth, from 0°. */
+            horizontalPattern: number[];
+            impedance: components["schemas"]["Complex"];
+            /** Format: double */
+            score: number;
+            /** Format: float */
+            swr: number;
+            /** @description Value of every variable. */
+            values: number[];
+            /** @description Total gain (dBi) every 2° of the vertical cut (as `Patterns::vertical`). */
+            verticalPattern: number[];
+        };
+        /** @description One row of the variable table (`AVAL`). */
+        Variable: {
+            link?: components["schemas"]["Link"];
+            /** Format: double */
+            max: number;
+            maxFrom?: number | null;
+            /** Format: double */
+            min: number;
+            /** @description Use the current value of this variable as the minimum instead (`#n`). */
+            minFrom?: number | null;
+            /**
+             * Format: double
+             * @description Smallest step tried (ピッチ): in the variable's unit, or in percent of
+             *     its starting value when the setup's `absolutePitch` is off.
+             */
+            pitch: number;
+            target: components["schemas"]["VariableTarget"];
+        };
+        /** @description What a variable changes. Indices are 0-based. */
+        VariableTarget: {
+            /** @enum {string} */
+            kind: "wire";
+            part: components["schemas"]["WirePart"];
+            wire: number;
+        } | {
+            anchor: components["schemas"]["PolarAnchor"];
+            /** @enum {string} */
+            kind: "polarWire";
+            quantity: components["schemas"]["PolarQuantity"];
+            wire: number;
+        } | {
+            element: number;
+            /** @enum {string} */
+            kind: "element";
+            part: components["schemas"]["ElementPart"];
+        } | {
+            /** @enum {string} */
+            kind: "load";
+            load: number;
+            part: components["schemas"]["LoadPart"];
+        } | {
+            /** @enum {string} */
+            kind: "height";
+        } | {
+            /** @enum {string} */
+            kind: "frequency";
+        } | {
+            /** @enum {string} */
+            kind: "source";
+            part: components["schemas"]["SourcePart"];
+            source: number;
+        } | {
+            /** @enum {string} */
+            kind: "stack";
+            part: components["schemas"]["StackPart"];
+        };
+        /**
+         * @description How much each goal counts (評価の割合, 0-100 each). All zero counts every
+         *     goal equally.
+         */
+        Weights: {
+            /**
+             * Format: int32
+             * @default 0
+             */
+            current: number;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            elevation: number;
+            /**
+             * Format: int32
+             * @default 50
+             */
+            fb: number;
+            /**
+             * Format: int32
+             * @default 50
+             */
+            gain: number;
+            /**
+             * Format: int32
+             * @default 50
+             */
+            jx: number;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            matching: number;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            swr: number;
+        };
         Wire: {
             end: components["schemas"]["Point3"];
             note?: string;
@@ -780,6 +1311,8 @@ export interface components {
         };
         /** @enum {string} */
         WireMaterial: "lossless" | "copper" | "copperPipe" | "aluminum" | "aluminumPipe" | "iron" | "ironPipe";
+        /** @enum {string} */
+        WirePart: "y1" | "z1" | "y2" | "z2" | "radius" | "x1" | "x2";
     };
     responses: never;
     parameters: never;
@@ -1010,6 +1543,123 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NearFieldResponse"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    optimize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptimizeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimizeOutcome"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    apply_trial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyTrialRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppliedTrial"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    edit_optimizer_setup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptimizerSetupRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupEdit"];
                 };
             };
             400: {

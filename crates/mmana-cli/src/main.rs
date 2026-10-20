@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
+use mmana_core::optimize::{self, OptimizerSetup, StopReason};
 use mmana_core::{CalcOptions, PatternResolution, Project, maa};
 use std::path::{Path, PathBuf};
 
@@ -38,6 +39,21 @@ enum Command {
         points: usize,
         #[arg(long)]
         json: bool,
+    },
+    /// Optimise an antenna with a setup (JSON `OptimizerSetup`, as the API takes it).
+    Optimize {
+        file: PathBuf,
+        #[arg(long)]
+        setup: PathBuf,
+        /// Starting calculation frequency in MHz (default: design frequency).
+        #[arg(long)]
+        freq: Option<f64>,
+        /// Stop after this many calculations.
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Write the optimised antenna (.maa, or project JSON by extension).
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
     /// Convert a .maa file to project JSON.
     ToJson { file: PathBuf },
@@ -99,6 +115,53 @@ fn main() -> Result<()> {
                     "{:>10.4} {:>9.2} {:>9.2} {:>8.2} {:>8.2} {:>7.2}",
                     p.frequency_mhz, p.impedance.re, p.impedance.im, p.swr, p.gain_dbi, p.fb_db
                 );
+            }
+        }
+        Command::Optimize { file, setup, freq, limit, output } => {
+            let project = load(&file)?;
+            let bytes = std::fs::read(&setup).with_context(|| format!("reading {}", setup.display()))?;
+            let setup: OptimizerSetup = serde_json::from_slice(&bytes)?;
+            let opts = CalcOptions { frequency_mhz: freq, ..Default::default() };
+            println!(
+                "{:>6} {:>4} {:>12} {:>8} {:>8} {:>7} {:>7} {:>6} {:>5}",
+                "calc", "var", "value", "R", "jX", "SWR", "dBi", "F/B", "elev"
+            );
+            let out = optimize::optimize(&project, &opts, &setup, limit, |p| {
+                println!(
+                    "{:>6} {:>4} {:>12.6} {:>8.2} {:>8.2} {:>7.2} {:>7.2} {:>6.2} {:>5.1}{}",
+                    p.calculation,
+                    p.variable + 1,
+                    p.values[p.variable],
+                    p.impedance.re,
+                    p.impedance.im,
+                    p.swr,
+                    p.gain_dbi,
+                    p.fb_db,
+                    p.elevation_deg,
+                    if p.improved { " *" } else { "" }
+                );
+                true
+            })?;
+            for w in &out.warnings {
+                eprintln!("warning: {}", w.message);
+            }
+            match &out.stop {
+                StopReason::Converged => println!("converged after {} calculations", out.calculations),
+                StopReason::CalculationLimit => println!("stopped at the limit of {} calculations", out.calculations),
+                StopReason::Cancelled => println!("cancelled"),
+                StopReason::Failed { message } => println!("stopped: {message}"),
+            }
+            if let Some(best) = &out.best {
+                let values: Vec<String> = best.values.iter().map(|v| format!("{v}")).collect();
+                println!("best values: {}", values.join(", "));
+            }
+            if let Some(output) = output {
+                let bytes = if output.extension().is_some_and(|e| e.eq_ignore_ascii_case("json")) {
+                    serde_json::to_vec_pretty(&out.project)?
+                } else {
+                    maa::encode(&maa::write(&out.project))
+                };
+                std::fs::write(&output, bytes).with_context(|| format!("writing {}", output.display()))?;
             }
         }
         Command::ToJson { file } => println!("{}", serde_json::to_string_pretty(&load(&file)?)?),

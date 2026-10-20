@@ -681,15 +681,192 @@ public:
 	CWGroup* GetCW(int w);
 	double GetXAbs(int w);
 };
+enum AVTYPE {
+	avWIRE,
+	avELE,
+	avLOAD,
+	avHEIGHT,
+	avFREQ,
+	avWIREP,
+	avFEED,
+	avSTACK,
+};
+#define	AVMAX	128		// 処理できる最適化バリアブルの最大数
+// 最適化バリアブルの配列構造
+typedef struct {
+	int		Type;		// バリアブルの形式  0-ﾜｲﾔ, 1-ｴﾚﾒﾝﾄ, 2-ﾛｰﾄﾞ, 3-地上高
+	int		With;			// 関連番号(-1:関連なし, 0～ 関連付けの番号)
+	int		Pos;			// 変数の位置(ワイヤ番号,ｴﾚﾒﾝﾄ番号,ﾛｰﾄﾞ番号等)
+	int		SubPos;			// 変数の箇所
+	USHORT	Min;
+	USHORT	Max;
+	int		Dummy1;
+	int		Dummy2;
+
+	double	DW;				// 可変幅
+	double	DMAX;			// 最適化最大制限の値
+	double	DMIN;			// 最適化最小制限の値
+	double	DIO;			// 最適化の初期間隔
+	double	DI;				// 最適化の実行間隔
+	double	DC;				// 現在の値
+}AVAL;
+
+#define BMAX	10
+typedef struct {			// 給電点の定義
+	double	fq;
+	CDEF	cdef[4];
+}BDEF;
+// 目標の構造
+typedef struct {
+	int		TF;				// 目標あり／なし
+	double	TG;				// Ｇのトレードオフ
+	double	TFB;			// ＦＢのトレードオフ
+	double	TJX;			// ＪＸのトレードオフ
+	double	TSWR;			// ＳＷＲのトレードオフ
+	double	TELV;			// エレベーション
+	double	TM;				// シンプルマッチング
+	double	TI;				// 電流
+
+	double	CG;
+	double	CFB;
+	double	CRR;
+	double	CJX;
+	double	CSWR;
+	double	CELV;
+	double	CM;
+
+	double	V;				// 評価値
+	double	AM;				// 前回の評価値
+	double	VM;				// 最大の評価値
+	double	AD[AVMAX];		// 最大時の各変数の値
+
+	int		bmax;			// バンドの数
+	int		bweight;
+	BDEF	bdef[BMAX];		// バンドの定義
+
+	double	MaxGain;		// 目標最大ゲイン
+	double	MaxFB;			// 目標最大ＦＢ比
+	double	MinJX;
+	double	MinSWR;
+	int		Match;
+	double	TergR;
+	double	TergJX;
+
+	int		IType;			// 0-電流最大, 1-電流最小
+	char	IPLUS[8+1];		// 電流位置
+	double	CurCur;			// 現在の電流値
+}ATRG;
+#define	MVMAX	128			// 記録リストの数
+typedef struct {			// 記憶リストの構造
+	double	AD[AVMAX];			// パラメータの状態
+	double	V;					// 評価値
+
+	float	CG;					// 表示用
+	float	CFB;
+	float	CRR;
+	float	CJX;
+	float	CSWR;
+	float	CELV;
+	short	PtnH[180];			// 2度分解能の水平パターン
+	short	PtnV[91];			// 2度分解能の垂直パターン
+}MVAL;
+// 最適化実行クラス
+class CACal
+{
+public:
+	AVAL	aval[AVMAX];	// 変数の配列
+	int		amax;			// 登録した変数の数
+	CWGroupList	WList;		// エレメントデータ
+	ATRG	atrg;			// 目標のデータ
+	int		PitchUnit;		// ピッチの単位
+	int		DegUnit;		// パターンの分解能
+
+	double	BV[BMAX];
+	double	BVM[BMAX];
+
+	ENVDEF	*EP;
+	ANTDEF	*AP;
+	CRes	maxres;			// 最大時の結果のデータ
+	char	InfoTTL[192];
+	char	Info[192];
+private:
+	MVAL	mval[MVMAX];	// 記憶リストの配列
+	int		mvwp;			// 次の書き込み位置
+	int		mvmax;			// 現在のデータ数
+private:
+	void WriteMV(void);
+	int IsMV(double &max);
+
+	void AdjWireChen(int w, WDEF *op, WDEF *np);
+	void SetParaWire(AVAL *ap, double d);
+	void SetParaEle(AVAL *ap, double d);
+	void SetParaLoad(AVAL *ap, double d);
+	void SetParaHeight(AVAL *ap);
+	void SetParaWireP(AVAL *ap, double d);
+	void SetParaFeed(AVAL *ap, double d);
+	void SetParaStack(AVAL *ap, double d);
+	double GetParaWire(AVAL *ap);
+	double GetParaEle(AVAL *ap);
+	double GetParaLoad(AVAL *ap);
+	double GetParaWireP(AVAL *ap);
+	double GetParaFeed(AVAL *ap);
+	double GetParaStack(AVAL *ap);
+	int SetMinMax(AVAL *ap, double &d);
+	void SetPara(int n);
+	int Exec(void);
+//	int SetMax(RESL *rp);
+	int IsSameMax(void);
+	int _GetLastChen(int c, int n);
+	void SetNowCur(RESL *rp);
+	double CalcV(RESL *rp, CRes *cp);
+public:
+	CACal(void);
+	inline ~CACal(){
+	};
+
+	inline int GetChenNo(int n){
+		if( n >= 0 ){
+			return n & 0x0000ffff;
+		}
+		else {
+			return -n-2;
+		}
+	};
+	int GetLastChen(int c, int n);
+	int WriteToFp(FILE *fp);		// セットアップのセーブ
+	int ReadFromFp(FILE *fp);		// セットアップのロード
+	inline int GetMV(void){
+		return mvmax;
+	};
+	void ReadMV(MVAL *wp, int n);
+
+	void Init(ANTDEF *ap, ENVDEF *ep);
+	int InitPara(void);
+	void SetPara(int n, double d);
+	void SetBand(ANTDEF *ap, int n);
+	void SetTradeOff(int gain, int fb, int jx, int swr, int elv, int mch, int cur);
+	int Execute(void);
+	double GetNowValue(int n);
+	double GetNowValue(int n, double sc);
+	void AdjSetup(int n);
+	int Check(void);
+	void SetTradeStr(LPSTR t);
+	void DispStat(TMemo *tp);
+};
 void ZSCopy(LPSTR t, LPCSTR p, int n);
 double RoundUp(double d);
 double RoundUp(double d, double s);
+double RoundUpStr(double d);
+double GetNormal(double d);
 double CalcSWR(double Rl, double Xl, double Ro, double Xo);
 void CalcParaZ(double &R, double &X, double f, double L, double C, double Q);
+double GetDeg(double x, double y);
 LPSTR SkipSpace(LPSTR sp);
 LPCSTR SkipSpace(LPCSTR sp);
 LPSTR StrDlm(LPSTR &tp, LPSTR sp);
 LPSTR StrDlm(LPSTR &tp, LPSTR sp, char c);
+void ErrorMB(LPCSTR fmt, ...);
+int YesNoMB(LPCSTR fmt, ...);
 PDEF *FindPP(ANTDEF *ap, double r);
 int CombWire(WDEF *tbl, ANTDEF *ap, PDEF *pp, WDEF *wp);
 void AddWZ(ANTDEF *ap, double x1, double y1, double z1, double x2, double y2, double z2, double R, int SEG, int wno);
@@ -702,6 +879,10 @@ int Str2Seg(int &Seg, LPCSTR p);
 
 int Str2PlusNo(ANTDEF *ap, LPCSTR s);
 void AdjPlusNo(ANTDEF *ap);
+void AdjWireChen(WDEF *wp, double ox, double oy, double oz, double nx, double ny, double nz);
+void AdjWireChen(WDEF *wp, int wmax, double ox, double oy, double oz, double nx, double ny, double nz);
+void AdjWireChen(WDEF *wp, int wmax, WDEF *np, WDEF *op);
+void GetWirePoll(double &WL, double &XYD, double &YZD, WDEF *wp);
 int Calc(double &d, LPCSTR p);
 int CalcI(int &d, LPCSTR p);
 int CalcU(int &d, LPCSTR p);

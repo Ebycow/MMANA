@@ -3,6 +3,7 @@
 //! Environment:
 //! - `MMANA_ADDR` (default `127.0.0.1:8080`)
 //! - `MMANA_MAX_PULSES` (default 4096)
+//! - `MMANA_MAX_OPTIMIZE_CALCULATIONS` (default 2000)
 //! - `RUST_LOG` (default `info`)
 
 use mmana_api::{AppState, Limits, app};
@@ -17,6 +18,9 @@ async fn main() -> std::io::Result<()> {
     let mut limits = Limits::default();
     if let Some(n) = std::env::var("MMANA_MAX_PULSES").ok().and_then(|v| v.parse().ok()) {
         limits.max_pulses = n;
+    }
+    if let Some(n) = std::env::var("MMANA_MAX_OPTIMIZE_CALCULATIONS").ok().and_then(|v| v.parse().ok()) {
+        limits.max_optimize_calculations = n;
     }
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;

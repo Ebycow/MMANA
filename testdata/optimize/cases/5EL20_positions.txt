@@ -1,0 +1,10 @@
+# 5-element Yagi by element positions (間隔表記 off), pitch in percent,
+# 1° patterns, gain / F/B / SWR with goal limits
+file 5EL20.MAA
+weights 60 40 0 30 0 0 0
+pitchabs 0
+coarse 0
+maxfb 20
+minswr 1.2
+allele 0 0
+limit 250

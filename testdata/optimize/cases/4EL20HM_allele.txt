@@ -1,0 +1,5 @@
+# the question's default answer (everything registered, nothing linked), scaling all coordinates
+file 4EL20HM.MAA
+weights 50 50 20 0 0 0 0
+allele 0 1
+limit 120

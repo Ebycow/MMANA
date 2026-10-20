@@ -1,0 +1,4 @@
+# refused: two variables vary the same thing
+file 3EL20.MAA
+set 0 ele 0 1
+set 1 ele 0 1

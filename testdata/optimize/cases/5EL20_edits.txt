@@ -1,0 +1,11 @@
+# setup edits: insert, delete, element links (エレメントの連携設定) and clear
+file 5EL20.MAA
+weights 50 50 30 0 0 0 0
+set 0 ele 0 0
+clear
+allele 1 0
+delete 2
+insert 0
+delete 0
+linkele
+limit 100

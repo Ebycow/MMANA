@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { CalcOptions, CalcResult, ParsedProject, Project, SweepPoint } from '../api/types';
+import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, SweepPoint } from '../api/types';
 import { EngineError, files, transport } from '../api/transport';
+import { defaultSetup } from '../domain/optimize';
 import { defaultOptions, newProject } from '../domain/project';
 
 const HISTORY_LIMIT = 200;
@@ -14,6 +15,41 @@ export interface SweepState {
   stale: boolean;
   running: boolean;
 }
+
+/** Calculations kept for the optimisation log. */
+const LOG_LIMIT = 300;
+
+export interface OptimizerState {
+  /** MMANA's optimisation sheet; kept until another document is opened. */
+  setup: OptimizerSetup;
+  dialogOpen: boolean;
+  resultsOpen: boolean;
+  running: boolean;
+  /** Calculations of the run, newest last (the improving ones always, others now and then). */
+  log: Progress[];
+  /** The calculation with the best score so far. */
+  best: Progress | null;
+  startedAt: number | null;
+  finishedAt: number | null;
+  outcome: OptimizeOutcome | null;
+  /** The setup the outcome's trials have values for. */
+  outcomeSetup: OptimizerSetup | null;
+  error: EngineError | null;
+}
+
+const freshOptimizer = (): OptimizerState => ({
+  setup: defaultSetup(),
+  dialogOpen: false,
+  resultsOpen: false,
+  running: false,
+  log: [],
+  best: null,
+  startedAt: null,
+  finishedAt: null,
+  outcome: null,
+  outcomeSetup: null,
+  error: null,
+});
 
 export interface AppState {
   project: Project;
@@ -40,6 +76,7 @@ export interface AppState {
   showCurrents: boolean;
   /** The element editor (エレメント編集) is open; it edits a copy of the antenna. */
   elementEditorOpen: boolean;
+  optimizer: OptimizerState;
 
   /** Applies an edit to a copy of the project and records it for undo. */
   edit: (recipe: (draft: Project) => void) => void;
@@ -56,6 +93,12 @@ export interface AppState {
   calculate: () => Promise<void>;
   runSweep: () => Promise<void>;
   save: (saveAs: boolean) => Promise<boolean>;
+  setOptimizer: (patch: Partial<OptimizerState>) => void;
+  /** Optimises the antenna with the sheet and applies the result as one undoable edit. */
+  runOptimization: () => Promise<void>;
+  cancelOptimization: () => Promise<void>;
+  /** Writes the values of a trial of the last run back (the trial list's 更新). */
+  applyTrial: (values: number[]) => Promise<void>;
 }
 
 const sweepAround = (mhz: number): Pick<SweepState, 'startMhz' | 'stopMhz'> => ({
@@ -75,6 +118,7 @@ const freshDocument = (project: Project) => ({
   resultStale: false,
   calcError: null,
   sweep: { ...sweepAround(project.antenna.frequencyMhz), points: 21, data: null, stale: false, running: false },
+  optimizer: freshOptimizer(),
 });
 
 const toEngineError = (e: unknown) =>
@@ -92,6 +136,19 @@ export const useApp = create<AppState>()((set, get) => {
     resultStale: get().result != null,
     sweep: { ...get().sweep, stale: get().sweep.data != null },
   });
+
+  /** The calculation frequency an optimisation left, unless it is today's. */
+  const keepFrequency = (mhz: number) => {
+    const { options, project } = get();
+    if (mhz !== (options.frequencyMhz ?? project.antenna.frequencyMhz)) get().setOptions({ frequencyMhz: mhz });
+  };
+  const applyProject = (p: Project, mhz: number) => {
+    get().edit((draft) => {
+      draft.antenna = structuredClone(p.antenna);
+      draft.environment = structuredClone(p.environment);
+    });
+    keepFrequency(mhz);
+  };
 
   const openDocument = (project: Project, fileName: string, filePath: string | null) => {
     generation++;
@@ -202,6 +259,42 @@ export const useApp = create<AppState>()((set, get) => {
       // the file holds `project`; edits made while saving are still unsaved
       set({ dirty: get().project !== project });
       return true;
+    },
+
+    setOptimizer: (patch) => set({ optimizer: { ...get().optimizer, ...patch } }),
+
+    runOptimization: async () => {
+      const { project, options, optimizer } = get();
+      if (optimizer.running) return;
+      const setup = optimizer.setup;
+      const gen = generation;
+      const patch = (p: Partial<OptimizerState>) => gen === generation && get().setOptimizer(p);
+      patch({ running: true, log: [], best: null, error: null, startedAt: performance.now(), finishedAt: null });
+      try {
+        const outcome = await transport.optimize({ project, options, setup, maxCalculations: null }, (p) => {
+          const o = get().optimizer;
+          patch({ log: [...o.log.slice(1 - LOG_LIMIT), p], best: p.improved ? p : o.best });
+        });
+        if (gen !== generation) return;
+        if (outcome.best) applyProject(outcome.project, outcome.frequencyMhz);
+        patch({ running: false, finishedAt: performance.now(), outcome, outcomeSetup: setup });
+        if (outcome.best) await get().calculate();
+      } catch (e) {
+        patch({ running: false, finishedAt: performance.now(), error: toEngineError(e) });
+      }
+    },
+
+    cancelOptimization: () => transport.cancelOptimize(),
+
+    applyTrial: async (values) => {
+      const { project, options, optimizer } = get();
+      const setup = optimizer.outcomeSetup;
+      if (!setup) return;
+      const gen = generation;
+      const applied = await transport.applyTrial({ project, options, setup, values });
+      if (gen !== generation) return;
+      applyProject(applied.project, applied.frequencyMhz);
+      await get().calculate();
     },
   };
 });

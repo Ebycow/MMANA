@@ -9,6 +9,7 @@
                 │  calc      calculate / sweep / far_field / near_field           │
                 │  pattern   パターン走査と利得・F/B・打ち上げ角（CRes 相当）      │
                 │  elements  エレメント編集（CWGroup / CWGroupList の移植）        │
+                │  optimize  最適化（CACal の移植）                               │
                 │  engine    MININEC3 本体（mininec3.cpp の移植）                  │
                 └──────▲───────────────────▲──────────────────────▲───────────────┘
                        │                   │                      │
@@ -67,6 +68,7 @@
 | `LoadAntStrings` / `SaveAntStrings` | `maa.rs` |
 | `Calc`（数式入力） | `expr.rs` |
 | `CWGroup`, `CWGroupList`, `TGrpWireDlg` の編集規則 | `elements.rs` |
+| `CACal`, `CACal::Exec`, `ACalExecute`, `TACalDlg` の変数操作 | `optimize.rs` |
 
 ## 検証の仕組み（Oracle テスト）
 
@@ -115,6 +117,27 @@ reference/oracle/gen_golden.sh
 - オリジナルの `AnaLoop` は、ループが閉じないときワイヤ配列の 1 つ先に書き込みます。
   Oracle では配列の確保に余白を足してこの書き込みを受け止めます（計算用の Oracle とは別のバイナリにしています）。
 
+## 最適化（optimize）
+
+ワイヤの座標・エレメントの寸法・集中定数・地上高・周波数・給電点・スタック間隔を変数にして、
+利得・F/B・jX・SWR・打ち上げ角・マッチング回路・電流の重み付きの評価値が上がるように、変数を 1 つずつ動かす機能です
+（オリジナルの `CACal`、`Main.cpp` の `CACal::Exec` と `ACalExecute`、設定ダイアログ `ACalBox.cpp` の変数操作）。
+
+- **探索はオリジナルと同じ値を同じ順に試します。** 変数ごとに評価値が上がる間は歩幅を倍にして進み、下がったら戻るという手順、
+  直近 128 件の試行の記録（同じ組み合わせは計算せずに記録の評価値を使う）、評価値の式（`RESL` が `float` で持つ値を `float` のまま使う箇所を含む）を
+  文単位で写しています。エレメント変数は `elements::ElementList` を使い、オリジナルと同じくエレメントの境界を解析し直しません。
+- **状態を持たない API です。** `optimize::optimize` はアンテナと設定（MMANA の「最適化シート」）を受け取り、最良の値を反映したアンテナと
+  直近の試行を返します。試行の書き戻しは `apply_trial`、変数表の編集（全エレメント・自動連携登録・挿入・削除）は `edit_setup` が、
+  エレメント編集と同じく操作の列を受け取って毎回最初から再生します。
+- **途中経過と中止。** `optimize` は計算のたびにコールバックを呼び、`false` が返ると、その時点までの最良の状態で終わります。
+  デスクトップアプリは Tauri のチャネルで途中経過を UI に送り（評価値が上がった計算は必ず、それ以外は 40 ms ごと）、中止ボタンでフラグを立てます。
+  HTTP API は計算回数の上限（`MMANA_MAX_OPTIMIZE_CALCULATIONS`）までで打ち切ります。
+- **検証は計算エンジンと同じ方式です。** `extract.sh` が `CACal`・`CACal::Exec`・`TACalDlg` の変数操作を行範囲でそのまま抜き出し、
+  `reference/oracle/optimize_main.cpp` が `testdata/optimize/cases/*.txt` の設定で実行して、計算ごとの値・結果・評価値、試行の記録、
+  最終的なアンテナを `testdata/optimize/golden` に書き出します（`reference/oracle/gen_optimize.sh`）。
+  `crates/mmana-core/tests/optimize.rs` がそれと比較します。試す値は四則演算だけで決まるのでどの環境でも一致しますが、評価値は計算エンジンの結果なので、
+  正解データを作った macOS/arm64 以外では許容誤差で比較し、評価値がわずかに異なって探索が分かれた時点で比較をやめます。
+
 ## 性能
 
 数値を 1 ビットも変えずに速くするため、**各要素が受ける演算の列はそのままにして、計算の順序と共有だけを変えています。**
@@ -148,5 +171,5 @@ reference/oracle/bench.sh                            # オリジナルの C++ �
 ## 次のフェーズ
 
 1. 3D ビューでの直接編集（ワイヤー描画、移動・回転ギズモ、スナップ）
-2. 最適化（`CACal` の移植。エレメントの寸法を変数にするときは `elements::ElementList` を使う）
+2. 最適化シートの保存・読み込み（設定と試行の一覧をファイルに残す）
 3. 結果の比較、近傍界・遠方界ファイルの書き出し、印刷 / PDF、インストーラとファイル関連付け

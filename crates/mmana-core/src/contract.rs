@@ -9,9 +9,10 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::elements::{ElementEdit, ElementOp};
+use crate::optimize::{OptimizeError, OptimizeOutcome, OptimizerSetup, Progress, SetupEdit, SetupOp};
 use crate::{
     Antenna, AxisRange, CalcError, CalcOptions, CalcResult, FarFieldSample, NearFieldSample, NearFieldSpec, Project,
-    SweepPoint, elements, maa,
+    SweepPoint, elements, maa, optimize,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,6 +93,57 @@ pub struct ElementEditRequest {
     pub operations: Vec<ElementOp>,
 }
 
+/// Optimisation. `options` are those the antenna is normally calculated
+/// with: their frequency is where the search starts (the setup sets the
+/// pattern resolution).
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct OptimizeRequest {
+    pub project: Project,
+    #[serde(default)]
+    pub options: CalcOptions,
+    pub setup: OptimizerSetup,
+    /// Stop after this many calculations; the best antenna so far is returned.
+    #[serde(default)]
+    pub max_calculations: Option<usize>,
+}
+
+/// Edits of the optimisation setup, replayed on the setup as sent, and a
+/// description of the result (current values, element table, problems).
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct OptimizerSetupRequest {
+    pub project: Project,
+    #[serde(default)]
+    pub options: CalcOptions,
+    #[serde(default)]
+    pub setup: OptimizerSetup,
+    #[serde(default)]
+    pub operations: Vec<SetupOp>,
+}
+
+/// Writes the values of one trial back to the antenna.
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct ApplyTrialRequest {
+    pub project: Project,
+    #[serde(default)]
+    pub options: CalcOptions,
+    pub setup: OptimizerSetup,
+    /// One value per variable (`Trial::values`).
+    pub values: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct AppliedTrial {
+    pub project: Project,
+    /// Calculation frequency (changed by a frequency variable).
+    pub frequency_mhz: f64,
+}
+
 /// Number of samples an axis produces (a step of 0 means one sample).
 pub fn axis_len(a: &AxisRange) -> usize {
     if a.step == 0.0 { 1 } else { a.count.max(1) as usize }
@@ -122,4 +174,22 @@ pub fn near_field(req: &NearFieldRequest) -> Result<NearFieldResponse, CalcError
 
 pub fn edit_elements(req: &ElementEditRequest) -> ElementEdit {
     elements::edit_antenna(&req.antenna, &req.operations)
+}
+
+/// Runs the optimisation; `progress` sees every calculation and stops the
+/// search by returning false.
+pub fn optimize(
+    req: &OptimizeRequest,
+    progress: impl FnMut(&Progress) -> bool,
+) -> Result<OptimizeOutcome, OptimizeError> {
+    optimize::optimize(&req.project, &req.options, &req.setup, req.max_calculations, progress)
+}
+
+pub fn edit_optimizer_setup(req: &OptimizerSetupRequest) -> SetupEdit {
+    optimize::edit_setup(&req.project, &req.options, &req.setup, &req.operations)
+}
+
+pub fn apply_trial(req: &ApplyTrialRequest) -> Result<AppliedTrial, OptimizeError> {
+    let (project, frequency_mhz) = optimize::apply_trial(&req.project, &req.options, &req.setup, &req.values)?;
+    Ok(AppliedTrial { project, frequency_mhz })
 }

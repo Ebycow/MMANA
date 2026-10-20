@@ -1,0 +1,8 @@
+# any Z: R = 75 with jX unscored (任意のZ, jX = *), then jX = 10 with R unscored
+file DP20.MAA
+weights 0 0 0 0 0 100 0
+match 2 75 *
+set 0 wire 0 2
+linksame 0
+set 2 height 0 0
+limit 150

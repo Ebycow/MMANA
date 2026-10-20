@@ -14,4 +14,10 @@ ${CXX:-clang++} -std=c++14 -O2 -ffp-contract=off -w \
 	"$HERE/generated/mininec3.cpp" "$HERE/generated/comlib_extract.cpp" "$HERE/generated/cwgroup_extract.cpp" \
 	"$HERE/elements_main.cpp" \
 	-o "$HERE/build/elements"
-echo "built $HERE/build/oracle and $HERE/build/elements"
+# shim/optimize/Main.h replaces shim/Main.h: the optimiser reaches the antenna through MainWnd
+${CXX:-clang++} -std=c++14 -O2 -ffp-contract=off -w \
+	-I"$HERE/shim/optimize" -I"$HERE" -I"$HERE/shim" -I"$HERE/generated" \
+	"$HERE/generated/mininec3.cpp" "$HERE/generated/comlib_extract.cpp" "$HERE/generated/cwgroup_extract.cpp" \
+	"$HERE/generated/cacal_extract.cpp" "$HERE/generated/acalbox_extract.cpp" "$HERE/optimize_main.cpp" \
+	-o "$HERE/build/optimize"
+echo "built $HERE/build/oracle, $HERE/build/elements and $HERE/build/optimize"

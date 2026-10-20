@@ -1,0 +1,6 @@
+# the least current there, with F/B
+file 2EL20.MAA
+weights 0 50 0 0 0 0 50
+current w2c 1
+set 0 ele 0 1
+limit 120

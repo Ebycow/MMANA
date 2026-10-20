@@ -1,0 +1,6 @@
+# elements with width, height and X width: register all three, link the
+# width to the height (the question 全エレメント asks once)
+file XQ20.MAA
+weights 50 50 20 0 0 0 0
+allele 1 0 1 1 1 1 0 0
+limit 120

@@ -8,9 +8,11 @@ import {
   IconFile,
   IconFileImport,
   IconFolderOpen,
+  IconListDetails,
   IconMoon,
   IconPlayerPlay,
   IconSun,
+  IconTarget,
 } from '@tabler/icons-react';
 import { useApp } from '../state/store';
 
@@ -35,6 +37,9 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const calculating = useApp((s) => s.calculating);
   const autoCalc = useApp((s) => s.autoCalc);
   const setAutoCalc = useApp((s) => s.setAutoCalc);
+  const optimizing = useApp((s) => s.optimizer.running);
+  const hasTrials = useApp((s) => (s.optimizer.outcome?.trials.length ?? 0) > 0);
+  const setOptimizer = useApp((s) => s.setOptimizer);
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const dark = colorScheme === 'dark';
 
@@ -92,6 +97,24 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Text>
         )}
       </Text>
+      <Group gap={2} wrap="nowrap">
+        <Tooltip label="寸法・集中定数・地上高などを変えながら、利得・F/B・SWR などの目標に近づけます">
+          <Button
+            size="sm"
+            variant="default"
+            leftSection={<IconTarget size={15} />}
+            loading={optimizing}
+            onClick={() => setOptimizer({ dialogOpen: true })}
+          >
+            最適化
+          </Button>
+        </Tooltip>
+        <Tooltip label="最適化結果の一覧">
+          <ActionIcon aria-label="最適化結果の一覧" disabled={!hasTrials || optimizing} onClick={() => setOptimizer({ resultsOpen: true })}>
+            <IconListDetails size={17} />
+          </ActionIcon>
+        </Tooltip>
+      </Group>
       <Tooltip label="編集するたびに自動で再計算します">
         <Switch label="自動計算" checked={autoCalc} onChange={(e) => setAutoCalc(e.currentTarget.checked)} />
       </Tooltip>

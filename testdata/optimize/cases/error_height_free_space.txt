@@ -1,0 +1,3 @@
+# refused: the height in free space
+file 5EL20.MAA
+set 0 height 0 0

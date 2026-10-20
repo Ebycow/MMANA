@@ -1,0 +1,3 @@
+# refused: the base element's interval is 0
+file 3EL20.MAA
+set 0 ele 1 0

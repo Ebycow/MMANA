@@ -1,0 +1,7 @@
+# resonant frequency of a ground plane: frequency variable, jX only, 1° patterns
+file GP40.MAA
+weights 0 0 100 0 0 0 0
+coarse 0
+set 0 freq 0 0
+var 0 pitch=0.01
+limit 120

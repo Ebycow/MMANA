@@ -1,0 +1,6 @@
+# no goals: a plain sweep of the height (目標なし（単純スイープ）)
+file DP20.MAA
+sweep 1
+set 0 height 0 0
+var 0 pitch=1 min=14 max=25
+limit 100

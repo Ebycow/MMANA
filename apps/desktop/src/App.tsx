@@ -7,6 +7,8 @@ import { EngineError, files, isTauri, startupFile, transport } from './api/trans
 import { AppHeader, type FileActions } from './components/AppHeader';
 import { EditorPanel } from './components/EditorPanel';
 import { ElementEditor } from './components/ElementEditor';
+import { OptimizerDialog } from './components/OptimizerDialog';
+import { OptimizerResults } from './components/OptimizerResults';
 import { Panel } from './components/Panel';
 import { ResultsPanel } from './components/ResultsPanel';
 import { SamplesModal } from './components/SamplesModal';
@@ -105,9 +107,10 @@ export function App() {
     ['mod+O', actions.open],
     ['mod+S', actions.save],
     ['mod+shift+S', actions.saveAs],
-    // the element editor has its own undo while it is open
-    ['mod+Z', () => !s.getState().elementEditorOpen && s.getState().undo()],
-    ['mod+shift+Z', () => !s.getState().elementEditorOpen && s.getState().redo()],
+    // the element editor has its own undo while it is open; a running
+    // optimisation applies its result to the antenna it started from
+    ['mod+Z', () => !s.getState().elementEditorOpen && !s.getState().optimizer.running && s.getState().undo()],
+    ['mod+shift+Z', () => !s.getState().elementEditorOpen && !s.getState().optimizer.running && s.getState().redo()],
     ['Escape', () => s.getState().selectWire(null)],
   ]);
   // Cmd+Enter must also work while typing in a cell
@@ -191,6 +194,8 @@ export function App() {
       </AppShell.Footer>
       <SamplesModal opened={samplesOpen} onClose={samples.close} onPick={pickSample} />
       <ElementEditor />
+      <OptimizerDialog />
+      <OptimizerResults />
     </AppShell>
   );
 }

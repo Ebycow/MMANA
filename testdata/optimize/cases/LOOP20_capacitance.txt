@@ -1,0 +1,7 @@
+# a quad loop (R above the SWR reference) matched by a capacitance match:
+# its perimeter
+file LOOP20.MAA
+weights 0 0 0 0 0 100 0
+match 0
+allele 1 0
+limit 150

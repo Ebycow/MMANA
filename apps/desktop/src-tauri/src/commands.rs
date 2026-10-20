@@ -3,13 +3,19 @@
 //! of TypeScript types. Calculations run on the blocking pool.
 
 use mmana_core::contract::{
-    self, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse, NearFieldRequest,
-    NearFieldResponse, ParsedProject, SweepRequest, SweepResponse,
+    self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
+    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, SweepRequest,
+    SweepResponse,
 };
 use mmana_core::elements::ElementEdit;
+use mmana_core::optimize::{OptimizeError, OptimizeOutcome, Progress, SetupEdit};
 use mmana_core::{CalcError, CalcResult, Project, maa};
 use serde::Serialize;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
+use tauri::ipc::Channel;
 
 /// Same shape as the API's problem+json body.
 #[derive(Debug, Serialize)]
@@ -23,6 +29,12 @@ pub struct CommandError {
 impl From<CalcError> for CommandError {
     fn from(e: CalcError) -> Self {
         Self { kind: "calculation-failed", title: "The antenna cannot be calculated", detail: e.to_string() }
+    }
+}
+
+impl From<OptimizeError> for CommandError {
+    fn from(e: OptimizeError) -> Self {
+        Self { kind: "invalid-optimizer-setup", title: "The optimisation setup cannot run", detail: e.to_string() }
     }
 }
 
@@ -134,4 +146,51 @@ pub async fn near_field(request: NearFieldRequest) -> Result<NearFieldResponse, 
 #[tauri::command]
 pub fn edit_elements(request: ElementEditRequest) -> ElementEdit {
     contract::edit_elements(&request)
+}
+
+/// Stops the running optimisation (managed state).
+#[derive(Default)]
+pub struct Optimizer {
+    cancel: Arc<AtomicBool>,
+}
+
+/// Optimisation. Calculations that improve the score are always reported;
+/// the others at most every 40 ms, which is plenty for the log and keeps
+/// small antennas (a calculation per millisecond) from flooding the UI.
+#[tauri::command]
+pub async fn optimize(
+    state: tauri::State<'_, Optimizer>,
+    request: OptimizeRequest,
+    on_progress: Channel<Progress>,
+) -> Result<OptimizeOutcome, CommandError> {
+    let cancel = state.cancel.clone();
+    cancel.store(false, Ordering::SeqCst);
+    blocking(move || {
+        let mut last: Option<Instant> = None;
+        Ok(contract::optimize(&request, |p| {
+            if p.improved || last.is_none_or(|t| t.elapsed() >= Duration::from_millis(40)) {
+                let _ = on_progress.send(p.clone());
+                last = Some(Instant::now());
+            }
+            !cancel.load(Ordering::SeqCst)
+        })?)
+    })
+    .await
+}
+
+/// The running optimisation returns its best antenna so far.
+#[tauri::command]
+pub fn cancel_optimization(state: tauri::State<'_, Optimizer>) {
+    state.cancel.store(true, Ordering::SeqCst);
+}
+
+/// Edits of the optimisation setup; fast enough for the IPC thread.
+#[tauri::command]
+pub fn edit_optimizer_setup(request: OptimizerSetupRequest) -> SetupEdit {
+    contract::edit_optimizer_setup(&request)
+}
+
+#[tauri::command]
+pub fn apply_trial(request: ApplyTrialRequest) -> Result<AppliedTrial, CommandError> {
+    Ok(contract::apply_trial(&request)?)
 }

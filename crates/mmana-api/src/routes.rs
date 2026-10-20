@@ -7,10 +7,12 @@ use axum::extract::{FromRequest, Query, State};
 use axum::http::header;
 use axum::response::IntoResponse;
 use mmana_core::contract::{
-    self, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse, NearFieldRequest,
-    NearFieldResponse, ParsedProject, SweepRequest, SweepResponse, axis_len,
+    self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
+    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, SweepRequest,
+    SweepResponse, axis_len,
 };
 use mmana_core::elements::ElementEdit;
+use mmana_core::optimize::{OptimizeOutcome, SetupEdit};
 use mmana_core::{CalcOptions, CalcResult, Project, maa};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -192,4 +194,65 @@ pub async fn edit_elements(
         )));
     }
     Ok(ApiJson(blocking(move || Ok(contract::edit_elements(&req))).await?))
+}
+
+/// Optimisation: varies the setup's variables one at a time while the score
+/// of the goals rises, until a whole round improves nothing, and returns the
+/// optimised antenna with the last trials. At most the server's calculation
+/// limit (and `maxCalculations`) run; the best antenna so far is returned
+/// then (`stop.kind` = `calculationLimit`).
+#[utoipa::path(
+    post,
+    path = "/v1/optimizations",
+    tag = "optimization",
+    request_body = OptimizeRequest,
+    responses((status = 200, body = OptimizeOutcome), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn optimize(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<OptimizeRequest>,
+) -> Result<ApiJson<OptimizeOutcome>, ApiError> {
+    let limit = state.limits.max_optimize_calculations;
+    let req = OptimizeRequest {
+        options: checked_options(req.options, &state.limits),
+        max_calculations: Some(req.max_calculations.map_or(limit, |n| n.min(limit))),
+        ..req
+    };
+    Ok(ApiJson(blocking(move || Ok(contract::optimize(&req, |_| true)?)).await?))
+}
+
+/// Edits of the optimisation setup (variables, "all elements", automatic
+/// links), and the current values, element table and problems of the result.
+#[utoipa::path(
+    post,
+    path = "/v1/optimizations/setup",
+    tag = "optimization",
+    request_body = OptimizerSetupRequest,
+    responses((status = 200, body = SetupEdit), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn edit_optimizer_setup(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<OptimizerSetupRequest>,
+) -> Result<ApiJson<SetupEdit>, ApiError> {
+    // like element editing, every edit may walk all wires
+    let work = (req.operations.len() + 1).saturating_mul(req.project.antenna.wires.len().max(8));
+    if work > state.limits.max_element_work {
+        return Err(ApiError::LimitExceeded(format!(
+            "(operations + 1) × wires must be at most {}",
+            state.limits.max_element_work
+        )));
+    }
+    Ok(ApiJson(blocking(move || Ok(contract::edit_optimizer_setup(&req))).await?))
+}
+
+/// Writes the values of one optimisation trial back to the antenna.
+#[utoipa::path(
+    post,
+    path = "/v1/optimizations/apply",
+    tag = "optimization",
+    request_body = ApplyTrialRequest,
+    responses((status = 200, body = AppliedTrial), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn apply_trial(ApiJson(req): ApiJson<ApplyTrialRequest>) -> Result<ApiJson<AppliedTrial>, ApiError> {
+    Ok(ApiJson(contract::apply_trial(&req)?))
 }

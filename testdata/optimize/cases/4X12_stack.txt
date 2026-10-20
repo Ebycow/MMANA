@@ -1,0 +1,6 @@
+# stacked Yagis: the horizontal stacking distance for gain
+file 4X12.MAA
+weights 100 20 0 0 0 0 0
+set 0 stack 0 1
+var 0 pitch=0.02
+limit 25

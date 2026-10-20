@@ -346,6 +346,12 @@ impl Solved {
     pub fn near_field(&self, spec: &NearFieldSpec) -> Vec<NearFieldSample> {
         self.engine.near_field(spec)
     }
+
+    /// `Str2PlusNo` on the calculated (stacked) model: the 1-based pulse a
+    /// name such as `w1c` refers to, or 0.
+    pub(crate) fn pulse_no(&self, name: &str) -> i32 {
+        self.ap.pulse_no(name)
+    }
 }
 
 fn patterns(p: &PatternState) -> Patterns {

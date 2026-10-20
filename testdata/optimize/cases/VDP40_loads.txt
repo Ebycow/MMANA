@@ -1,0 +1,7 @@
+# loading coils: one L and the other linked to it (自動連携登録); jX and SWR
+file VDP40.MAA
+weights 0 0 60 40 0 0 0
+set 0 load 0 0
+linksame 0
+var 0 pitch=0.5
+limit 200

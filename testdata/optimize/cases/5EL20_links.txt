@@ -1,0 +1,18 @@
+# every kind of link, a chain of links and a bound from another variable
+file 5EL20.MAA
+weights 50 50 30 0 0 0 0
+set 0 ele 2 1
+set 1 ele 3 1
+var 1 link=offset:0:-0.2
+set 2 ele 4 1
+var 2 link=scaled:1:0.98
+set 3 ele 1 1
+var 3 link=negoffset:0:21
+set 4 ele 0 1
+var 4 link=divided:0:0.9
+set 5 ele 3 0
+set 6 ele 4 0
+var 5 max=@6
+set 7 ele 0 0
+var 7 min=@5 pitch=0.05
+limit 200

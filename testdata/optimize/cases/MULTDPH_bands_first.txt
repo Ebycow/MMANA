@@ -1,0 +1,9 @@
+# the same with band 1 counting fully and band 2 half (１番を重視)
+file MULTDPH.MAA
+weights 0 0 20 100 0 0 0
+emphasize 1
+band 7.01 w2b 0 1
+band 14.1 w2b 0 1
+set 0 load 2 1
+linksame 0
+limit 120

@@ -215,7 +215,7 @@ pub struct EditedWires {
 }
 
 /// `RoundUp(d, s)`: rounds half away from zero to a multiple of 1/s.
-fn round_up(d: f64, s: f64) -> f64 {
+pub(crate) fn round_up(d: f64, s: f64) -> f64 {
     if d >= 0.0 {
         let mut d = d * s;
         d += 0.5;
@@ -1409,6 +1409,121 @@ impl ElementList {
             out.origins.push(self.slots[s].origin);
         }
         out
+    }
+}
+
+/// What the optimiser (`CACal`, see [`crate::optimize`]) does with the
+/// element table. Like the original it changes wires and elements in place
+/// and never analyses the elements again, so bounds stay as they were found.
+impl ElementList {
+    /// `wmax`
+    pub(crate) fn wire_count(&self) -> usize {
+        self.slots.len()
+    }
+
+    /// `wdef[w]`: X is relative to the element's centre (see [`Self::x_abs`]).
+    pub(crate) fn wire(&self, w: usize) -> &Wire {
+        &self.slots[w].wire
+    }
+
+    pub(crate) fn wire_mut(&mut self, w: usize) -> &mut Wire {
+        &mut self.slots[w].wire
+    }
+
+    /// `GetEleNo`
+    pub(crate) fn element_of(&self, w: usize) -> Option<usize> {
+        self.groups.iter().position(|g| g.refs.iter().any(|r| r.slot == w))
+    }
+
+    /// `GetXAbs`: what a wire's relative X is added to. It counts from where
+    /// the first element was found, so it is off once that element moved.
+    pub(crate) fn x_abs(&self, w: usize) -> f64 {
+        match self.element_of(w) {
+            Some(e) => self.position(e) + self.groups[0].c[X],
+            None => 0.0,
+        }
+    }
+
+    /// `CACal::AdjWireChen`: the other wires of the element that ended where
+    /// wire `w` ended (`old`) follow it.
+    pub(crate) fn follow_wire(&mut self, w: usize, old: &Wire) {
+        let Some(e) = self.element_of(w) else { return };
+        let new = self.slots[w].wire.clone();
+        for r in &self.groups[e].refs {
+            if r.slot == w {
+                continue;
+            }
+            let wp = &mut self.slots[r.slot].wire;
+            for (o, n) in [(old.start, new.start), (old.end, new.end)] {
+                if n != o {
+                    // `AdjWireChen` moves one end at most
+                    if wp.start == o {
+                        wp.start = n;
+                    } else if wp.end == o {
+                        wp.end = n;
+                    }
+                }
+            }
+        }
+    }
+
+    pub(crate) fn element_interval(&self, n: usize) -> f64 {
+        self.interval(n)
+    }
+
+    pub(crate) fn set_element_interval(&mut self, n: usize, d: f64) {
+        *self.interval_mut(n) = d;
+    }
+
+    /// `GetXPosition`
+    pub(crate) fn element_position(&self, n: usize) -> f64 {
+        self.position(n)
+    }
+
+    /// `SetXPosition`
+    pub(crate) fn set_element_position(&mut self, n: usize, d: f64) {
+        self.set_position(n, d);
+    }
+
+    /// `GetWidth`, `GetHeight`, `GetRound`, `GetR` and `EnbXw` of element `n`.
+    pub(crate) fn element_width(&self, n: usize) -> f64 {
+        self.groups[n].width()
+    }
+
+    pub(crate) fn element_height(&self, n: usize) -> f64 {
+        self.groups[n].height()
+    }
+
+    pub(crate) fn element_perimeter(&self, n: usize) -> f64 {
+        self.groups[n].perimeter()
+    }
+
+    pub(crate) fn element_radius(&self, n: usize) -> f64 {
+        self.groups[n].radius(&self.slots)
+    }
+
+    pub(crate) fn element_x_width(&self, n: usize) -> bool {
+        self.groups[n].xw
+    }
+
+    /// `SetWidth` / `SetWidthAll`
+    pub(crate) fn set_element_width(&mut self, n: usize, all: bool, d: f64) {
+        self.groups[n].set_width(&mut self.slots, all, d);
+    }
+
+    /// `SetHeight` / `SetHeightAll`
+    pub(crate) fn set_element_height(&mut self, n: usize, all: bool, d: f64) {
+        self.groups[n].set_height(&mut self.slots, all, d);
+    }
+
+    /// `SetRound` / `SetRoundAll`
+    pub(crate) fn set_element_perimeter(&mut self, n: usize, all: bool, d: f64) {
+        self.groups[n].set_perimeter(&mut self.slots, all, d);
+    }
+
+    /// `SetR`
+    pub(crate) fn set_element_radius(&mut self, n: usize, d: f64) {
+        self.groups[n].set_radius(&mut self.slots, d);
     }
 }
 

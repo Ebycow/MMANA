@@ -1,0 +1,6 @@
+# hairpin match (R below the reference) with gain
+file 3EL20.MAA
+weights 50 0 0 0 0 80 0
+match 1
+allele 1 0
+limit 200

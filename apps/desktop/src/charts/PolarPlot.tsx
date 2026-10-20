@@ -16,9 +16,11 @@ interface PolarPlotProps {
   maxDb: number;
   title: string;
   subtitle: string;
+  /** Draws only the total gain (the optimiser's trial list keeps no polarisations). */
+  totalOnly?: boolean;
 }
 
-export function PolarPlot({ kind, cut, maxDb, title, subtitle }: PolarPlotProps) {
+export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: PolarPlotProps) {
   const { ref, width, height } = useElementSize();
   const [hover, setHover] = useState<number | null>(null);
   const pad = 24;
@@ -46,6 +48,7 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle }: PolarPlotProps)
   };
 
   const tip = hover != null ? pt(hover, cut.total[hover]) : null;
+  const series = totalOnly ? SERIES.filter((s) => s.key === 'total') : SERIES;
 
   return (
     <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
@@ -97,7 +100,7 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle }: PolarPlotProps)
             })}
             {half && <line x1={cx - R} y1={cy} x2={cx + R} y2={cy} stroke="var(--chart-axis)" />}
 
-            {[...SERIES].reverse().map((s) => (
+            {[...series].reverse().map((s) => (
               <path
                 key={s.key}
                 d={path(cut[s.key])}
@@ -124,7 +127,7 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle }: PolarPlotProps)
             role="status"
           >
             <div style={{ fontWeight: 600, marginBottom: 2 }}>{sampleLabel(kind, hover, cut.stepDeg)}</div>
-            {SERIES.map((s) => (
+            {series.map((s) => (
               <div key={s.key} className="num" style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
                 <span>
                   <span className="legend-swatch" style={{ borderColor: s.color, borderTopStyle: s.dash ? 'dashed' : 'solid' }} />

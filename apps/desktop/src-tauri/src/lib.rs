@@ -4,6 +4,7 @@ mod commands;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(commands::Optimizer::default())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(tauri_plugin_log::Builder::default().level(log::LevelFilter::Info).build())?;
@@ -21,6 +22,10 @@ pub fn run() {
             commands::far_field,
             commands::near_field,
             commands::edit_elements,
+            commands::optimize,
+            commands::cancel_optimization,
+            commands::edit_optimizer_setup,
+            commands::apply_trial,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MMANA application");

@@ -1,0 +1,12 @@
+# trap dipole on two bands: the traps' C (L follows to keep the resonance)
+# and a wire end; SWR on both bands added up
+file MULTDPH.MAA
+weights 0 0 20 100 0 0 0
+emphasize 0
+band 7.01 w2b 0 1
+band 14.1 w2b 0 1
+set 0 load 0 1
+linksame 0
+set 2 wire 6 2
+linksame 2
+limit 160

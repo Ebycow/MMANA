@@ -1,6 +1,8 @@
 // One interface for both back ends: Tauri commands in the desktop app, the
 // HTTP API (crates/mmana-api) when the UI runs in a browser.
 import type {
+  AppliedTrial,
+  ApplyTrialRequest,
   CalcResult,
   CalculationRequest,
   ElementEdit,
@@ -9,8 +11,13 @@ import type {
   FarFieldResponse,
   NearFieldRequest,
   NearFieldResponse,
+  OptimizeOutcome,
+  OptimizeRequest,
+  OptimizerSetupRequest,
   ParsedProject,
+  Progress,
   Project,
+  SetupEdit,
   SweepRequest,
   SweepResponse,
 } from './types';
@@ -34,6 +41,17 @@ export interface Transport {
   farField(req: FarFieldRequest): Promise<FarFieldResponse>;
   nearField(req: NearFieldRequest): Promise<NearFieldResponse>;
   editElements(req: ElementEditRequest): Promise<ElementEdit>;
+  /**
+   * Runs an optimisation. The desktop app reports calculations as they run
+   * (the improving ones always, the others now and then); over HTTP only the
+   * outcome arrives.
+   */
+  optimize(req: OptimizeRequest, onProgress: (p: Progress) => void): Promise<OptimizeOutcome>;
+  /** Whether a running optimisation can be stopped (it then returns its best so far). */
+  readonly canCancelOptimize: boolean;
+  cancelOptimize(): Promise<void>;
+  editOptimizerSetup(req: OptimizerSetupRequest): Promise<SetupEdit>;
+  applyTrial(req: ApplyTrialRequest): Promise<AppliedTrial>;
 }
 
 /** File access differs per platform: native dialogs vs. browser upload/download. */
@@ -79,6 +97,16 @@ export const tauriTransport: Transport = {
   farField: (request) => tauriInvoke('far_field', { request }),
   nearField: (request) => tauriInvoke('near_field', { request }),
   editElements: (request) => tauriInvoke('edit_elements', { request }),
+  async optimize(request, onProgress) {
+    const { Channel } = await import('@tauri-apps/api/core');
+    const onProgressChannel = new Channel<Progress>();
+    onProgressChannel.onmessage = onProgress;
+    return tauriInvoke('optimize', { request, onProgress: onProgressChannel });
+  },
+  canCancelOptimize: true,
+  cancelOptimize: () => tauriInvoke('cancel_optimization', {}),
+  editOptimizerSetup: (request) => tauriInvoke('edit_optimizer_setup', { request }),
+  applyTrial: (request) => tauriInvoke('apply_trial', { request }),
 };
 
 const FILTERS = [{ name: 'MMANA アンテナ', extensions: ['maa', 'MAA', 'json'] }];
@@ -140,6 +168,11 @@ export function httpTransport(baseUrl: string): Transport {
     farField: (req) => json('/v1/far-field', req),
     nearField: (req) => json('/v1/near-field', req),
     editElements: (req) => json('/v1/elements', req),
+    optimize: (req) => json('/v1/optimizations', req),
+    canCancelOptimize: false,
+    cancelOptimize: async () => {},
+    editOptimizerSetup: (req) => json('/v1/optimizations/setup', req),
+    applyTrial: (req) => json('/v1/optimizations/apply', req),
   };
 }
 

@@ -176,6 +176,31 @@ tr:hover .row-actions,
 tr.selected .row-actions {
   opacity: 1;
 }
+/* optimiser: the kind / position / part columns are menus */
+.cell-select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 3px 4px;
+  height: 27px;
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+.cell-select:hover {
+  background: var(--mantine-color-default-hover);
+}
+.cell-select:focus {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--panel-bg);
+}
+.cell-select option {
+  background: var(--panel-bg);
+  color: var(--text-primary);
+}
 /* element editor: the form column opens a menu */
 .kind-button {
   display: inline-flex;

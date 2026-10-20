@@ -23,6 +23,7 @@ pub mod expr;
 pub mod format;
 pub mod maa;
 pub mod model;
+pub mod optimize;
 mod par;
 mod pattern;
 

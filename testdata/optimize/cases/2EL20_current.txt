@@ -1,0 +1,6 @@
+# current goal: the most current in the parasitic element's centre
+file 2EL20.MAA
+weights 0 0 0 0 0 0 100
+current w2c 0
+allele 1 0
+limit 150

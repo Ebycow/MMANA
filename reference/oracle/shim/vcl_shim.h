@@ -30,6 +30,7 @@ typedef char *LPSTR;
 // Only referenced by unused overloads (CTextString(AnsiString&), StripWireNotes).
 class AnsiString { public: const char *c_str(void) const { return ""; } };
 class TCanvas;
+class TMemo;
 
 static inline char *strupr(char *s)
 {

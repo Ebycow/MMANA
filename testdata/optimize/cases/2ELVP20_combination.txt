@@ -1,0 +1,5 @@
+# the same question answered differently: no X width, height linked to the width
+file 2ELVP20.MAA
+weights 50 50 20 0 0 0 0
+allele 1 1 1 1 0 0 1 0
+limit 120

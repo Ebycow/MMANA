@@ -24,6 +24,8 @@ pub struct Limits {
     /// Element editing: (operations + 1) × wires, which bounds the wires the
     /// edits can create (each edit copies at most one element).
     pub max_element_work: usize,
+    /// Calculations one optimisation may run (requests may ask for fewer).
+    pub max_optimize_calculations: usize,
     pub max_body_bytes: usize,
 }
 
@@ -34,6 +36,7 @@ impl Default for Limits {
             max_sweep_points: 401,
             max_field_points: 65_341,
             max_element_work: 1_000_000,
+            max_optimize_calculations: 2000,
             max_body_bytes: 4 * 1024 * 1024,
         }
     }
@@ -55,12 +58,18 @@ pub struct AppState {
         routes::sweep,
         routes::far_field,
         routes::near_field,
-        routes::edit_elements
+        routes::edit_elements,
+        routes::optimize,
+        routes::edit_optimizer_setup,
+        routes::apply_trial
     ),
+    // reported by the desktop app while an optimisation runs
+    components(schemas(mmana_core::optimize::Progress)),
     tags(
         (name = "calculations", description = "Antenna calculations"),
         (name = "files", description = "MMANA .maa file conversion"),
         (name = "editing", description = "Antenna editing"),
+        (name = "optimization", description = "Optimisation of dimensions, loads, height and more"),
         (name = "system")
     )
 )]
@@ -82,6 +91,9 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/far-field", post(routes::far_field))
         .route("/v1/near-field", post(routes::near_field))
         .route("/v1/elements", post(routes::edit_elements))
+        .route("/v1/optimizations", post(routes::optimize))
+        .route("/v1/optimizations/setup", post(routes::edit_optimizer_setup))
+        .route("/v1/optimizations/apply", post(routes::apply_trial))
         .with_state(state)
         .layer(RequestBodyLimitLayer::new(body_limit))
         .layer(CorsLayer::permissive())

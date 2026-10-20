@@ -6,6 +6,7 @@ JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）
 **移植した計算エンジンは、オリジナルの C++ エンジンとビット単位で同じ結果を返します**
 （サンプル 81 ファイルとその派生、計 149 ケースで検証済み。詳細は [docs/architecture.md](docs/architecture.md)）。
 エレメント編集も、オリジナルの `CWGroup` / `CWGroupList` とビット単位で同じワイヤを書き出します（81 ファイル × 7 種の編集手順、計 567 ケース）。
+最適化も、オリジナルの `CACal` と同じ値を同じ順に試し、同じアンテナで終わります（25 ケースで、計算ごとの値・評価値・試行の記録・最終形状を検証）。
 
 ## 構成
 
@@ -42,6 +43,7 @@ cargo test --release
 # CLI
 cargo run --release -p mmana-cli -- calc testdata/maa/3EL20.MAA
 cargo run --release -p mmana-cli -- sweep testdata/maa/3EL20.MAA --start 13.9 --stop 14.4 --points 6
+cargo run --release -p mmana-cli -- optimize testdata/maa/3EL20.MAA --setup setup.json -o out.maa
 
 # API サーバー（http://127.0.0.1:8080）
 cargo run --release -p mmana-api
@@ -60,6 +62,9 @@ cargo run --release -p mmana-api
 | POST | `/v1/far-field` | 任意方向の遠方界 |
 | POST | `/v1/near-field` | 近傍界（電界・磁界） |
 | POST | `/v1/elements` | エレメント編集（つながったワイヤをエレメントとして、幅・全周・間隔などを変更） |
+| POST | `/v1/optimizations` | 最適化（寸法・集中定数・地上高などを変えて、利得・F/B・SWR などの目標に近づける） |
+| POST | `/v1/optimizations/setup` | 最適化の変数表の編集（全エレメント・自動連携登録など）と、現在値・問題点の確認 |
+| POST | `/v1/optimizations/apply` | 最適化の試行結果をアンテナに書き戻す |
 
 エラーは [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) の `application/problem+json` で返します。
 
@@ -70,7 +75,7 @@ curl -s --data-binary @testdata/maa/3EL20.MAA localhost:8080/v1/maa/parse \
   | jq '{impedance, swr, gainDbi, fbDb, elevationDeg}'
 ```
 
-環境変数: `MMANA_ADDR`（待ち受けアドレス）、`MMANA_MAX_PULSES`（パルス数の上限）、`RUST_LOG`。
+環境変数: `MMANA_ADDR`（待ち受けアドレス）、`MMANA_MAX_PULSES`（パルス数の上限）、`MMANA_MAX_OPTIMIZE_CALCULATIONS`（最適化 1 回の計算回数の上限、既定 2000）、`RUST_LOG`。
 
 ## ライセンス
 

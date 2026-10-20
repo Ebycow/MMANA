@@ -1,0 +1,9 @@
+# dipole length through one wire end and its mirror (自動連携登録 links
+# Y1 to -Y2), and the radius; resonance (jX only)
+file DP20.MAA
+weights 0 0 100 0 0 0 0
+set 0 wire 0 2
+linksame 0
+set 2 wire 0 4
+var 2 pitch=0.0005 min=0.0002 max=0.01
+limit 200

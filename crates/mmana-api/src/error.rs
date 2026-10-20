@@ -4,6 +4,7 @@ use axum::extract::rejection::JsonRejection;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use mmana_core::CalcError;
+use mmana_core::optimize::OptimizeError;
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -26,6 +27,8 @@ pub enum ApiError {
     Calculation(CalcError),
     /// A request limit (points, pulses...) was exceeded.
     LimitExceeded(String),
+    /// The optimisation setup cannot run.
+    Optimize(OptimizeError),
     Internal(String),
 }
 
@@ -37,6 +40,12 @@ impl ApiError {
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "calculation-failed",
                 "The antenna cannot be calculated",
+                e.to_string(),
+            ),
+            ApiError::Optimize(e) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid-optimizer-setup",
+                "The optimisation setup cannot run",
                 e.to_string(),
             ),
             ApiError::LimitExceeded(d) => {
@@ -62,6 +71,12 @@ impl IntoResponse for ApiError {
 impl From<CalcError> for ApiError {
     fn from(e: CalcError) -> Self {
         ApiError::Calculation(e)
+    }
+}
+
+impl From<OptimizeError> for ApiError {
+    fn from(e: OptimizeError) -> Self {
+        ApiError::Optimize(e)
     }
 }
 

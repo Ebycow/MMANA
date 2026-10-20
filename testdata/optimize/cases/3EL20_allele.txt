@@ -1,0 +1,6 @@
+# 3-element Yagi: every element's width and the intervals (全エレメント),
+# gain and F/B with some jX
+file 3EL20.MAA
+weights 50 50 20 0 0 0 0
+allele 1 0
+limit 300
