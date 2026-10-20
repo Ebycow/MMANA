@@ -158,7 +158,19 @@ describe('optimisation in the store', () => {
     expect(s.options.frequencyMhz).toBe(14.2);
     expect(s.optimizer.outcomeSetup).toBe(s.optimizer.setup);
     s.undo();
+    // the frequency the optimisation moved comes back with the antenna
     expect(useApp.getState().project).toBe(before);
+    expect(useApp.getState().options.frequencyMhz).toBeNull();
+    useApp.getState().redo();
+    expect(useApp.getState().project.antenna.wires[0].end.y).toBe(5.5);
+    expect(useApp.getState().options.frequencyMhz).toBe(14.2);
+  });
+
+  it('does not undo frequency changes made outside the history', () => {
+    useApp.getState().edit((p) => void (p.antenna.wires[0].end.z += 1));
+    useApp.getState().setOptions({ frequencyMhz: 14.3 });
+    useApp.getState().undo();
+    expect(useApp.getState().options.frequencyMhz).toBe(14.3);
   });
 
   it('leaves the antenna alone when no trial finished', async () => {

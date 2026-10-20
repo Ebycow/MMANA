@@ -61,13 +61,23 @@ const freshOptimizer = (): OptimizerState => ({
   error: null,
 });
 
+/**
+ * A step of the undo history: the project before it, and the calculation
+ * options before it when the step changed them too (an optimisation that
+ * moved the frequency). Other changes of the options are not undone.
+ */
+export interface HistoryEntry {
+  project: Project;
+  options?: CalcOptions;
+}
+
 export interface AppState {
   project: Project;
   fileName: string;
   filePath: string | null;
   dirty: boolean;
-  past: Project[];
-  future: Project[];
+  past: HistoryEntry[];
+  future: HistoryEntry[];
 
   /** 0-based index of the selected wire. */
   selectedWire: number | null;
@@ -88,8 +98,11 @@ export interface AppState {
   elementEditorOpen: boolean;
   optimizer: OptimizerState;
 
-  /** Applies an edit to a copy of the project and records it for undo. */
-  edit: (recipe: (draft: Project) => void) => void;
+  /**
+   * Applies an edit to a copy of the project and records it for undo; an
+   * options patch is applied and undone with it.
+   */
+  edit: (recipe: (draft: Project) => void, options?: Partial<CalcOptions>) => void;
   undo: () => void;
   redo: () => void;
   load: (parsed: ParsedProject, name: string, path: string | null) => void;
@@ -120,8 +133,8 @@ const initialProject = newProject();
 
 const freshDocument = (project: Project) => ({
   project,
-  past: [] as Project[],
-  future: [] as Project[],
+  past: [] as HistoryEntry[],
+  future: [] as HistoryEntry[],
   dirty: false,
   selectedWire: null,
   result: null,
@@ -147,17 +160,17 @@ export const useApp = create<AppState>()((set, get) => {
     sweep: { ...get().sweep, stale: get().sweep.data != null },
   });
 
-  /** The calculation frequency an optimisation left, unless it is today's. */
-  const keepFrequency = (mhz: number) => {
-    const { options, project } = get();
-    if (mhz !== (options.frequencyMhz ?? project.antenna.frequencyMhz)) get().setOptions({ frequencyMhz: mhz });
-  };
+  /** An optimised antenna and the calculation frequency it left, as one undoable step. */
   const applyProject = (p: Project, mhz: number) => {
-    get().edit((draft) => {
-      draft.antenna = structuredClone(p.antenna);
-      draft.environment = structuredClone(p.environment);
-    });
-    keepFrequency(mhz);
+    const { options, project } = get();
+    const moved = mhz !== (options.frequencyMhz ?? project.antenna.frequencyMhz);
+    get().edit(
+      (draft) => {
+        draft.antenna = structuredClone(p.antenna);
+        draft.environment = structuredClone(p.environment);
+      },
+      moved ? { frequencyMhz: mhz } : undefined,
+    );
   };
 
   const openDocument = (project: Project, fileName: string, filePath: string | null) => {
@@ -178,29 +191,44 @@ export const useApp = create<AppState>()((set, get) => {
     showCurrents: true,
     elementEditorOpen: false,
 
-    edit: (recipe) => {
-      const { project, past } = get();
+    edit: (recipe, patch) => {
+      const { project, past, options } = get();
       const draft = structuredClone(project);
       recipe(draft);
       set({
         project: draft,
-        past: [...past, project].slice(-HISTORY_LIMIT),
+        ...(patch && { options: { ...options, ...patch } }),
+        past: [...past, patch ? { project, options } : { project }].slice(-HISTORY_LIMIT),
         future: [],
         dirty: true,
         ...staleFlags(),
       });
     },
     undo: () => {
-      const { past, project, future } = get();
+      const { past, project, future, options } = get();
       const prev = past.at(-1);
       if (!prev) return;
-      set({ project: prev, past: past.slice(0, -1), future: [project, ...future], dirty: true, ...staleFlags() });
+      set({
+        project: prev.project,
+        ...(prev.options && { options: prev.options }),
+        past: past.slice(0, -1),
+        future: [prev.options ? { project, options } : { project }, ...future],
+        dirty: true,
+        ...staleFlags(),
+      });
     },
     redo: () => {
-      const { past, project, future } = get();
+      const { past, project, future, options } = get();
       const next = future[0];
       if (!next) return;
-      set({ project: next, past: [...past, project], future: future.slice(1), dirty: true, ...staleFlags() });
+      set({
+        project: next.project,
+        ...(next.options && { options: next.options }),
+        past: [...past, next.options ? { project, options } : { project }],
+        future: future.slice(1),
+        dirty: true,
+        ...staleFlags(),
+      });
     },
     load: (parsed, name, path) => openDocument(parsed.project, name, path),
     reset: () => openDocument(newProject(), '無題.maa', null),
