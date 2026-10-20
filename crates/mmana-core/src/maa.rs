@@ -309,9 +309,10 @@ impl Parser<'_> {
     }
 }
 
-/// Pulse names are copied into an 8-character field.
+/// Pulse names are converted to half-width and copied into an 8-character
+/// field.
 fn pulse_name(s: &str) -> String {
-    s.trim_end().chars().take(8).collect()
+    crate::engine::to_half_width(s).trim_end().chars().take(8).collect()
 }
 
 /// Moves the `[MMANA-WIRE-NOTES]` block from the comment onto the wires.
@@ -528,6 +529,12 @@ mod tests {
     fn round_trips() {
         let p = parse(DP).project;
         assert_eq!(write(&p), DP);
+    }
+
+    #[test]
+    fn full_width_pulse_names_are_converted() {
+        let p = parse(&DP.replace("w1c,", "ｗ１ｃ,")).project;
+        assert_eq!(p.antenna.sources[0].pulse, "w1c");
     }
 
     #[test]

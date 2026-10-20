@@ -45,8 +45,15 @@ const lerp = (a: Point3, b: Point3, t: number): Point3 => ({
 });
 
 /** Approximate location of a pulse name (`w2c`, `w2b`, `w2e`) for markers. */
+/** Full-width ASCII and the ideographic space to half-width, as MMANA reads pulse names. */
+export const toHalfWidth = (s: string) =>
+  s.replace(/[\uff01-\uff5e]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/\u3000/g, ' ');
+
+/** A pulse name as typed, in the form the engine reads it. */
+export const normalizePulse = (s: string) => toHalfWidth(s).trim();
+
 export function pulseLocation(name: string, wires: Wire[]): Point3 | null {
-  const m = /^w(\d+)([bce]?)/i.exec(name.trim());
+  const m = /^w(\d+)([bce]?)/i.exec(normalizePulse(name));
   if (!m) return null;
   const w = wires[Number(m[1]) - 1];
   if (!w) return null;

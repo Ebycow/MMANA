@@ -26,15 +26,17 @@ impl AntDef {
     /// `Str2PlusNo`: `12` → pulse 12, `w3c` → centre of wire 3, `w3b2` → 2nd
     /// pulse from the beginning, `w3e1` → 1 before the end. 0 means invalid.
     pub fn pulse_no(&self, name: &str) -> i32 {
-        let bf = name.to_ascii_uppercase();
+        let bf = to_half_width(name).to_ascii_uppercase();
         let b = bf.as_bytes();
         match b.first() {
             Some(c) if c.is_ascii_digit() => leading_uint(&bf),
             Some(b'W') => {
                 let digits = b[1..].iter().take_while(|c| c.is_ascii_digit()).count();
                 let wire_part = &bf[1..1 + digits];
-                let (kind, rest) = match b.get(1 + digits) {
-                    Some(&c) => (c, &bf[2 + digits..]),
+                // the kind letter must be ASCII; anything else is an invalid name
+                let (kind, rest) = match bf[1 + digits..].chars().next() {
+                    Some(c) if c.is_ascii() => (c as u8, &bf[2 + digits..]),
+                    Some(_) => return 0,
                     None => (b'C', ""),
                 };
                 let n = if rest.is_empty() { 0 } else { leading_int(rest) };
@@ -61,6 +63,18 @@ impl AntDef {
     }
 }
 
+/// Converts full-width ASCII (U+FF01-FF5E) and the ideographic space to
+/// half-width, as MMANA does when it reads pulse names.
+pub(crate) fn to_half_width(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap_or(c),
+            '\u{3000}' => ' ',
+            c => c,
+        })
+        .collect()
+}
+
 /// `sscanf("%u")` on the leading digits.
 fn leading_uint(s: &str) -> i32 {
     let digits: String = s.trim_start().chars().take_while(char::is_ascii_digit).collect();
@@ -76,4 +90,66 @@ fn leading_int(s: &str) -> i32 {
         _ => (1, s),
     };
     sign * leading_uint(body)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::antdef::WDef;
+    use super::*;
+
+    /// Two wires: pulses 1-9 and 10-19.
+    fn two_wires() -> AntDef {
+        AntDef {
+            cfq: 14.0,
+            wires: vec![WDef { pno: 1, pmax: 9, ..WDef::default() }, WDef { pno: 10, pmax: 10, ..WDef::default() }],
+            sources: Vec::new(),
+            loads_enabled: false,
+            loads: Vec::new(),
+            pdef: Vec::new(),
+            wz: Vec::new(),
+            min_z: 0.0,
+            rmd: 0.0,
+            dm1: 400,
+            dm2: 40,
+            ec: 1,
+            sc: 2.0,
+        }
+    }
+
+    #[test]
+    fn resolves_names() {
+        let ap = two_wires();
+        assert_eq!(ap.pulse_no("12"), 12);
+        assert_eq!(ap.pulse_no("w1c"), 5);
+        assert_eq!(ap.pulse_no("W2"), 15);
+        assert_eq!(ap.pulse_no("w2b2"), 12);
+        assert_eq!(ap.pulse_no("w2e1"), 19);
+        assert_eq!(ap.pulse_no("w3c"), 0);
+    }
+
+    #[test]
+    fn full_width_names_resolve_like_half_width() {
+        let ap = two_wires();
+        assert_eq!(ap.pulse_no("ｗ１ｃ"), 5);
+        assert_eq!(ap.pulse_no("w１c"), 5);
+        assert_eq!(ap.pulse_no("w2b２"), 12);
+        assert_eq!(ap.pulse_no("１２"), 12);
+        // trailing text after the offset is ignored, as with sscanf
+        assert_eq!(ap.pulse_no("w1c２あ"), 7);
+    }
+
+    #[test]
+    fn non_ascii_names_are_invalid_not_a_panic() {
+        let ap = two_wires();
+        for name in ["wあ", "w1あ", "wあ1c", "w🙂", "あ", "w1é", ""] {
+            assert_eq!(ap.pulse_no(name), 0, "{name}");
+        }
+    }
+
+    #[test]
+    fn half_width_conversion() {
+        assert_eq!(to_half_width("ｗ１ｃ"), "w1c");
+        assert_eq!(to_half_width("Ｗ３Ｂ－１　"), "W3B-1 ");
+        assert_eq!(to_half_width("給電ﾜｲﾔ"), "給電ﾜｲﾔ");
+    }
 }

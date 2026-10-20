@@ -1,13 +1,14 @@
 import { ActionIcon, Button, Group, Select, Stack, Switch, Text, Title } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { Load, LoadKind } from '../api/types';
+import { normalizePulse } from '../domain/geometry';
 import { newLoad, newSource } from '../domain/project';
 import { useApp } from '../state/store';
 import { NumCell, TextCell } from './Cells';
 
 const PULSE_HELP = 'w1c = ワイヤー1の中央、w2b / w2e = 始点 / 終点、w2b3 = 始点から3番目、数字のみ = パルス番号';
 
-const validPulse = (t: string) => /^(w\d*[bce]?-?\d*|\d+)$/i.test(t.trim());
+const validPulse = (t: string) => /^(w\d*[bce]?-?\d*|\d+)$/i.test(normalizePulse(t));
 
 export function SourcesLoads() {
   return (
@@ -50,7 +51,7 @@ function Sources() {
                   ariaLabel={`給電点 ${i + 1} の位置`}
                   value={s.pulse}
                   validate={validPulse}
-                  onCommit={(t) => edit((p) => void (p.antenna.sources[i].pulse = t.trim()))}
+                  onCommit={(t) => edit((p) => void (p.antenna.sources[i].pulse = normalizePulse(t)))}
                 />
               </td>
               <td>
@@ -130,7 +131,7 @@ function Loads() {
               <tr key={i}>
                 <td className="index num">{i + 1}</td>
                 <td style={{ width: 80 }}>
-                  <TextCell ariaLabel={`負荷 ${i + 1} の位置`} value={l.pulse} validate={validPulse} onCommit={(t) => edit((p) => void (p.antenna.loads[i].pulse = t.trim()))} />
+                  <TextCell ariaLabel={`負荷 ${i + 1} の位置`} value={l.pulse} validate={validPulse} onCommit={(t) => edit((p) => void (p.antenna.loads[i].pulse = normalizePulse(t)))} />
                 </td>
                 <td style={{ width: 110, padding: '0 4px' }}>
                   <Select

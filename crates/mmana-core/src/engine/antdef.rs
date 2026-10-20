@@ -1,7 +1,7 @@
 //! The engine-side antenna definition (MMANA's `ANTDEF`) and its
 //! construction from the public model, including stacking (`TMainWnd::Stack`).
 
-use super::{NULLV, PPMAX, SMAX};
+use super::{NULLV, PPMAX, SMAX, to_half_width};
 use crate::model::{Antenna, LoadKind, StackDirection};
 
 #[derive(Debug, Clone, Default)]
@@ -106,7 +106,7 @@ impl AntDef {
         let sources = ant
             .sources
             .iter()
-            .map(|s| CDef { plus: s.pulse.clone(), plus_no: 0, ev: s.voltage, deg: s.phase_deg })
+            .map(|s| CDef { plus: to_half_width(&s.pulse), plus_no: 0, ev: s.voltage, deg: s.phase_deg })
             .collect();
         let loads = ant.loads.iter().map(|l| ldef_from_model(&l.pulse, &l.kind)).collect();
         let mut def = AntDef {
@@ -189,7 +189,7 @@ impl AntDef {
 }
 
 fn ldef_from_model(pulse: &str, kind: &LoadKind) -> LDef {
-    let mut l = LDef { ty: 0, plus: pulse.to_owned(), plus_no: 0, sn: 0, a: [NULLV; SMAX], b: [NULLV; SMAX] };
+    let mut l = LDef { ty: 0, plus: to_half_width(pulse), plus_no: 0, sn: 0, a: [NULLV; SMAX], b: [NULLV; SMAX] };
     match kind {
         LoadKind::Lc { inductance_uh, capacitance_pf, q } => {
             l.a[0] = *inductance_uh;

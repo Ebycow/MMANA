@@ -34,6 +34,8 @@ mod nearfield;
 mod pulse;
 mod segment;
 
+pub(crate) use pulse::to_half_width;
+
 pub use farfield::FarFieldSample;
 pub use nearfield::{AxisRange, NearFieldKind, NearFieldSample, NearFieldSpec};
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { niceTicks } from '../charts/ticks';
 import { radiusFor, sampleAngle, sampleAt } from '../charts/polar';
 import { evaluate } from '../domain/expr';
-import { displayWires, pulseLocation } from '../domain/geometry';
+import { displayWires, normalizePulse, pulseLocation } from '../domain/geometry';
 import { newProject } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
 
@@ -85,5 +85,10 @@ describe('3D view geometry', () => {
     const c = pulseLocation('w1c', p.antenna.wires)!;
     expect(c.y).toBeCloseTo(0);
     expect(pulseLocation('w9c', p.antenna.wires)).toBeNull();
+    expect(pulseLocation('ｗ１ｃ', p.antenna.wires)).toEqual(c);
+  });
+  it('converts full-width pulse names to half-width', () => {
+    expect(normalizePulse(' ｗ１ｃ　')).toBe('w1c');
+    expect(normalizePulse('Ｗ３Ｂ－１')).toBe('W3B-1');
   });
 });
