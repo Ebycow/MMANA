@@ -149,7 +149,10 @@ export interface components {
     schemas: {
         Antenna: {
             autoSegmentation: components["schemas"]["AutoSegmentation"];
-            /** @description Kept for the editor (MMANA's "auto voltage" checkbox); not used by the engine. */
+            /**
+             * @description MMANA's "auto voltage" (電圧自動設定): editing that adds or removes a
+             *     source sets every voltage to 1 / count. Not used by the engine.
+             */
             autoVoltage: boolean;
             combinedWires?: components["schemas"]["CombinedWire"][];
             comment?: string;

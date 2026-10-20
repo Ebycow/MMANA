@@ -40,6 +40,16 @@ export function newWire(start: Wire['start'], end: Wire['end']): Wire {
 }
 
 export const newSource = (): Source => ({ pulse: 'w1c', phaseDeg: 0, voltage: 1 });
+
+/**
+ * MMANA's `SetAutoVol`: with automatic voltage on, every source gets
+ * 1 / count. MMANA runs it whenever a source is added or removed, not when
+ * the setting itself is switched on.
+ */
+export function setAutoVoltage(antenna: Antenna) {
+  if (!antenna.autoVoltage) return;
+  for (const s of antenna.sources) s.voltage = 1 / antenna.sources.length;
+}
 export const newLoad = (): Load => ({ pulse: 'w1c', kind: 'impedance', r: 0, x: 0 });
 
 export function defaultOptions(): CalcOptions {

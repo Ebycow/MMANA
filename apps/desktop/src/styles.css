@@ -162,6 +162,9 @@ textarea {
   border-color: var(--mantine-primary-color-filled);
   background: var(--panel-bg);
 }
+.cell-input:read-only {
+  color: var(--mantine-color-dimmed);
+}
 .cell-input.invalid {
   border-color: var(--mantine-color-red-6);
 }

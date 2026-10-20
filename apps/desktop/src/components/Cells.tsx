@@ -28,6 +28,8 @@ interface NumCellProps extends CellBaseProps {
   scale?: number;
   wavelength?: number;
   validate?: (v: number) => boolean;
+  /** Shows the value but does not accept edits. */
+  readOnly?: boolean;
 }
 
 export function format(value: number, digits: number): string {
@@ -35,7 +37,7 @@ export function format(value: number, digits: number): string {
   return Number(value.toFixed(digits)).toString();
 }
 
-export function NumCell({ value, onCommit, digits = 4, scale = 1, wavelength = 1, validate, ariaLabel, align }: NumCellProps) {
+export function NumCell({ value, onCommit, digits = 4, scale = 1, wavelength = 1, validate, readOnly, ariaLabel, align }: NumCellProps) {
   const shown = format(value * scale, digits);
   const [text, setText] = useState(shown);
   const [invalid, setInvalid] = useState(false);
@@ -76,6 +78,7 @@ export function NumCell({ value, onCommit, digits = 4, scale = 1, wavelength = 1
       aria-label={ariaLabel}
       aria-invalid={invalid}
       value={text}
+      readOnly={readOnly}
       spellCheck={false}
       onFocus={(e) => {
         editing.current = true;

@@ -213,7 +213,8 @@ pub struct Antenna {
     pub frequency_mhz: f64,
     pub wires: Vec<Wire>,
     pub sources: Vec<Source>,
-    /// Kept for the editor (MMANA's "auto voltage" checkbox); not used by the engine.
+    /// MMANA's "auto voltage" (電圧自動設定): editing that adds or removes a
+    /// source sets every voltage to 1 / count. Not used by the engine.
     pub auto_voltage: bool,
     pub loads: Vec<Load>,
     pub loads_enabled: bool,

@@ -3,7 +3,7 @@ import { niceTicks } from '../charts/ticks';
 import { radiusFor, sampleAngle, sampleAt } from '../charts/polar';
 import { evaluate } from '../domain/expr';
 import { displayWires, normalizePulse, pulseLocation } from '../domain/geometry';
-import { newProject } from '../domain/project';
+import { newProject, newSource, setAutoVoltage } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
 
 describe('segmentation codes (must match mmana-core Segmentation::to_code/from_code)', () => {
@@ -90,5 +90,37 @@ describe('3D view geometry', () => {
   it('converts full-width pulse names to half-width', () => {
     expect(normalizePulse(' ｗ１ｃ　')).toBe('w1c');
     expect(normalizePulse('Ｗ３Ｂ－１')).toBe('W3B-1');
+  });
+});
+
+describe('automatic source voltage (SetAutoVol)', () => {
+  const withSources = (count: number, autoVoltage: boolean) => {
+    const { antenna } = newProject();
+    antenna.autoVoltage = autoVoltage;
+    antenna.sources = Array.from({ length: count }, () => ({ ...newSource(), voltage: 1 / count }));
+    return antenna;
+  };
+
+  it('spreads 1 V over the sources after adding or removing one', () => {
+    const antenna = withSources(2, true);
+    antenna.sources.push(newSource());
+    setAutoVoltage(antenna);
+    expect(antenna.sources.map((s) => s.voltage)).toEqual([1 / 3, 1 / 3, 1 / 3]);
+    antenna.sources.splice(0, 2);
+    setAutoVoltage(antenna);
+    expect(antenna.sources.map((s) => s.voltage)).toEqual([1]);
+  });
+
+  it('keeps the voltages when the setting is off', () => {
+    const antenna = withSources(2, false);
+    antenna.sources.push(newSource());
+    setAutoVoltage(antenna);
+    expect(antenna.sources.map((s) => s.voltage)).toEqual([0.5, 0.5, 1]);
+  });
+
+  it('accepts an antenna without sources', () => {
+    const antenna = withSources(0, true);
+    setAutoVoltage(antenna);
+    expect(antenna.sources).toEqual([]);
   });
 });

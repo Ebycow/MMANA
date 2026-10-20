@@ -1456,7 +1456,11 @@ pub fn edit_antenna(antenna: &Antenna, ops: &[ElementOp]) -> ElementEdit {
         }
         edited.wires = out.wires;
         wire_elements = out.elements;
+        let sources = edited.sources.len();
         edited.sources.retain_mut(|s| follow_wire(&mut s.pulse, &moved, "source", &mut warnings));
+        if edited.sources.len() != sources {
+            set_auto_voltage(&mut edited);
+        }
         edited.loads.retain_mut(|l| follow_wire(&mut l.pulse, &moved, "load", &mut warnings));
     } else {
         // nothing changed: the wires are not rewritten (that would round X)
@@ -1476,6 +1480,17 @@ pub fn edit_antenna(antenna: &Antenna, ops: &[ElementOp]) -> ElementEdit {
         applied,
         duplicate,
         warnings,
+    }
+}
+
+/// `SetAutoVol`: with automatic voltage on, every source gets 1 / count.
+/// MMANA runs it whenever a source is added or removed.
+fn set_auto_voltage(antenna: &mut Antenna) {
+    if antenna.auto_voltage {
+        let v = 1.0 / antenna.sources.len() as f64;
+        for s in &mut antenna.sources {
+            s.voltage = v;
+        }
     }
 }
 
@@ -1582,6 +1597,22 @@ mod tests {
         assert_eq!(e.antenna.sources[0].pulse, "w2c");
         assert!(e.antenna.loads.is_empty());
         assert_eq!(e.warnings.len(), 1);
+    }
+
+    #[test]
+    fn removing_a_source_resets_automatic_voltages() {
+        let source = |pulse: &str| crate::Source { pulse: pulse.into(), phase_deg: 0.0, voltage: 0.5 };
+        for auto_voltage in [true, false] {
+            let ant = Antenna {
+                wires: yagi_with_quad(),
+                sources: vec![source("w3c"), source("w6c")],
+                auto_voltage,
+                ..Antenna::default()
+            };
+            let e = edit_antenna(&ant, &[ElementOp::Delete { row: 2 }]);
+            assert_eq!(e.antenna.sources.len(), 1);
+            assert_eq!(e.antenna.sources[0].voltage, if auto_voltage { 1.0 } else { 0.5 });
+        }
     }
 
     #[test]

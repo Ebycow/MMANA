@@ -2,7 +2,7 @@ import { ActionIcon, Button, Group, Select, Stack, Switch, Text, Title } from '@
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { Load, LoadKind } from '../api/types';
 import { normalizePulse } from '../domain/geometry';
-import { newLoad, newSource } from '../domain/project';
+import { newLoad, newSource, setAutoVoltage } from '../domain/project';
 import { useApp } from '../state/store';
 import { NumCell, TextCell } from './Cells';
 
@@ -21,12 +21,30 @@ export function SourcesLoads() {
 
 function Sources() {
   const sources = useApp((s) => s.project.antenna.sources);
+  const autoVoltage = useApp((s) => s.project.antenna.autoVoltage);
   const edit = useApp((s) => s.edit);
   return (
     <section>
       <Group justify="space-between" mb={4}>
-        <Title order={6}>給電点</Title>
-        <Button variant="light" leftSection={<IconPlus size={14} />} onClick={() => edit((p) => void p.antenna.sources.push(newSource()))}>
+        <Group gap="sm">
+          <Title order={6}>給電点</Title>
+          <Switch
+            label="電圧自動設定"
+            title="給電点を追加・削除したとき、各電圧を 1 / 給電点数 にそろえます"
+            checked={autoVoltage}
+            onChange={(e) => edit((p) => void (p.antenna.autoVoltage = e.currentTarget.checked))}
+          />
+        </Group>
+        <Button
+          variant="light"
+          leftSection={<IconPlus size={14} />}
+          onClick={() =>
+            edit((p) => {
+              p.antenna.sources.push(newSource());
+              setAutoVoltage(p.antenna);
+            })
+          }
+        >
           給電点を追加
         </Button>
       </Group>
@@ -58,10 +76,27 @@ function Sources() {
                 <NumCell ariaLabel={`給電点 ${i + 1} の位相`} value={s.phaseDeg} digits={2} onCommit={(v) => edit((p) => void (p.antenna.sources[i].phaseDeg = v))} />
               </td>
               <td>
-                <NumCell ariaLabel={`給電点 ${i + 1} の電圧`} value={s.voltage} digits={3} onCommit={(v) => edit((p) => void (p.antenna.sources[i].voltage = v))} />
+                <NumCell
+                  ariaLabel={`給電点 ${i + 1} の電圧`}
+                  value={s.voltage}
+                  digits={3}
+                  readOnly={autoVoltage}
+                  onCommit={(v) => edit((p) => void (p.antenna.sources[i].voltage = v))}
+                />
               </td>
               <td style={{ width: 32 }}>
-                <ActionIcon size="sm" color="red" className="row-actions" aria-label={`給電点 ${i + 1} を削除`} onClick={() => edit((p) => void p.antenna.sources.splice(i, 1))}>
+                <ActionIcon
+                  size="sm"
+                  color="red"
+                  className="row-actions"
+                  aria-label={`給電点 ${i + 1} を削除`}
+                  onClick={() =>
+                    edit((p) => {
+                      p.antenna.sources.splice(i, 1);
+                      setAutoVoltage(p.antenna);
+                    })
+                  }
+                >
                   <IconTrash size={14} />
                 </ActionIcon>
               </td>
