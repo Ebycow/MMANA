@@ -1,0 +1,3 @@
+# Sample antennas are Shift_JIS with CRLF; golden data must stay byte-exact.
+*.MAA binary
+testdata/golden/*.json -text

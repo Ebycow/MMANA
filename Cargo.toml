@@ -1,0 +1,15 @@
+[workspace]
+resolver = "3"
+members = ["crates/mmana-core", "crates/mmana-api", "crates/mmana-cli", "apps/desktop/src-tauri"]
+# The desktop crate embeds apps/desktop/dist; build it with `npm run tauri build`
+# (or pass --workspace after `npm run build`).
+default-members = ["crates/mmana-core", "crates/mmana-api", "crates/mmana-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "LGPL-3.0-or-later"
+repository = "https://github.com/Ebycow/MMANA"
+
+[profile.dev.package.mmana-core]
+opt-level = 2

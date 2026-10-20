@@ -1,0 +1,22 @@
+[package]
+name = "mmana-desktop"
+description = "MMANA desktop application"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "mmana_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.3", features = [] }
+
+[dependencies]
+mmana-core = { path = "../../../crates/mmana-core" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+tauri = { version = "2.12.4", features = [] }
+tauri-plugin-log = "2"
+tauri-plugin-dialog = "2"
