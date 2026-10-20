@@ -1,6 +1,7 @@
 // Sample antennas shipped with MMANA (<repo>/testdata/maa), bundled as assets.
 const urls = import.meta.glob('../../../../testdata/maa/*.MAA', {
-  query: '?url',
+  // as files, not data: URLs: the app's CSP does not allow fetching data:
+  query: '?url&no-inline',
   import: 'default',
   eager: true,
 }) as Record<string, string>;
