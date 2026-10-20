@@ -1,0 +1,39 @@
+name: Radiation null audit
+on:
+  workflow_dispatch:
+  push:
+    branches: ["diagnostics/radiation-nulls"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.99.1
+      - name: Collect full differences and run unchanged golden tests
+        shell: python
+        run: |
+          import pathlib, subprocess
+          out = pathlib.Path("null-audit-results")
+          out.mkdir()
+          with (out / "rustc.txt").open("w", encoding="utf-8") as f:
+              subprocess.run(["rustc", "-vV"], stdout=f, check=True)
+          with (out / "differences.jsonl").open("w", encoding="utf-8") as f:
+              subprocess.run(["cargo", "run", "--locked", "--release", "-p", "mmana-core", "--example", "diagnose_nulls"], stdout=f, check=True)
+          with (out / "original-tests.txt").open("w", encoding="utf-8") as f:
+              result = subprocess.run(["cargo", "test", "--locked", "--release", "-p", "mmana-core", "--test", "golden", "--", "--nocapture"], stdout=f, stderr=subprocess.STDOUT)
+          (out / "original-tests-exit.txt").write_text(str(result.returncode))
+          for line in (out / "differences.jsonl").read_text(encoding="utf-8").splitlines():
+              if '"record":"summary"' in line:
+                  print(line)
+          raise SystemExit(result.returncode)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: null-audit-${{ matrix.os }}
+          path: null-audit-results/
