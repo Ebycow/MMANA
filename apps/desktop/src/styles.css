@@ -253,3 +253,84 @@ tr.selected .row-actions {
   vertical-align: middle;
   margin-right: 6px;
 }
+
+/* ---- 3D editing ---- */
+.view3d-toolbar {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 10;
+}
+.view3d-toolbar-row {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  pointer-events: auto;
+  background: var(--panel-bg);
+}
+.view3d-hud {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 260px);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  pointer-events: none;
+  z-index: 10;
+}
+.view3d-box {
+  position: absolute;
+  border: 1px dashed var(--series-1);
+  background: color-mix(in srgb, var(--series-1) 10%, transparent);
+  pointer-events: none;
+  z-index: 10;
+}
+.end-handle {
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--panel-bg);
+  border: 2px solid var(--wire-selected);
+}
+.end-handle.hot {
+  width: 13px;
+  height: 13px;
+  background: var(--wire-selected);
+}
+.snap-marker {
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--series-1);
+  border-radius: 50%;
+}
+.snap-marker.vertex {
+  width: 16px;
+  height: 16px;
+  border-color: var(--series-3);
+  background: color-mix(in srgb, var(--series-3) 25%, transparent);
+}
+.snap-marker.midpoint {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border-color: var(--series-3);
+}
+.snap-marker.free {
+  width: 8px;
+  height: 8px;
+}

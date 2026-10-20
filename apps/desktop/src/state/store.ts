@@ -79,7 +79,9 @@ export interface AppState {
   past: HistoryEntry[];
   future: HistoryEntry[];
 
-  /** 0-based index of the selected wire. */
+  /** 0-based indices of the selected wires, in the order they were picked. */
+  selectedWires: number[];
+  /** The wire last picked (the table's current row), or null. */
   selectedWire: number | null;
 
   options: CalcOptions;
@@ -107,7 +109,12 @@ export interface AppState {
   redo: () => void;
   load: (parsed: ParsedProject, name: string, path: string | null) => void;
   reset: () => void;
+  /** Selects only `index` (or nothing). */
   selectWire: (index: number | null) => void;
+  /** Replaces the selection; `active` defaults to the last wire of it. */
+  setSelection: (indices: number[], active?: number | null) => void;
+  /** Adds a wire to the selection or removes it. */
+  toggleWire: (index: number) => void;
   setOptions: (patch: Partial<CalcOptions>) => void;
   setAutoCalc: (on: boolean) => void;
   setShowCurrents: (on: boolean) => void;
@@ -136,6 +143,7 @@ const freshDocument = (project: Project) => ({
   past: [] as HistoryEntry[],
   future: [] as HistoryEntry[],
   dirty: false,
+  selectedWires: [] as number[],
   selectedWire: null,
   result: null,
   resultStale: false,
@@ -153,6 +161,14 @@ export const useApp = create<AppState>()((set, get) => {
   let generation = 0;
   // the latest sweep request; an earlier one finishing must not overwrite it
   let sweepRequest = 0;
+
+  /** Drops selected wires that an edit, undo or redo removed. */
+  const keepSelection = (project: Project) => {
+    const n = project.antenna.wires.length;
+    const { selectedWires, selectedWire } = get();
+    if (selectedWires.every((i) => i < n) && (selectedWire ?? -1) < n) return {};
+    return { selectedWires: selectedWires.filter((i) => i < n), selectedWire: selectedWire != null && selectedWire < n ? selectedWire : null };
+  };
 
   /** Marks the result and sweep of the current document as out of date. */
   const staleFlags = () => ({
@@ -202,6 +218,7 @@ export const useApp = create<AppState>()((set, get) => {
         future: [],
         dirty: true,
         ...staleFlags(),
+        ...keepSelection(draft),
       });
     },
     undo: () => {
@@ -215,6 +232,7 @@ export const useApp = create<AppState>()((set, get) => {
         future: [prev.options ? { project, options } : { project }, ...future],
         dirty: true,
         ...staleFlags(),
+        ...keepSelection(prev.project),
       });
     },
     redo: () => {
@@ -228,11 +246,25 @@ export const useApp = create<AppState>()((set, get) => {
         future: future.slice(1),
         dirty: true,
         ...staleFlags(),
+        ...keepSelection(next.project),
       });
     },
     load: (parsed, name, path) => openDocument(parsed.project, name, path),
     reset: () => openDocument(newProject(), '無題.maa', null),
-    selectWire: (index) => set({ selectedWire: index }),
+    selectWire: (index) => set({ selectedWires: index == null ? [] : [index], selectedWire: index }),
+    setSelection: (indices, active) => {
+      const unique = [...new Set(indices)];
+      set({ selectedWires: unique, selectedWire: active !== undefined ? active : (unique.at(-1) ?? null) });
+    },
+    toggleWire: (index) => {
+      const { selectedWires } = get();
+      if (selectedWires.includes(index)) {
+        const rest = selectedWires.filter((i) => i !== index);
+        set({ selectedWires: rest, selectedWire: rest.at(-1) ?? null });
+      } else {
+        set({ selectedWires: [...selectedWires, index], selectedWire: index });
+      }
+    },
     setOptions: (patch) => set({ options: { ...get().options, ...patch }, ...staleFlags() }),
     setAutoCalc: (on) => set({ autoCalc: on }),
     setShowCurrents: (on) => set({ showCurrents: on }),

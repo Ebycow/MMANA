@@ -13,8 +13,11 @@ import { Panel } from './components/Panel';
 import { ResultsPanel } from './components/ResultsPanel';
 import { SamplesModal } from './components/SamplesModal';
 import { StatusBar } from './components/StatusBar';
+import { TOOL_KEYS } from './components/EditToolbar';
 import { loadSampleBytes, samples as samplesList, type Sample } from './domain/samples';
+import { useEditor } from './state/editor';
 import { useApp } from './state/store';
+import { canEditWires, copySelected, cutSelected, deleteSelected, duplicateSelected, paste, selectAll } from './state/wireCommands';
 
 function reportError(e: unknown) {
   const err = e instanceof EngineError ? e : new EngineError('internal', 'エラー', String(e));
@@ -102,6 +105,10 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // wire edits from the keyboard, unless a dialog is open
+  const wireKey = (f: () => void) => () => {
+    if (canEditWires() && !samplesOpen && !useEditor.getState().transformOpen) f();
+  };
   useHotkeys([
     ['mod+Enter', () => s.getState().calculate(), { preventDefault: true }],
     ['mod+O', actions.open],
@@ -112,6 +119,16 @@ export function App() {
     ['mod+Z', () => !s.getState().elementEditorOpen && !s.getState().optimizer.running && s.getState().undo()],
     ['mod+shift+Z', () => !s.getState().elementEditorOpen && !s.getState().optimizer.running && s.getState().redo()],
     ['Escape', () => s.getState().selectWire(null)],
+    ['Delete', wireKey(deleteSelected)],
+    ['Backspace', wireKey(deleteSelected)],
+    ['mod+D', wireKey(duplicateSelected)],
+    ['mod+C', copySelected],
+    ['mod+X', wireKey(cutSelected)],
+    ['mod+V', wireKey(paste)],
+    ['mod+A', selectAll],
+    ...Object.entries(TOOL_KEYS).map(
+      ([key, tool]) => [key, tool === 'select' ? () => useEditor.getState().setTool(tool) : wireKey(() => useEditor.getState().setTool(tool))] as [string, () => void],
+    ),
   ]);
   // Cmd+Enter must also work while typing in a cell
   useEffect(() => {

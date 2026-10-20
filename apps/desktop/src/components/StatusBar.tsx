@@ -5,6 +5,7 @@ import { useApp } from '../state/store';
 export function StatusBar() {
   const wires = useApp((s) => s.project.antenna.wires.length);
   const selected = useApp((s) => s.selectedWire);
+  const count = useApp((s) => s.selectedWires.length);
   const result = useApp((s) => s.result);
   const ms = useApp((s) => s.lastCalcMs);
   const calculating = useApp((s) => s.calculating);
@@ -12,7 +13,7 @@ export function StatusBar() {
   return (
     <Group h="100%" px="md" gap="lg" wrap="nowrap">
       <Text size="xs" c="dimmed">
-        ワイヤー {wires} 本{selected != null ? `（No.${selected + 1} を選択中）` : ''}
+        ワイヤー {wires} 本{count > 1 ? `（${count} 本を選択中）` : selected != null ? `（No.${selected + 1} を選択中）` : ''}
       </Text>
       {result && (
         <Text size="xs" c="dimmed" className="num">

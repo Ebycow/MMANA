@@ -172,3 +172,40 @@ describe('saving', () => {
     expect(useApp.getState()).toMatchObject({ dirty: true, fileName: 'B.maa', filePath: '/tmp/B.maa' });
   });
 });
+
+describe('wire selection', () => {
+  const threeWires = () =>
+    useApp.getState().edit((p) => {
+      const w = p.antenna.wires[0];
+      p.antenna.wires.push(structuredClone(w), structuredClone(w));
+    });
+
+  it('adds, removes and replaces wires of the selection', () => {
+    threeWires();
+    const s = useApp.getState();
+    s.selectWire(0);
+    s.toggleWire(2);
+    expect(useApp.getState().selectedWires).toEqual([0, 2]);
+    expect(useApp.getState().selectedWire).toBe(2);
+    useApp.getState().toggleWire(2);
+    expect(useApp.getState().selectedWires).toEqual([0]);
+    expect(useApp.getState().selectedWire).toBe(0);
+    useApp.getState().setSelection([1, 1, 2], 1);
+    expect(useApp.getState().selectedWires).toEqual([1, 2]);
+    expect(useApp.getState().selectedWire).toBe(1);
+  });
+
+  it('drops wires an undo removes from the selection', () => {
+    threeWires();
+    useApp.getState().setSelection([0, 2]);
+    useApp.getState().undo();
+    expect(useApp.getState().selectedWires).toEqual([0]);
+    expect(useApp.getState().selectedWire).toBeNull();
+  });
+
+  it('clears the selection when another document is opened', () => {
+    useApp.getState().selectWire(0);
+    useApp.getState().load(parsed('other'), 'other.maa', null);
+    expect(useApp.getState().selectedWires).toEqual([]);
+  });
+});

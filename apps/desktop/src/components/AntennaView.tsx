@@ -5,8 +5,13 @@ import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { Point3 } from '../api/types';
 import { bounds, currentPolylines, displayWires, pulseLocation, type DisplayWire } from '../domain/geometry';
+import { niceStep, sub } from '../domain/wireEdit';
+import { isDrawTool, useEditor } from '../state/editor';
 import { useApp } from '../state/store';
+import { EditScene } from './EditController';
+import { EditToolbar } from './EditToolbar';
 import { Panel } from './Panel';
 
 type Preset = 'iso' | 'top' | 'front' | 'side';
@@ -38,15 +43,24 @@ export function AntennaView() {
   const showCurrents = useApp((s) => s.showCurrents);
   const setShowCurrents = useApp((s) => s.setShowCurrents);
   const fileName = useApp((s) => s.fileName);
+  const editable = useApp((s) => !s.elementEditorOpen && !s.optimizer.running && !s.optimizer.dialogOpen && !s.optimizer.resultsOpen);
+  const preview = useEditor((s) => s.preview);
+  const step = useEditor((s) => s.step);
   const scheme = useComputedColorScheme('light');
   const [preset, setPreset] = useState<{ p: Preset; n: number }>({ p: 'iso', n: 0 });
 
-  const wires = useMemo(() => displayWires(antenna), [antenna]);
-  const box = useMemo(() => bounds(wires), [wires]);
+  // a drag in progress shows its wires; the antenna changes when it ends
+  const shown = useMemo(() => (preview ? { ...antenna, wires: preview } : antenna), [antenna, preview]);
+  const wires = useMemo(() => displayWires(shown), [shown]);
+  // framing and the grid step follow the antenna, not a drag in progress
+  const box = useMemo(() => bounds(displayWires(antenna)), [antenna]);
+  const autoStep = niceStep(box.radius / 25);
   const currents = useMemo(
-    () => (result && showCurrents && !stale ? currentPolylines(wires, result) : null),
-    [wires, result, showCurrents, stale],
+    () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),
+    [wires, result, showCurrents, stale, preview],
   );
+  // the first stacked copy is the one edited; the others follow it
+  const offset: Point3 = wires.length && shown.wires.length ? sub(wires[0].start, shown.wires[0].start) : { x: 0, y: 0, z: 0 };
 
   // re-frame when another antenna is loaded
   useEffect(() => setPreset((s) => ({ p: s.p, n: s.n + 1 })), [fileName]);
@@ -95,7 +109,11 @@ export function AntennaView() {
           dpr={[1, 2]}
         >
           <Scene wires={wires} box={box} currents={currents} preset={preset} scheme={scheme} groundZ={environment.ground === 'freeSpace' ? null : -environment.height} />
+          {/* picking and snapping use the wires as they are, not a drag in progress */}
+          <EditScene wires={antenna.wires} display={wires} offset={offset} step={step ?? autoStep} editable={editable} radius={box.radius} />
         </Canvas>
+        <EditToolbar autoStep={autoStep} editable={editable} />
+        <EditOverlay />
         {currents && (
           <CurrentLegend maxMa={currents.maxMa} ramp={scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT} />
         )}
@@ -106,6 +124,42 @@ export function AntennaView() {
         )}
       </div>
     </Panel>
+  );
+}
+
+const DRAW_HINTS: Record<string, string> = {
+  wire: 'クリックで点を追加 ・ 始点をクリックで閉じる ・ 数字で長さ ・ Enter / Esc / 右クリックで終了',
+  rect: '対角の 2 点をクリック',
+  polygon: '中心、続いて頂点をクリック ・ 数字で半径',
+};
+
+/** Read-outs of the drag or drawing in progress, and the selection box. */
+function EditOverlay() {
+  const hud = useEditor((s) => s.hud);
+  const typed = useEditor((s) => s.typed);
+  const box = useEditor((s) => s.box);
+  const tool = useEditor((s) => s.tool);
+  const drafting = useEditor((s) => s.draft.length > 0);
+  const cursor = useEditor((s) => s.cursor);
+  const plane = useEditor((s) => s.draftPlane ?? s.cursor?.plane);
+  const draw = isDrawTool(tool);
+  const lines = [
+    hud,
+    typed && `入力: ${typed} m（Enter で確定）`,
+    draw && cursor && `${plane ? `${plane.toUpperCase()} 面 ` : ''}(${[cursor.point.x, cursor.point.y, cursor.point.z].map((v) => Number(v.toFixed(4))).join(', ')})`,
+    draw && !drafting && !hud && DRAW_HINTS[tool],
+  ].filter(Boolean);
+  return (
+    <>
+      {box && <div className="view3d-box" style={{ left: box.x0, top: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 }} />}
+      {lines.length > 0 && (
+        <div className="view3d-hud num">
+          {lines.map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -133,11 +187,10 @@ interface SceneProps {
 
 function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
   const antenna = useApp((s) => s.project.antenna);
-  const selected = useApp((s) => s.selectedWire);
-  const select = useApp((s) => s.selectWire);
+  const selected = useApp((s) => s.selectedWires);
+  const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, invalidate, size } = useThree();
-  const [hover, setHover] = useState<number | null>(null);
 
   const colors = useMemo(
     () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--chart-grid'), axis: cssVar('--chart-axis') }),
@@ -167,6 +220,9 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
     return { src, loads };
   }, [antenna]);
 
+  // hover and selection change the lines without changing the camera
+  useEffect(() => invalidate());
+
   const markerSize = box.radius * 0.025;
   const gridSize = Math.max(10, Math.ceil(box.radius * 4));
 
@@ -189,8 +245,9 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
         infiniteGrid
       />
 
+      {/* picking is done in screen space by EditScene */}
       {wires.map((w, i) => {
-        const isSel = selected === w.base;
+        const isSel = selected.includes(w.base);
         const isHover = hover === w.base;
         const showPlain = !currents;
         return (
@@ -204,21 +261,7 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
             lineWidth={isSel ? 4 : isHover ? 3.5 : showPlain ? 2.2 : 1}
             transparent={!showPlain && !isSel}
             opacity={!showPlain && !isSel ? 0.35 : 1}
-            onPointerOver={(e) => {
-              e.stopPropagation();
-              setHover(w.base);
-              document.body.style.cursor = 'pointer';
-              invalidate();
-            }}
-            onPointerOut={() => {
-              setHover(null);
-              document.body.style.cursor = '';
-              invalidate();
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              select(isSel ? null : w.base);
-            }}
+            raycast={() => null}
           />
         );
       })}

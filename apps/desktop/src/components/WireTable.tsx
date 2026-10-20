@@ -1,9 +1,11 @@
 import { ActionIcon, Button, Group, Text, Tooltip } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { IconCopy, IconLayoutRows, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import type { Point3 } from '../api/types';
 import { newWire, wavelength, wireLength } from '../domain/project';
 import { describeSegmentation, formatSegmentation, parseSegmentation } from '../domain/segmentation';
+import { insertWires, removeWires } from '../domain/wireEdit';
 import { useApp } from '../state/store';
 import { NumCell, TextCell, format } from './Cells';
 
@@ -20,7 +22,10 @@ export function WireTable() {
   const wires = useApp((s) => s.project.antenna.wires);
   const freq = useApp((s) => s.project.antenna.frequencyMhz);
   const selected = useApp((s) => s.selectedWire);
+  const selection = useApp((s) => s.selectedWires);
   const select = useApp((s) => s.selectWire);
+  const setSelection = useApp((s) => s.setSelection);
+  const toggleWire = useApp((s) => s.toggleWire);
   const edit = useApp((s) => s.edit);
   const setElementEditorOpen = useApp((s) => s.setElementEditorOpen);
   const lambda = wavelength(freq);
@@ -40,6 +45,24 @@ export function WireTable() {
       p.antenna.wires.push({ ...(last ?? newWire(start, start)), start, end: { ...start, y: start.y + 1 }, note: '' });
     });
     select(wires.length);
+  };
+
+  /** Click on a row number: Shift selects a range, ⌘ / Ctrl adds or removes. */
+  const clickRow = (i: number, e: React.MouseEvent) => {
+    if (e.shiftKey && selected != null) {
+      const [a, b] = selected < i ? [selected, i] : [i, selected];
+      setSelection([...selection, ...Array.from({ length: b - a + 1 }, (_, k) => a + k)], i);
+    } else if (e.metaKey || e.ctrlKey) {
+      toggleWire(i);
+    } else {
+      select(selected === i && selection.length === 1 ? null : i);
+    }
+  };
+
+  /** Replaces the antenna and tells the user about sources and loads that moved or went. */
+  const editPulses = (r: ReturnType<typeof removeWires>) => {
+    edit((p) => void (p.antenna = r.antenna));
+    if (r.warnings.length) notifications.show({ color: 'yellow', title: '給電点・負荷を更新しました', message: r.warnings.join('\n') });
   };
 
   return (
@@ -64,8 +87,12 @@ export function WireTable() {
         </thead>
         <tbody ref={bodyRef}>
           {wires.map((w, i) => (
-            <tr key={i} className={selected === i ? 'selected' : undefined} onFocus={() => select(i)}>
-              <td className="index num" onClick={() => select(selected === i ? null : i)}>
+            <tr
+              key={i}
+              className={selection.includes(i) ? 'selected' : undefined}
+              onFocus={() => (selection.includes(i) ? setSelection(selection, i) : select(i))}
+            >
+              <td className="index num" onClick={(e) => clickRow(i, e)}>
                 {i + 1}
               </td>
               {COORDS.map((c) => (
@@ -115,7 +142,7 @@ export function WireTable() {
                     <ActionIcon
                       size="sm"
                       aria-label={`ワイヤー ${i + 1} を複製`}
-                      onClick={() => edit((p) => void p.antenna.wires.splice(i + 1, 0, structuredClone(p.antenna.wires[i])))}
+                      onClick={() => editPulses(insertWires(useApp.getState().project.antenna, i + 1, [structuredClone(w)]))}
                     >
                       <IconCopy size={14} />
                     </ActionIcon>
@@ -126,7 +153,7 @@ export function WireTable() {
                       color="red"
                       aria-label={`ワイヤー ${i + 1} を削除`}
                       onClick={() => {
-                        edit((p) => void p.antenna.wires.splice(i, 1));
+                        editPulses(removeWires(useApp.getState().project.antenna, [i]));
                         select(null);
                       }}
                     >
