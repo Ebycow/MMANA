@@ -21,9 +21,28 @@ fn f32v(v: &Value) -> f64 {
     f(v) as f32 as f64
 }
 
+/// Difference of one sample. A non-finite value never matches (`f64::max`
+/// would otherwise drop a NaN; the engine's "no power" sentinel is the finite
+/// -999), and samples where both sides are at or below `null_floor` count as
+/// equal nulls.
+fn sample_diff(x: f64, y: f64, null_floor: f64) -> f64 {
+    if !x.is_finite() || !y.is_finite() {
+        f64::INFINITY
+    } else if x == y || (x <= null_floor && y <= null_floor) {
+        0.0
+    } else {
+        (x - y).abs()
+    }
+}
+
 /// Largest absolute difference between two float series.
 fn max_diff(a: impl Iterator<Item = f64>, b: impl Iterator<Item = f64>) -> f64 {
-    a.zip(b).map(|(x, y)| if x == y { 0.0 } else { (x - y).abs() }).fold(0.0, f64::max)
+    max_db_diff(a, b, f64::NEG_INFINITY)
+}
+
+/// Largest dB difference, ignoring samples where both sides are nulls.
+fn max_db_diff(a: impl Iterator<Item = f64>, b: impl Iterator<Item = f64>, null_floor: f64) -> f64 {
+    a.zip(b).map(|(x, y)| sample_diff(x, y, null_floor)).fold(0.0, f64::max)
 }
 
 fn worst_case_figures_exact(r: &mmana_core::CalcResult, g: &Value) -> bool {
@@ -84,6 +103,24 @@ const GOLDEN_PLATFORM: bool = cfg!(all(target_os = "macos", target_arch = "aarch
 const TOL_CURRENT_REL: f64 = 1e-5;
 const TOL_DB: f64 = 1e-3;
 const TOL_OHM_REL: f64 = 1e-5;
+
+/// Verification scope for pattern / far-field samples: components deeper than
+/// this below the peak gain are not checked when both sides are that deep.
+///
+/// The far field is summed in `f64`, so a 1-ulp libm difference moves each
+/// sample's field by about 1e-16·k of the peak field (k ≈ a few in the
+/// observed cases). At peak−200 dB the field is 1e-10 of the peak, so that
+/// noise is ~1e-6·k relative, ≈ 1e-5·k dB: everything above the floor is
+/// still held to `TOL_DB` with ~100× margin. Below it, values are rounding
+/// residue of an exact cancellation (seen at peak−270…−310 dB at the horizon
+/// over ground, or the -999 sentinel) that shifts by tenths of a dB or more
+/// between libms. The `f32` impedance matrix already limits physical accuracy
+/// to roughly peak−140 dB, so nothing meaningful is lost. It applies to every
+/// direction and polarisation, since exact cancellation (ground at the
+/// horizon, symmetry nulls, cross-polar of planar antennas) can occur
+/// anywhere. On the golden platform the raw values are still required to be
+/// bit-identical.
+const NULL_BELOW_PEAK_DB: f64 = 200.0;
 
 #[test]
 fn engine_matches_original() {
@@ -166,22 +203,30 @@ fn engine_matches_original() {
             }
         }
 
-        // pattern cuts
-        let cut = |ours: [&Vec<f32>; 3], theirs: &Value| {
+        // pattern cuts: `dp` is the raw difference, `dp_tol` ignores nulls
+        let null_floor = f32v(&res["gain"]) - NULL_BELOW_PEAK_DB;
+        let cut = |ours: [&Vec<f32>; 3], theirs: &Value, floor: f64| {
             (0..3)
                 .map(|k| {
                     let t = theirs[k].as_array().unwrap();
-                    max_diff(ours[k].iter().map(|&v| v as f64), t.iter().take(ours[k].len()).map(f32v))
+                    max_db_diff(ours[k].iter().map(|&v| v as f64), t.iter().take(ours[k].len()).map(f32v), floor)
                 })
                 .fold(0.0, f64::max)
         };
         let h = &r.patterns.horizontal;
         let v = &r.patterns.vertical;
-        let dp = cut([&h.vertical_pol, &h.horizontal_pol, &h.total], &g["pattern"]["h"])
-            .max(cut([&v.vertical_pol, &v.horizontal_pol, &v.total], &g["pattern"]["v"]));
-        worst.2 = worst.2.max(dp);
-        if dp > TOL_DB {
-            problems.push(format!("pattern diff {dp} dB"));
+        let cuts = |floor: f64| {
+            cut([&h.vertical_pol, &h.horizontal_pol, &h.total], &g["pattern"]["h"], floor).max(cut(
+                [&v.vertical_pol, &v.horizontal_pol, &v.total],
+                &g["pattern"]["v"],
+                floor,
+            ))
+        };
+        let dp = cuts(f64::NEG_INFINITY);
+        let dp_tol = cuts(null_floor);
+        worst.2 = worst.2.max(dp_tol);
+        if dp_tol > TOL_DB {
+            problems.push(format!("pattern diff {dp_tol} dB"));
         }
 
         // displayed current distribution
@@ -262,14 +307,40 @@ fn exports_match_original() {
             let ours = solved.far_field((0.0, 15.0, 13), (0.0, 45.0, 8));
             let theirs = far.as_array().unwrap();
             assert_eq!(ours.len(), theirs.len(), "{}: far-field sample count", case.name);
+            let null_floor = f32v(&g["result"]["gain"]) - NULL_BELOW_PEAK_DB;
             for (o, t) in ours.iter().zip(theirs) {
                 let vals = [o.zenith, o.azimuth, o.vertical_db, o.horizontal_db, o.total_db];
-                for (a, b) in vals.iter().zip(t.as_array().unwrap()) {
-                    assert!((a - f(b)).abs() <= 5.0001e-4, "{}: far {vals:?} vs {t}", case.name);
+                for (k, (&a, b)) in vals.iter().zip(t.as_array().unwrap()).enumerate() {
+                    // angles are compared in full; only the dB columns may be nulls
+                    let floor = if k >= 2 { null_floor } else { f64::NEG_INFINITY };
+                    assert!(sample_diff(a, f(b), floor) <= 5.0001e-4, "{}: far {vals:?} vs {t}", case.name);
                 }
             }
             checked += 1;
         }
     }
     assert!(checked >= 16, "expected near/far goldens, checked {checked}");
+}
+
+#[test]
+fn sample_comparison_handles_nulls_and_non_finite_values() {
+    let floor = 12.0 - NULL_BELOW_PEAK_DB; // -188 dB
+    // non-finite values never match, not even as nulls or with themselves
+    assert_eq!(sample_diff(f64::NAN, -300.0, floor), f64::INFINITY);
+    assert_eq!(sample_diff(-300.0, f64::NAN, floor), f64::INFINITY);
+    assert_eq!(sample_diff(f64::NAN, f64::NAN, floor), f64::INFINITY);
+    assert_eq!(sample_diff(f64::NEG_INFINITY, -300.0, floor), f64::INFINITY);
+    assert_eq!(sample_diff(f64::NEG_INFINITY, f64::NEG_INFINITY, floor), f64::INFINITY);
+    assert_eq!(sample_diff(f64::INFINITY, -10.0, floor), f64::INFINITY);
+    assert_eq!(max_db_diff([f64::NAN, -10.0].into_iter(), [-300.0, -10.0].into_iter(), floor), f64::INFINITY);
+    assert_eq!(max_diff([f64::NAN].into_iter(), [1.0].into_iter()), f64::INFINITY);
+    // the finite -999 sentinel and residue below the floor are equal nulls
+    assert_eq!(sample_diff(-999.0, -299.9, floor), 0.0);
+    assert_eq!(sample_diff(-290.9, -291.7, floor), 0.0);
+    // the floor itself is a null; anything above it is compared
+    assert_eq!(sample_diff(floor, -999.0, floor), 0.0);
+    assert!(sample_diff(floor + 0.01, -999.0, floor) > 800.0);
+    assert_eq!(sample_diff(-10.0, -300.0, floor), 290.0);
+    // without a floor every difference counts
+    assert_eq!(sample_diff(-999.0, -300.0, f64::NEG_INFINITY), 699.0);
 }
