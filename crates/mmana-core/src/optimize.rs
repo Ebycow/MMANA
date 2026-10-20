@@ -1432,9 +1432,15 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                 loop {
                     if init {
                         let s = &mut self.state[n];
+                        let before = s.dc;
                         s.dc += s.di * dir;
                         let mut dc = s.dc;
-                        if self.clamp(n, &mut dc) {
+                        // a sweep only turns at a bound, which a step that does
+                        // not move the value (pitch 0) never reaches: the
+                        // original loops on its memo forever, never calculating
+                        // again, so it could not even be stopped
+                        let stuck = self.setup.sweep_only && dc == before;
+                        if self.clamp(n, &mut dc) || stuck {
                             // back to the best value, and the other way
                             let mut d = max_d;
                             self.clamp(n, &mut d);
@@ -2348,6 +2354,23 @@ mod tests {
         let edit =
             edit_setup(&project, &opts, &percent, &[SetupOp::SetTarget { index: 1, target: VariableTarget::Height }]);
         assert_eq!(edit.applied, vec![false]);
+    }
+
+    #[test]
+    fn a_sweep_with_no_step_ends() {
+        let project = sample("DP20.MAA");
+        let mut setup = OptimizerSetup { sweep_only: true, ..Default::default() };
+        let mut v = Variable::new(VariableTarget::Height);
+        (v.pitch, v.min, v.max) = (0.0, 0.0, 200.0);
+        setup.variables.push(v);
+        let out = optimize(&project, &CalcOptions::default(), &setup, Some(2), |_| true).unwrap();
+        assert_eq!(out.stop, StopReason::Converged);
+        assert_eq!(out.calculations, 1);
+        assert_eq!(out.project.environment.height, project.environment.height);
+        // a step too small to move the value is no step either
+        setup.variables[0].pitch = 1e-300;
+        let out = optimize(&project, &CalcOptions::default(), &setup, Some(2), |_| true).unwrap();
+        assert_eq!(out.calculations, 1);
     }
 
     #[test]
