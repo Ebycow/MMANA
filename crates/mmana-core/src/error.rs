@@ -27,4 +27,8 @@ pub enum CalcError {
     InvalidWireSegmentation { wire: usize, max: i32 },
     #[error("{what} pulse '{name}' does not exist (valid pulses: 1-{max})")]
     PulseOutOfRange { what: &'static str, name: String, max: usize },
+    #[error("wires {first} and {second} lie exactly on top of each other")]
+    OverlappingWires { first: usize, second: usize },
+    #[error("the calculation has no finite solution (the impedance matrix is singular)")]
+    NoFiniteSolution,
 }

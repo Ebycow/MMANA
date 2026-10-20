@@ -10,6 +10,7 @@ import { ElementEditor } from './components/ElementEditor';
 import { OptimizerDialog } from './components/OptimizerDialog';
 import { OptimizerResults } from './components/OptimizerResults';
 import { Panel } from './components/Panel';
+import { PanelBoundary } from './components/PanelBoundary';
 import { ResultsPanel } from './components/ResultsPanel';
 import { SamplesModal } from './components/SamplesModal';
 import { StatusBar } from './components/StatusBar';
@@ -182,6 +183,7 @@ export function App() {
   // keep the window title in sync
   const fileName = useApp((st) => st.fileName);
   const dirty = useApp((st) => st.dirty);
+  const result = useApp((st) => st.result);
   useEffect(() => {
     const title = `${dirty ? '● ' : ''}${fileName} — MMANA`;
     document.title = title;
@@ -196,12 +198,18 @@ export function App() {
       <AppShell.Main style={{ height: '100dvh' }}>
         <div style={{ height: 'calc(100dvh - 52px - 26px)' }}>
           <div className="workspace">
-            <EditorPanel />
+            <PanelBoundary title="アンテナ" resetKey={fileName}>
+              <EditorPanel />
+            </PanelBoundary>
             <div className="right-column">
-              <Suspense fallback={<Panel title="アンテナ形状">{null}</Panel>}>
-                <AntennaView />
-              </Suspense>
-              <ResultsPanel />
+              <PanelBoundary title="アンテナ形状" resetKey={fileName}>
+                <Suspense fallback={<Panel title="アンテナ形状">{null}</Panel>}>
+                  <AntennaView />
+                </Suspense>
+              </PanelBoundary>
+              <PanelBoundary title="計算結果" resetKey={result}>
+                <ResultsPanel />
+              </PanelBoundary>
             </div>
           </div>
         </div>

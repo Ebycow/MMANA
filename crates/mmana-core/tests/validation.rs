@@ -98,3 +98,45 @@ fn rejects_expansion_that_crosses_the_wire_limit_part_way() {
     p.antenna.sources[0].pulse = "w4096c".into();
     assert_eq!(calc(p), Err(CalcError::TooManySegmentWires { max: 4096 }));
 }
+
+#[test]
+fn rejects_wires_on_top_of_each_other() {
+    // a copy left where it was made, in either direction; the original
+    // carries on with NaN currents
+    for reversed in [false, true] {
+        let mut p = dp20();
+        let mut copy = p.antenna.wires[0].clone();
+        if reversed {
+            std::mem::swap(&mut copy.start, &mut copy.end);
+        }
+        p.antenna.wires.push(copy);
+        assert_eq!(calc(p), Err(CalcError::OverlappingWires { first: 1, second: 2 }), "reversed: {reversed}");
+    }
+}
+
+#[test]
+fn rejects_stacked_copies_on_top_of_each_other() {
+    let mut p = dp20();
+    p.antenna.stack.horizontal = 2;
+    p.antenna.stack.horizontal_spacing = 0.0;
+    assert_eq!(calc(p), Err(CalcError::NoFiniteSolution));
+}
+
+#[test]
+fn accepts_wires_that_only_partly_overlap() {
+    let mut p = dp20();
+    let mut w = p.antenna.wires[0].clone();
+    w.start = Point3::new(w.start.x + 0.001, w.start.y, w.start.z);
+    w.end = Point3::new(w.end.x + 0.001, w.end.y, w.end.z);
+    p.antenna.wires.push(w);
+    assert_eq!(calc(p), Ok(()));
+}
+
+#[test]
+fn accepts_a_disabled_copy_of_a_wire() {
+    let mut p = dp20();
+    let mut off = p.antenna.wires[0].clone();
+    off.radius = 0.0;
+    p.antenna.wires.push(off);
+    assert_eq!(calc(p), Ok(()));
+}

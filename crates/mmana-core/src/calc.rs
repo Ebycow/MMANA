@@ -227,6 +227,22 @@ fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
     Ok(())
 }
 
+/// Rejects two wires with the same ends (in either direction), such as a
+/// copy left where it was made. Their impedance matrix is singular and the
+/// original carries on with NaN currents. Wires with R = 0 are not
+/// calculated, so they may lie anywhere.
+fn check_overlap(ant: &Antenna) -> Result<(), CalcError> {
+    let same = |a: &Point3, b: &Point3| a.x == b.x && a.y == b.y && a.z == b.z;
+    for (i, a) in ant.wires.iter().enumerate().filter(|(_, w)| w.radius != 0.0) {
+        for (j, b) in ant.wires.iter().enumerate().skip(i + 1).filter(|(_, w)| w.radius != 0.0) {
+            if (same(&a.start, &b.start) && same(&a.end, &b.end)) || (same(&a.start, &b.end) && same(&a.end, &b.start)) {
+                return Err(CalcError::OverlappingWires { first: i + 1, second: j + 1 });
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Builds the geometry and solves for the currents at one frequency.
 pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError> {
     let ant = &project.antenna;
@@ -238,10 +254,15 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         return Err(CalcError::NoWires);
     }
     check_segmentation(ant)?;
+    check_overlap(ant)?;
     let mut ap = AntDef::from_model(ant, cfq);
     let cfg = engine_config(project, opts);
     let mut engine = Mininec::new(&mut ap, &cfg)?;
     engine.solve();
+    // other degenerate geometry (stacked copies 0 m apart...) ends the same way
+    if engine.solutions.iter().any(|s| !(s.current.0.is_finite() && s.current.1.is_finite())) {
+        return Err(CalcError::NoFiniteSolution);
+    }
     let mut warnings = Vec::new();
     if project.environment.ground != GroundKind::FreeSpace && ap.min_z + project.environment.height < 0.0 {
         warnings.push("some wires are below ground".to_owned());
