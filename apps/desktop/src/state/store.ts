@@ -193,10 +193,14 @@ export const useApp = create<AppState>()((set, get) => {
 
     save: async (saveAs) => {
       const { project, filePath, fileName } = get();
+      const gen = generation;
       const saved = await files.save(project, saveAs ? null : filePath, fileName);
       if (!saved) return false;
+      // a document opened while saving keeps its own name and state
+      if (gen !== generation) return true;
       if (saved.path) set({ filePath: saved.path, fileName: saved.path.split(/[\\/]/).pop() ?? fileName });
-      set({ dirty: false });
+      // the file holds `project`; edits made while saving are still unsaved
+      set({ dirty: get().project !== project });
       return true;
     },
   };

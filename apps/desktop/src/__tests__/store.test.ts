@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalcResult, ParsedProject, SweepResponse } from '../api/types';
-import { transport } from '../api/transport';
+import { files, transport } from '../api/transport';
 import { newProject } from '../domain/project';
 import { useApp } from '../state/store';
 
@@ -135,5 +135,40 @@ describe('results from a previous document', () => {
     older.resolve(sweepOf(1));
     await first;
     expect(useApp.getState().sweep.data?.[0].gainDbi).toBe(5);
+  });
+});
+
+describe('saving', () => {
+  type Saved = { path: string | null } | null;
+
+  it('clears the unsaved mark when nothing changed while saving', async () => {
+    vi.spyOn(files, 'save').mockResolvedValue({ path: '/tmp/A.maa' });
+    moveWire();
+    expect(await useApp.getState().save(false)).toBe(true);
+    expect(useApp.getState()).toMatchObject({ dirty: false, fileName: 'A.maa', filePath: '/tmp/A.maa' });
+  });
+
+  it('keeps the unsaved mark for an edit made while saving', async () => {
+    const d = deferred<Saved>();
+    const spy = vi.spyOn(files, 'save').mockReturnValue(d.promise);
+    moveWire();
+    const saving = useApp.getState().save(false);
+    moveWire();
+    d.resolve({ path: '/tmp/A.maa' });
+    expect(await saving).toBe(true);
+    expect(spy.mock.calls[0][0]).not.toBe(useApp.getState().project);
+    expect(useApp.getState()).toMatchObject({ dirty: true, filePath: '/tmp/A.maa' });
+  });
+
+  it('leaves a file opened while saving alone', async () => {
+    const d = deferred<Saved>();
+    vi.spyOn(files, 'save').mockReturnValue(d.promise);
+    moveWire();
+    const saving = useApp.getState().save(true);
+    useApp.getState().load(parsed('B'), 'B.maa', '/tmp/B.maa');
+    moveWire();
+    d.resolve({ path: '/tmp/A.maa' });
+    await saving;
+    expect(useApp.getState()).toMatchObject({ dirty: true, fileName: 'B.maa', filePath: '/tmp/B.maa' });
   });
 });
