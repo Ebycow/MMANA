@@ -118,7 +118,10 @@ export function cellOp(row: number, col: ElementColumn, value: number, u: Units,
   }
 }
 
-/** The dialog's input checks, on the value as typed (display units). */
+/**
+ * The dialog's input checks, on the value as typed in the unit the table
+ * shows (mmana-core only gets metres, so these are checked here).
+ */
 export function acceptsValue(col: ElementColumn, v: number): boolean {
   if (col === 'interval' || col === 'position') return v >= 0;
   if (col === 'width' || col === 'height' || col === 'perimeter') return v >= 0.001;
@@ -127,7 +130,8 @@ export function acceptsValue(col: ElementColumn, v: number): boolean {
 
 /**
  * Find & replace (検索と置換): sets `replacement` in every row of `col` whose
- * value, as the table shows it with six decimals, equals `search`.
+ * value, as the table shows it with six decimals, equals `search`. Like typing
+ * it, a replacement the cell would not accept changes nothing.
  */
 export function replaceOps(
   rows: ElementRow[],
@@ -148,8 +152,10 @@ export function replaceOps(
       return;
     }
     if (typeof search !== 'number' || typeof replacement !== 'number') return;
+    const value = Number(strDbl(replacement));
+    if (!acceptsValue(col, value)) return;
     const v = cellValue(rows, base, row, col, u);
-    if (v != null && Number(strDbl(v)) === search) ops.push(cellOp(row, col, Number(strDbl(replacement)), u, scaleAll));
+    if (v != null && Number(strDbl(v)) === search) ops.push(cellOp(row, col, value, u, scaleAll));
   });
   return ops;
 }

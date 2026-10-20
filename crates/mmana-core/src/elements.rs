@@ -1230,6 +1230,11 @@ impl ElementList {
     /// Applies one edit with the dialog's rules (`GridSetEditText`, the popup
     /// menu, `AllRoundUp`). Returns false when the edit is not allowed and
     /// nothing changed.
+    ///
+    /// The dialog accepts a width, height or perimeter of at least 0.001 in
+    /// the unit it shows (metres or wavelengths). Values arrive here in
+    /// metres, so that check belongs to the front end; this only refuses
+    /// sizes that are not positive, never one the original accepts.
     pub fn apply(&mut self, op: &ElementOp) -> bool {
         use ElementOp::*;
         let len = self.groups.len();
@@ -1278,21 +1283,21 @@ impl ElementList {
                 self.set_position(row, value);
             }
             SetWidth { row, value, scale_all } => {
-                if !value.is_finite() || value < 0.001 {
+                if !value.is_finite() || value <= 0.0 {
                     return false;
                 }
                 new_row(self, row, ElementKind::HorizontalDipole);
                 self.groups[row].set_width(&mut self.slots, scale_all, value);
             }
             SetHeight { row, value, scale_all } => {
-                if !value.is_finite() || value < 0.001 {
+                if !value.is_finite() || value <= 0.0 {
                     return false;
                 }
                 new_row(self, row, ElementKind::VerticalDipole);
                 self.groups[row].set_height(&mut self.slots, scale_all, value);
             }
             SetPerimeter { row, value, scale_all } => {
-                if !value.is_finite() || value < 0.001 {
+                if !value.is_finite() || value <= 0.0 {
                     return false;
                 }
                 new_row(self, row, ElementKind::VerticalSquare);
@@ -1614,6 +1619,19 @@ mod tests {
         // the dipole has one wire: the load on the quad's third wire is gone
         assert!(e.antenna.loads.is_empty());
         assert_eq!(e.warnings, vec!["load 'w4c' was removed with its wire".to_string()]);
+    }
+
+    #[test]
+    fn sizes_below_a_millimetre_are_allowed() {
+        // 0.002 λ at 1296 MHz, which MMANA accepts in wavelength display
+        let mut list = ElementList::new(&yagi_with_quad(), 299.8 / 1296.0);
+        let w = 0.002 * (299.8 / 1296.0);
+        assert!(w < 0.001);
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: w, scale_all: false }));
+        assert_eq!(list.rows()[0].width, w);
+        assert!(list.apply(&ElementOp::SetPerimeter { row: 1, value: 0.0005, scale_all: true }));
+        assert!(!list.apply(&ElementOp::SetHeight { row: 1, value: 0.0, scale_all: false }));
+        assert!(!list.apply(&ElementOp::SetWidth { row: 1, value: -1.0, scale_all: false }));
     }
 
     #[test]

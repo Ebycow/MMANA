@@ -73,6 +73,11 @@ describe('element editor helpers', () => {
       { op: 'setInterval', row: 0, value: 2.8 },
       { op: 'setInterval', row: 2, value: 2.8 },
     ]);
+    // a replacement the cell refuses (below 0.001 in the shown unit) does nothing
+    expect(replaceOps(rows, 1, 'width', 10.63, 0.0005, metres, false)).toEqual([]);
+    expect(replaceOps(rows, 1, 'width', 0.5315, 0.002, lambdas, false)).toEqual([
+      { op: 'setWidth', row: 1, value: 0.04, scaleAll: false },
+    ]);
     const seg = replaceOps(rows, 1, 'segmentation', { kind: 'taper' }, { kind: 'fixed', count: 21 }, metres, false);
     expect(seg.map((o) => o.op === 'setSegmentation' && o.row)).toEqual([0, 1]);
   });
