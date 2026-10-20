@@ -12,8 +12,10 @@ use crate::error::CalcError;
 const DM2DEF: f64 = 0.85;
 
 impl AntDef {
+    /// Keeps at most one wire past `WZMAX` (the original drops the excess
+    /// silently), so [`AntDef::set_wz`] can report the overflow.
     fn add_wz(&mut self, x1: f64, y1: f64, z1: f64, x2: f64, y2: f64, z2: f64, r: f64, seg: i32, wno: usize) {
-        if self.wz.len() < WZMAX {
+        if self.wz.len() <= WZMAX {
             self.wz.push(WzDef { x1, y1, z1, x2, y2, z2, r, seg, wno, pno: 0, sno: 0, smax: 0 });
         }
     }
@@ -255,6 +257,10 @@ impl AntDef {
                 }
             } else {
                 self.set_wz_one(i, &wp);
+            }
+            // a tapered or combined wire can cross the limit part-way through
+            if self.wz.len() > WZMAX {
+                return Err(CalcError::TooManySegmentWires { max: WZMAX });
             }
         }
         Ok(())

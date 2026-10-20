@@ -1,6 +1,6 @@
 //! Inputs MMANA's dialogs never produce but project JSON and API requests can.
 
-use mmana_core::{CalcError, CalcOptions, Project, Segmentation, calculate, maa};
+use mmana_core::{CalcError, CalcOptions, Point3, Project, Segmentation, calculate, maa};
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -57,4 +57,26 @@ fn accepts_settings_in_range() {
     p.antenna.auto_segmentation.sc = 3.0;
     p.antenna.wires[0].segmentation = Segmentation::TaperCustom { dm1: 800, dm2: Some(20) };
     calc(p).unwrap();
+}
+
+/// `count` short single-segment wires away from the dipole.
+fn filler_wires(p: &mut Project, count: usize) {
+    let template = p.antenna.wires[0].clone();
+    for k in 0..count {
+        let mut w = template.clone();
+        w.start = Point3 { x: 100.0, y: k as f64, z: 0.0 };
+        w.end = Point3 { x: 100.0, y: k as f64, z: 0.1 };
+        w.segmentation = Segmentation::Fixed { count: 1 };
+        p.antenna.wires.insert(0, w);
+    }
+}
+
+#[test]
+fn rejects_expansion_that_crosses_the_wire_limit_part_way() {
+    // the tapered dipole expands into several wires; only the first fits
+    let mut p = dp20();
+    p.antenna.wires[0].segmentation = Segmentation::Taper;
+    filler_wires(&mut p, 4095);
+    p.antenna.sources[0].pulse = "w4096c".into();
+    assert_eq!(calc(p), Err(CalcError::TooManySegmentWires { max: 4096 }));
 }
