@@ -10,6 +10,11 @@ use crate::model::*;
 
 const WIRE_NOTE_BEGIN: &str = "[MMANA-WIRE-NOTES]";
 const WIRE_NOTE_END: &str = "[/MMANA-WIRE-NOTES]";
+/// MMANA keeps the real-ground media in Mmana.ini, not in the file; the port
+/// stores them in the comment so a file reproduces its results. MMANA shows
+/// the block as comment text and calculates with its own INI values.
+const GROUND_BEGIN: &str = "[MMANA-REAL-GROUND]";
+const GROUND_END: &str = "[/MMANA-REAL-GROUND]";
 
 /// Result of reading a file: the project plus non-fatal issues found.
 #[derive(Debug, Clone)]
@@ -72,7 +77,7 @@ pub fn parse(text: &str) -> ParsedMaa {
     if p.read().is_none() {
         p.warnings.push("file ended before all sections were read".into());
     }
-    finish_comment(&mut p.project.antenna);
+    finish_comment(&mut p.project, &mut p.warnings);
     ParsedMaa { project: p.project, warnings: p.warnings }
 }
 
@@ -315,34 +320,110 @@ fn pulse_name(s: &str) -> String {
     crate::engine::to_half_width(s).trim_end().chars().take(8).collect()
 }
 
-/// Moves the `[MMANA-WIRE-NOTES]` block from the comment onto the wires.
-fn finish_comment(ant: &mut Antenna) {
+/// Moves the port's own blocks (`[MMANA-WIRE-NOTES]`, `[MMANA-REAL-GROUND]`)
+/// from the comment onto the model. A block that cannot be read stays in the
+/// comment so nothing the user wrote is lost.
+fn finish_comment(project: &mut Project, warnings: &mut Vec<String>) {
+    let comment = std::mem::take(&mut project.antenna.comment);
     let mut clean = String::new();
-    let mut in_block = false;
-    for line in ant.comment.split("\r\n") {
-        if line == WIRE_NOTE_BEGIN {
-            in_block = true;
-            continue;
-        }
-        if in_block {
-            if line == WIRE_NOTE_END {
-                in_block = false;
-            } else if let Some((n, note)) = line.split_once('=') {
-                let w: usize = n.trim().parse().unwrap_or(0);
-                if w > 0 && w <= ant.wires.len() {
-                    ant.wires[w - 1].note = decode_note(note);
-                }
-            }
-            continue;
-        }
+    let mut keep = |line: &str| {
         clean.push_str(line);
         clean.push_str("\r\n");
+    };
+    // (begin marker, end marker, lines so far)
+    let mut block: Option<(&str, &str, Vec<&str>)> = None;
+    for line in comment.split("\r\n") {
+        if let Some((begin, end, lines)) = &mut block {
+            if line != *end {
+                lines.push(line);
+                continue;
+            }
+            if *begin == WIRE_NOTE_BEGIN {
+                read_wire_notes(&mut project.antenna, lines);
+            } else if let Some(rg) = read_real_ground(lines) {
+                project.environment.real_ground = rg;
+            } else {
+                warnings.push(format!("{begin} in the comment could not be read; the default ground is used"));
+                [*begin].iter().chain(lines.iter()).chain([*end].iter()).for_each(|l| keep(l));
+            }
+            block = None;
+            continue;
+        }
+        match line {
+            WIRE_NOTE_BEGIN => block = Some((WIRE_NOTE_BEGIN, WIRE_NOTE_END, Vec::new())),
+            GROUND_BEGIN => block = Some((GROUND_BEGIN, GROUND_END, Vec::new())),
+            _ => keep(line),
+        }
+    }
+    if let Some((begin, _, lines)) = block {
+        warnings.push(format!("{begin} in the comment is not closed; it was kept as comment text"));
+        [begin].iter().chain(lines.iter()).for_each(|l| keep(l));
     }
     // split() yields a trailing empty piece after the final CRLF.
     if clean.ends_with("\r\n\r\n") || clean == "\r\n" {
         clean.truncate(clean.len() - 2);
     }
-    ant.comment = clean;
+    project.antenna.comment = clean;
+}
+
+fn read_wire_notes(ant: &mut Antenna, lines: &[&str]) {
+    for line in lines {
+        if let Some((n, note)) = line.split_once('=') {
+            let w: usize = n.trim().parse().unwrap_or(0);
+            if w > 0 && w <= ant.wires.len() {
+                ant.wires[w - 1].note = decode_note(note);
+            }
+        }
+    }
+}
+
+/// `medium=permittivity,conductivity,boundary,height` (one line per medium,
+/// empty for "not set") and optionally `screen=radials,radius`.
+fn read_real_ground(lines: &[&str]) -> Option<RealGround> {
+    fn num(s: &str) -> Option<f64> {
+        s.trim().parse().ok().filter(|v: &f64| v.is_finite())
+    }
+    fn opt(s: &str) -> Option<Option<f64>> {
+        if s.trim().is_empty() { Some(None) } else { num(s).map(Some) }
+    }
+    let mut rg = RealGround { media: Vec::new(), screen: None };
+    for line in lines {
+        let (key, value) = line.split_once('=')?;
+        let f: Vec<&str> = value.split(',').collect();
+        match (key, f.as_slice()) {
+            ("medium", [e, c, b, h]) => rg.media.push(Medium {
+                permittivity: num(e)?,
+                conductivity: num(c)?,
+                boundary: opt(b)?,
+                height: opt(h)?,
+            }),
+            ("screen", [n, r]) => {
+                rg.screen = Some(GroundScreen { radials: n.trim().parse().ok()?, radial_radius: num(r)? })
+            }
+            _ => return None,
+        }
+    }
+    (!rg.media.is_empty()).then_some(rg)
+}
+
+fn write_real_ground(rg: &RealGround, out: &mut String) {
+    let opt = |v: Option<f64>| v.map(|v| v.to_string()).unwrap_or_default();
+    out.push_str(GROUND_BEGIN);
+    out.push_str("\r\n");
+    for m in &rg.media {
+        out.push_str(&format!(
+            "medium={},{},{},{}\r\n",
+            m.permittivity,
+            m.conductivity,
+            opt(m.boundary),
+            opt(m.height)
+        ));
+    }
+    if let Some(s) = rg.screen {
+        out.push_str(&format!("screen={},{}\r\n", s.radials, s.radial_radius));
+    }
+    out.push_str(GROUND_END);
+    out.push_str("\r\n");
 }
 
 /// Notes are stored percent-encoded (bytes in the file's encoding).
@@ -498,6 +579,14 @@ pub fn write(project: &Project) -> String {
         rem.push_str(WIRE_NOTE_END);
         rem.push_str("\r\n");
     }
+    // the default is what MMANA itself starts with, so it is left out and the
+    // file stays identical to one MMANA writes
+    if env.real_ground != RealGround::default() {
+        if !rem.is_empty() && !rem.ends_with('\n') {
+            rem.push_str("\r\n");
+        }
+        write_real_ground(&env.real_ground, &mut rem);
+    }
     if !rem.is_empty() {
         out.push_str("### コメント ###\r\n");
         out.push_str(&rem);
@@ -546,5 +635,66 @@ mod tests {
         let back = parse(&decode(&encode(&text))).project;
         assert_eq!(back.antenna.wires[0].note, "給電 element");
         assert_eq!(back.antenna.comment, "hello\r\n");
+    }
+    fn reread(p: &Project) -> ParsedMaa {
+        parse(&decode(&encode(&write(p))))
+    }
+
+    #[test]
+    fn default_ground_is_not_written() {
+        assert!(!write(&parse(DP).project).contains(GROUND_BEGIN));
+    }
+
+    #[test]
+    fn real_ground_round_trips() {
+        let mut p = parse(DP).project;
+        p.antenna.wires[0].note = "給電".into();
+        p.antenna.comment = "hello\r\n".into();
+        p.environment.real_ground = RealGround {
+            media: vec![
+                Medium { permittivity: 13.0, conductivity: 0.005, boundary: Some(12.5), height: Some(-0.1) },
+                Medium { permittivity: 1.0 / 3.0, conductivity: 1.0e-4, boundary: None, height: None },
+            ],
+            screen: Some(GroundScreen { radials: 64, radial_radius: 7.25 }),
+        };
+        let back = reread(&p);
+        assert!(back.warnings.is_empty(), "{:?}", back.warnings);
+        assert_eq!(back.project.environment.real_ground, p.environment.real_ground);
+        assert_eq!(back.project.antenna.comment, "hello\r\n");
+        assert_eq!(back.project.antenna.wires[0].note, "給電");
+        // writing again gives the same file
+        assert_eq!(write(&back.project), write(&p));
+    }
+
+    #[test]
+    fn saved_ground_reproduces_the_result() {
+        let bytes = include_bytes!("../../../testdata/maa/DP20.MAA");
+        let mut p = parse_bytes(bytes).project;
+        p.environment.ground = GroundKind::Real;
+        p.environment.real_ground.media[0] = Medium { permittivity: 13.0, conductivity: 0.005, ..Medium::default() };
+        let opts = crate::CalcOptions::default();
+        let before = crate::calculate(&p, &opts).unwrap().gain_dbi;
+        let after = crate::calculate(&reread(&p).project, &opts).unwrap().gain_dbi;
+        assert_eq!(before, after);
+        let default = crate::calculate(&parse_bytes(bytes).project, &opts).unwrap().gain_dbi;
+        assert_ne!(before, default);
+    }
+
+    #[test]
+    fn unreadable_ground_block_stays_in_the_comment() {
+        let block = "[MMANA-REAL-GROUND]\r\nmedium=13,abc,,\r\n[/MMANA-REAL-GROUND]\r\n";
+        let p = parse(&format!("{DP}### コメント ###\r\nnote\r\n{block}"));
+        assert_eq!(p.warnings.len(), 1);
+        assert_eq!(p.project.environment.real_ground, RealGround::default());
+        assert_eq!(p.project.antenna.comment, format!("note\r\n{block}"));
+    }
+
+    #[test]
+    fn unclosed_block_stays_in_the_comment() {
+        let text = "[MMANA-REAL-GROUND]\r\nmedium=13,0.005,,\r\nmore\r\n";
+        let p = parse(&format!("{DP}### コメント ###\r\n{text}"));
+        assert_eq!(p.warnings.len(), 1);
+        assert_eq!(p.project.environment.real_ground, RealGround::default());
+        assert_eq!(p.project.antenna.comment, text);
     }
 }
