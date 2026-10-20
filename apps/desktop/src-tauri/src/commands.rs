@@ -3,9 +3,10 @@
 //! of TypeScript types. Calculations run on the blocking pool.
 
 use mmana_core::contract::{
-    self, CalculationRequest, FarFieldRequest, FarFieldResponse, NearFieldRequest, NearFieldResponse, ParsedProject,
-    SweepRequest, SweepResponse,
+    self, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse, NearFieldRequest,
+    NearFieldResponse, ParsedProject, SweepRequest, SweepResponse,
 };
+use mmana_core::elements::ElementEdit;
 use mmana_core::{CalcError, CalcResult, Project, maa};
 use serde::Serialize;
 use std::path::Path;
@@ -82,6 +83,18 @@ pub fn parse_maa(bytes: Vec<u8>) -> ParsedProject {
     contract::parse_maa(&bytes)
 }
 
+/// Writes a text export (CSV etc.) as UTF-8 with a BOM, which spreadsheet
+/// applications need to detect the encoding.
+#[tauri::command]
+pub async fn save_text(path: String, contents: String) -> Result<(), CommandError> {
+    blocking(move || {
+        let path = Path::new(&path);
+        let bytes = [b"\xEF\xBB\xBF".as_slice(), contents.as_bytes()].concat();
+        std::fs::write(path, bytes).map_err(|e| io_error(path, e))
+    })
+    .await
+}
+
 /// Saves as `.maa` (Shift_JIS, readable by MMANA) or as project JSON, by extension.
 #[tauri::command]
 pub async fn save_project(path: String, project: Project) -> Result<(), CommandError> {
@@ -115,4 +128,10 @@ pub async fn far_field(request: FarFieldRequest) -> Result<FarFieldResponse, Com
 #[tauri::command]
 pub async fn near_field(request: NearFieldRequest) -> Result<NearFieldResponse, CommandError> {
     blocking(move || Ok(contract::near_field(&request)?)).await
+}
+
+/// Element editing; fast enough to answer on the IPC thread.
+#[tauri::command]
+pub fn edit_elements(request: ElementEditRequest) -> ElementEdit {
+    contract::edit_elements(&request)
 }

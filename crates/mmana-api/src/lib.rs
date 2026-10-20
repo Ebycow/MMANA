@@ -21,12 +21,21 @@ pub struct Limits {
     pub max_sweep_points: usize,
     /// Directions (far field) or points (near field) per request.
     pub max_field_points: usize,
+    /// Element editing: (operations + 1) × wires, which bounds the wires the
+    /// edits can create (each edit copies at most one element).
+    pub max_element_work: usize,
     pub max_body_bytes: usize,
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        Self { max_pulses: 4096, max_sweep_points: 401, max_field_points: 65_341, max_body_bytes: 4 * 1024 * 1024 }
+        Self {
+            max_pulses: 4096,
+            max_sweep_points: 401,
+            max_field_points: 65_341,
+            max_element_work: 1_000_000,
+            max_body_bytes: 4 * 1024 * 1024,
+        }
     }
 }
 
@@ -45,11 +54,13 @@ pub struct AppState {
         routes::calculate,
         routes::sweep,
         routes::far_field,
-        routes::near_field
+        routes::near_field,
+        routes::edit_elements
     ),
     tags(
         (name = "calculations", description = "Antenna calculations"),
         (name = "files", description = "MMANA .maa file conversion"),
+        (name = "editing", description = "Antenna editing"),
         (name = "system")
     )
 )]
@@ -70,6 +81,7 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/sweeps", post(routes::sweep))
         .route("/v1/far-field", post(routes::far_field))
         .route("/v1/near-field", post(routes::near_field))
+        .route("/v1/elements", post(routes::edit_elements))
         .with_state(state)
         .layer(RequestBodyLimitLayer::new(body_limit))
         .layer(CorsLayer::permissive())

@@ -1,0 +1,1633 @@
+//! Element editing (MMANA "エレメント編集").
+//!
+//! Wires joined at their ends form an element (a dipole, a quad loop, ...).
+//! The editor recognises each element's form, lets its width, height,
+//! perimeter, radius and segmentation be changed as a whole, and places the
+//! elements along X by interval or position.
+//!
+//! Port of `CWGroup` / `CWGroupList` (ComLib.cpp) and of the edit rules of the
+//! element dialog `TGrpWireDlg` (GrpWire.cpp). The arithmetic and the order of
+//! comparisons follow the original statement by statement, so edited wires are
+//! bit-identical to MMANA's; `tests/elements.rs` checks this against the
+//! original C++ (`reference/oracle/elements_main.cpp`).
+//!
+//! The dialog edits its own copy of the wires and writes them back on OK.
+//! [`edit_antenna`] does the same for a list of [`ElementOp`]s, replaying them
+//! from the antenna each time, so callers need not keep any editor state.
+
+use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "openapi")]
+use utoipa::ToSchema;
+
+use crate::engine::to_half_width;
+use crate::model::{Antenna, Point3, SPEED_OF_LIGHT_MMANA, Segmentation, Wire};
+
+#[allow(clippy::excessive_precision)]
+const COS30: f64 = 0.866025403784438646763723170752936;
+#[allow(clippy::excessive_precision)]
+const TAN22R5: f64 = 0.414213562373095048801688724209698;
+#[allow(clippy::excessive_precision)]
+const SIN22R5: f64 = 0.382683432365089771728459984030399;
+#[allow(clippy::excessive_precision)]
+const COS22R5: f64 = 0.923879532511286756128183189396788;
+
+const X: usize = 0;
+const Y: usize = 1;
+const Z: usize = 2;
+
+/// The form of an element (`CWTYPE`), as recognised from its wires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub enum ElementKind {
+    /// 不明
+    #[default]
+    Unknown,
+    /// 垂直DP
+    VerticalDipole,
+    /// 垂直□
+    VerticalSquare,
+    /// 垂直◇
+    VerticalDiamond,
+    /// 垂直△ (apex up)
+    VerticalTriangle,
+    /// 垂直▽ (apex down)
+    VerticalInvertedTriangle,
+    /// 垂直○ (octagon)
+    VerticalOctagon,
+    /// 垂直ループ (any other vertical loop)
+    VerticalLoop,
+    /// 水平DP
+    HorizontalDipole,
+    /// 水平□
+    HorizontalSquare,
+    /// 水平◇
+    HorizontalDiamond,
+    /// 水平△
+    HorizontalTriangle,
+    /// 水平▽
+    HorizontalInvertedTriangle,
+    /// 水平ループ (any other horizontal loop)
+    HorizontalLoop,
+    /// 水平系 (open, mostly horizontal)
+    HorizontalOther,
+    /// 垂直系 (open, mostly vertical)
+    VerticalOther,
+    /// 垂直双□ (two squares side by side; a template only, recognised as 垂直□)
+    VerticalDoubleSquare,
+    /// 垂直双▽ (bow tie; a template only, recognised as 垂直ループ)
+    VerticalDoubleTriangle,
+}
+
+impl ElementKind {
+    /// Whether [`ElementOp::SetKind`] can build an element of this form
+    /// (the forms of the dialog's "ｴﾚﾒﾝﾄ形式の変更" menu).
+    pub fn is_template(self) -> bool {
+        use ElementKind::*;
+        matches!(
+            self,
+            HorizontalDipole
+                | VerticalDipole
+                | VerticalSquare
+                | VerticalDiamond
+                | VerticalInvertedTriangle
+                | VerticalTriangle
+                | VerticalOctagon
+                | VerticalDoubleSquare
+                | VerticalDoubleTriangle
+                | HorizontalSquare
+                | HorizontalDiamond
+                | HorizontalTriangle
+                | HorizontalInvertedTriangle
+        )
+    }
+
+    /// The template (`CWTYPE` of `SetNewType`) that builds this form. The
+    /// horizontal triangle templates come out as the other triangle when
+    /// recognised; MMANA's menu names them by the result, and so does this.
+    fn template(self) -> ElementKind {
+        match self {
+            ElementKind::HorizontalTriangle => ElementKind::HorizontalInvertedTriangle,
+            ElementKind::HorizontalInvertedTriangle => ElementKind::HorizontalTriangle,
+            k => k,
+        }
+    }
+}
+
+/// One edit in the element editor. `row` is the 0-based element; the row
+/// after the last one (`row` = element count) is the dialog's "新規" row,
+/// where an edit first creates a new element.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(tag = "op", rename_all = "camelCase")]
+pub enum ElementOp {
+    /// Distance to the neighbouring element on the base element's side (間隔).
+    SetInterval { row: usize, value: f64 },
+    /// Distance from the first element (位置).
+    SetPosition { row: usize, value: f64 },
+    /// Extent along Y (横幅). `scaleAll` scales every coordinate instead of
+    /// moving only the outermost ones.
+    #[serde(rename_all = "camelCase")]
+    SetWidth {
+        row: usize,
+        value: f64,
+        #[serde(default)]
+        scale_all: bool,
+    },
+    /// Extent along Z (縦幅).
+    #[serde(rename_all = "camelCase")]
+    SetHeight {
+        row: usize,
+        value: f64,
+        #[serde(default)]
+        scale_all: bool,
+    },
+    /// Perimeter of a loop (全周), or the extent along X of other forms (Ｘ幅).
+    #[serde(rename_all = "camelCase")]
+    SetPerimeter {
+        row: usize,
+        value: f64,
+        #[serde(default)]
+        scale_all: bool,
+    },
+    /// Radius of every wire of the element in metres (negative selects a
+    /// combined wire). Ignored when the wires' radii differ.
+    SetRadius { row: usize, value: f64 },
+    /// Ignored when the wires' segmentations differ.
+    SetSegmentation { row: usize, segmentation: Segmentation },
+    /// Rebuilds the element in another form, keeping its size and radius.
+    SetKind { row: usize, kind: ElementKind },
+    /// Inserts a copy of the element at `row` before it.
+    Insert { row: usize },
+    /// Deletes an element; the base element cannot be deleted.
+    Delete { row: usize },
+    /// Rounds sizes, positions and radii to `decimals` places (値を丸める),
+    /// in metres or, with `inWavelengths`, in wavelengths.
+    #[serde(rename_all = "camelCase")]
+    RoundValues {
+        decimals: u32,
+        #[serde(default)]
+        in_wavelengths: bool,
+        #[serde(default)]
+        scale_all: bool,
+    },
+}
+
+/// One line of the element table.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct ElementRow {
+    pub kind: ElementKind,
+    /// Distance to the neighbouring element on the base element's side
+    /// (0 for the base element).
+    pub interval: f64,
+    /// Distance from the first element.
+    pub position: f64,
+    /// Extent along Y (横幅).
+    pub width: f64,
+    /// Extent along Z (縦幅).
+    pub height: f64,
+    /// Perimeter (全周), or the extent along X when `xWidth` is set.
+    pub perimeter: f64,
+    /// `perimeter` is the extent along X (Ｘ幅), not a loop's perimeter.
+    pub x_width: bool,
+    /// Radius of the wires, or `None` when they differ (複合).
+    pub radius: Option<f64>,
+    /// Segmentation of the wires, or `None` when they differ (複合).
+    pub segmentation: Option<Segmentation>,
+    pub wire_count: usize,
+}
+
+/// The wires the editor writes back, in MMANA's order.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditedWires {
+    pub wires: Vec<Wire>,
+    /// Element (row) of each wire.
+    pub elements: Vec<usize>,
+    /// Slot of each wire in the editor's wire table. Slots below the original
+    /// wire count started as the original wires; a slot freed by a deletion
+    /// may be reused by a wire the editor creates.
+    pub slots: Vec<usize>,
+}
+
+/// `RoundUp(d, s)`: rounds half away from zero to a multiple of 1/s.
+fn round_up(d: f64, s: f64) -> f64 {
+    if d >= 0.0 {
+        let mut d = d * s;
+        d += 0.5;
+        d = d.trunc();
+        d / s
+    } else {
+        let mut d = -d;
+        d *= s;
+        d += 0.5;
+        d = d.trunc();
+        -(d / s)
+    }
+}
+
+fn coord(p: &mut Point3, axis: usize) -> &mut f64 {
+    match axis {
+        X => &mut p.x,
+        Y => &mut p.y,
+        _ => &mut p.z,
+    }
+}
+
+/// A wire of the editor's own wire table (`CWGroupList::wdef`). Deleted
+/// wires stay as dead slots (`PNo == 0`) until a new wire reuses them.
+#[derive(Debug, Clone)]
+struct Slot {
+    wire: Wire,
+    live: bool,
+}
+
+/// `WREF`: a wire of an element and the values `AnaType` derives from it.
+#[derive(Debug, Clone, Copy, Default)]
+struct WireRef {
+    slot: usize,
+    zz: f64,
+    vxy: f64,
+    vyz: f64,
+    /// 1-based place in the loop, 0 = not visited, -1 = dead end.
+    lcf: i32,
+}
+
+/// A corner of a loop (`LOOPS`).
+#[derive(Debug, Clone, Copy)]
+struct Vertex {
+    p: Point3,
+    vxy: f64,
+    vyz: f64,
+}
+
+/// `CWGroup`: one element.
+#[derive(Debug, Clone)]
+struct Group {
+    refs: Vec<WireRef>,
+    /// Bounds (`XL` `YL` `ZL` / `XH` `YH` `ZH`); X is relative to `c[X]`.
+    lo: [f64; 3],
+    hi: [f64; 3],
+    /// Centre (`BX` `BY` `BZ`); `c[X]` is where the element was found.
+    c: [f64; 3],
+    /// `XwF`: not a loop of known form, so the perimeter column is the X extent.
+    xw: bool,
+    kind: ElementKind,
+    enb_r: bool,
+    enb_seg: bool,
+}
+
+impl Group {
+    /// `CWGroup::Init`
+    fn new() -> Self {
+        Self {
+            refs: Vec::new(),
+            lo: [0.0; 3],
+            hi: [0.0; 3],
+            c: [0.0; 3],
+            xw: false,
+            kind: ElementKind::Unknown,
+            enb_r: true,
+            enb_seg: true,
+        }
+    }
+
+    fn add(&mut self, slot: usize) {
+        self.refs.push(WireRef { slot, ..WireRef::default() });
+    }
+
+    /// `AnaLoop`: follows the wires end to end from `p`; true when the chain
+    /// closes at `o`. Like the original it gives up at the first dead end.
+    fn ana_loop(&mut self, slots: &[Slot], n: i32, o: Point3, p: Point3) -> bool {
+        for i in 0..self.refs.len() {
+            if self.refs[i].lcf != 0 {
+                continue;
+            }
+            let w = &slots[self.refs[i].slot].wire;
+            let next = if p == w.start {
+                w.end
+            } else if p == w.end {
+                w.start
+            } else {
+                continue;
+            };
+            self.refs[i].lcf = n + 1;
+            if o == next || self.ana_loop(slots, n + 1, o, next) {
+                return true;
+            }
+            self.refs[i].lcf = -1;
+            return false;
+        }
+        // (here the original also marks the slot after the last wire as a dead end)
+        false
+    }
+
+    /// `AnaType`: recognises the form.
+    fn ana_type(&mut self, slots: &[Slot]) {
+        for r in &mut self.refs {
+            let w = &slots[r.slot].wire;
+            r.lcf = 0;
+            let xx = w.end.x - w.start.x;
+            let yy = w.end.y - w.start.y;
+            r.zz = w.end.z - w.start.z;
+            r.vxy = if yy != 0.0 { if xx != 0.0 { round_up(yy / xx, 10.0) } else { 1.0 } } else { 0.0 };
+            r.vyz = if r.zz != 0.0 { if yy != 0.0 { round_up(r.zz / yy, 10.0) } else { 1.0 } } else { 0.0 };
+        }
+        // The original means to start from the longest wire, but its maximum
+        // starts at 0 and is never raised, so it always starts from the first.
+        let first = slots[self.refs[0].slot].wire.clone();
+        self.refs[0].lcf = 1;
+        self.xw = false;
+        if !self.ana_loop(slots, 1, first.start, first.end) {
+            self.xw = true;
+            self.kind = if self.hi[Z] != self.lo[Z] {
+                if self.lo[X] == self.hi[X] && self.lo[Y] == self.hi[Y] {
+                    ElementKind::VerticalDipole
+                } else if (self.hi[Z] - self.lo[Z]) >= (self.width() / 4.0) {
+                    ElementKind::VerticalOther
+                } else {
+                    ElementKind::HorizontalOther
+                }
+            } else if self.lo[X] == self.hi[X] {
+                ElementKind::HorizontalDipole
+            } else {
+                ElementKind::HorizontalOther
+            };
+            return;
+        }
+
+        // the loop's wires in order of travel
+        let mut order = vec![0usize; self.refs.len()];
+        let mut nm = 0;
+        for (i, o) in order.iter_mut().enumerate() {
+            if let Some(j) = self.refs.iter().position(|r| i as i32 == r.lcf - 1) {
+                *o = j;
+                nm += 1;
+            }
+        }
+
+        // corners: where the direction changes
+        let mut lp: Vec<Vertex> = Vec::with_capacity(nm);
+        let mut zz = 0.0;
+        self.lo = [f64::MAX; 3];
+        self.hi = [-f64::MAX; 3];
+        for i in 0..nm {
+            let j = if i + 1 >= nm { 0 } else { i + 1 };
+            let rp = self.refs[order[i]];
+            zz += rp.zz.abs();
+            let rrp = self.refs[order[j]];
+            if rp.vxy == rrp.vxy && rp.vyz == rrp.vyz {
+                continue;
+            }
+            let (a, b) = (&slots[rp.slot].wire, &slots[rrp.slot].wire);
+            let p = if a.start == b.start || a.start == b.end { a.start } else { a.end };
+            let v = [p.x, p.y, p.z];
+            for axis in [X, Y, Z] {
+                if self.lo[axis] > v[axis] {
+                    self.lo[axis] = v[axis];
+                }
+            }
+            for axis in [X, Y, Z] {
+                if self.hi[axis] < v[axis] {
+                    self.hi[axis] = v[axis];
+                }
+            }
+            lp.push(Vertex { p, vxy: rp.vxy, vyz: rp.vyz });
+        }
+
+        use ElementKind::*;
+        let nt = lp.len();
+        if nt == 3 {
+            // △ / ▽
+            let (a, b, c) =
+                if zz != 0.0 { (lp[0].p.z, lp[1].p.z, lp[2].p.z) } else { (lp[0].p.x, lp[1].p.x, lp[2].p.x) };
+            let apex_up = if a == b {
+                c > a
+            } else if a == c {
+                b > a
+            } else {
+                a > b
+            };
+            self.kind = match (zz != 0.0, apex_up) {
+                (true, true) => VerticalTriangle,
+                (true, false) => VerticalInvertedTriangle,
+                (false, true) => HorizontalTriangle,
+                (false, false) => HorizontalInvertedTriangle,
+            };
+        } else if nt == 4 {
+            // □ / ◇
+            self.kind = if zz != 0.0 {
+                if lp[0].vxy != 0.0 && lp[0].vyz != 0.0 { VerticalDiamond } else { VerticalSquare }
+            } else if lp[0].vxy == 0.0 || lp[0].vxy == 1.0 {
+                HorizontalSquare
+            } else {
+                HorizontalDiamond
+            };
+        } else if nt >= 3 {
+            // other loops
+            self.xw = true;
+            self.kind = if zz != 0.0 {
+                if nt == 8 {
+                    self.xw = false;
+                    VerticalOctagon
+                } else {
+                    VerticalLoop
+                }
+            } else {
+                HorizontalLoop
+            };
+        } else {
+            self.xw = true;
+            self.kind = Unknown;
+        }
+    }
+
+    /// `AnaWire`: bounds, common radius / segmentation, form; then moves the
+    /// element's X to be relative to its centre.
+    fn ana_wire(&mut self, slots: &mut [Slot]) {
+        self.enb_r = true;
+        self.enb_seg = true;
+        if self.refs.is_empty() {
+            return;
+        }
+        self.lo = [f64::MAX; 3];
+        self.hi = [-f64::MAX; 3];
+        let (mut r0, mut seg0) = (0.0, 0);
+        for (i, r) in self.refs.iter().enumerate() {
+            let w = &slots[r.slot].wire;
+            for p in [[w.start.x, w.start.y, w.start.z], [w.end.x, w.end.y, w.end.z]] {
+                for axis in [X, Y, Z] {
+                    if self.lo[axis] > p[axis] {
+                        self.lo[axis] = p[axis];
+                    }
+                }
+                for axis in [X, Y, Z] {
+                    if self.hi[axis] < p[axis] {
+                        self.hi[axis] = p[axis];
+                    }
+                }
+            }
+            let seg = w.segmentation.to_code();
+            if i > 0 {
+                if w.radius != r0 {
+                    self.enb_r = false;
+                }
+                if seg != seg0 {
+                    self.enb_seg = false;
+                }
+            } else {
+                r0 = w.radius;
+                seg0 = seg;
+            }
+        }
+        self.ana_type(slots);
+        for axis in [X, Y, Z] {
+            self.c[axis] = (self.hi[axis] + self.lo[axis]) / 2.0;
+        }
+        for r in &self.refs {
+            let w = &mut slots[r.slot].wire;
+            w.start.x -= self.c[X];
+            w.end.x -= self.c[X];
+        }
+        self.lo[X] -= self.c[X];
+        self.hi[X] -= self.c[X];
+    }
+
+    /// `GetHeight`
+    fn height(&self) -> f64 {
+        if self.hi[Z] != self.lo[Z] {
+            self.hi[Z] - self.lo[Z]
+        } else if !self.xw {
+            self.hi[X] - self.lo[X]
+        } else {
+            0.0
+        }
+    }
+
+    /// `GetWidth`
+    fn width(&self) -> f64 {
+        if self.hi[Y] != self.lo[Y] {
+            self.hi[Y] - self.lo[Y]
+        } else if !self.xw {
+            self.hi[X] - self.lo[X]
+        } else {
+            0.0
+        }
+    }
+
+    /// `GetRound`
+    fn perimeter(&self) -> f64 {
+        use ElementKind::*;
+        let h = self.height();
+        let w = self.width();
+        match self.kind {
+            VerticalSquare | HorizontalSquare => (h * 2.0) + (w * 2.0),
+            VerticalDiamond | HorizontalDiamond => 2.0 * ((h * h) + (w * w)).sqrt(),
+            VerticalTriangle | VerticalInvertedTriangle | HorizontalTriangle | HorizontalInvertedTriangle => {
+                w + 2.0 * ((h * h) + ((w * w) / 4.0)).sqrt()
+            }
+            VerticalOctagon => ((h * TAN22R5) * 4.0) + ((w * TAN22R5) * 4.0),
+            _ => self.hi[X] - self.lo[X],
+        }
+    }
+
+    /// `GetR`
+    fn radius(&self, slots: &[Slot]) -> f64 {
+        self.refs.first().map_or(0.005, |r| slots[r.slot].wire.radius)
+    }
+
+    /// `GetSEG`
+    fn segmentation(&self, slots: &[Slot]) -> Segmentation {
+        self.refs.first().map_or(Segmentation::Auto, |r| slots[r.slot].wire.segmentation)
+    }
+
+    /// New bounds for an extent of `w` along Y or Z (`SetWidth`, `SetHeight`).
+    fn new_bounds(&self, axis: usize, w: f64) -> (f64, f64) {
+        let (lo, hi) = (self.lo[axis], self.hi[axis]);
+        if lo == 0.0 {
+            (0.0, w)
+        } else if hi == 0.0 {
+            (-w, 0.0)
+        } else if lo < 0.0 && hi > 0.0 && (hi - lo) != 0.0 {
+            (lo * (w / (hi - lo)), hi * (w / (hi - lo)))
+        } else {
+            (self.c[axis] - (w / 2.0), self.c[axis] + (w / 2.0))
+        }
+    }
+
+    /// Moves the coordinates at (or beyond) the bounds to new bounds
+    /// (the edge-only `SetXWidth` / `SetWidth` / `SetHeight`).
+    fn move_ends(&mut self, slots: &mut [Slot], axis: usize, nl: f64, nh: f64) {
+        let (lo, hi) = (self.lo[axis], self.hi[axis]);
+        for r in &self.refs {
+            let w = &mut slots[r.slot].wire;
+            let (s, e) = (&mut w.start, &mut w.end);
+            if *coord(s, axis) > hi {
+                *coord(s, axis) += nh - hi;
+            }
+            if *coord(e, axis) > hi {
+                *coord(e, axis) += nh - hi;
+            }
+            if *coord(s, axis) < lo {
+                *coord(s, axis) -= lo - nl;
+            }
+            if *coord(e, axis) < lo {
+                *coord(e, axis) -= lo - nl;
+            }
+            if *coord(s, axis) == lo {
+                *coord(s, axis) = nl;
+            }
+            if *coord(e, axis) == lo {
+                *coord(e, axis) = nl;
+            }
+            if *coord(s, axis) == hi {
+                *coord(s, axis) = nh;
+            }
+            if *coord(e, axis) == hi {
+                *coord(e, axis) = nh;
+            }
+        }
+        self.lo[axis] = nl;
+        self.hi[axis] = nh;
+    }
+
+    /// Scales every coordinate to the new extent (`SetXWidthAll` /
+    /// `SetWidthAll` / `SetHeightAll` with `SetLineXY`). Like the original
+    /// this scales about 0, not about the element centre.
+    fn scale_coords(&mut self, slots: &mut [Slot], axis: usize, nl: f64, nh: f64) {
+        let (ol, oh) = (self.lo[axis], self.hi[axis]);
+        for r in &self.refs {
+            let w = &mut slots[r.slot].wire;
+            for p in [&mut w.start, &mut w.end] {
+                let ow = oh - ol;
+                let nw = nh - nl;
+                let t = coord(p, axis);
+                *t *= nw / ow;
+            }
+        }
+        self.lo[axis] = nl;
+        self.hi[axis] = nh;
+    }
+
+    /// `SetXWidth` / `SetXWidthAll`
+    fn set_x_width(&mut self, slots: &mut [Slot], all: bool, w: f64) {
+        if self.hi[X] != self.lo[X] {
+            let (nl, nh) = (-(w / 2.0), w / 2.0);
+            if all {
+                self.scale_coords(slots, X, nl, nh);
+            } else {
+                self.move_ends(slots, X, nl, nh);
+            }
+        }
+    }
+
+    /// `SetWidth` / `SetHeight` and their `All` versions: an extent along Y or
+    /// Z, or along X when the element is flat in that direction.
+    fn set_extent(&mut self, slots: &mut [Slot], axis: usize, all: bool, w: f64) {
+        if self.hi[axis] != self.lo[axis] {
+            let (nl, nh) = self.new_bounds(axis, w);
+            if all {
+                self.scale_coords(slots, axis, nl, nh);
+            } else {
+                self.move_ends(slots, axis, nl, nh);
+            }
+        } else {
+            self.set_x_width(slots, all, w);
+        }
+    }
+
+    fn set_width(&mut self, slots: &mut [Slot], all: bool, w: f64) {
+        self.set_extent(slots, Y, all, w);
+    }
+
+    fn set_height(&mut self, slots: &mut [Slot], all: bool, w: f64) {
+        self.set_extent(slots, Z, all, w);
+    }
+
+    /// `SetRound` / `SetRoundAll`: keeps the aspect ratio of the loop.
+    fn set_perimeter(&mut self, slots: &mut [Slot], all: bool, d: f64) {
+        use ElementKind::*;
+        let h = self.height();
+        let w = self.width();
+        match self.kind {
+            VerticalSquare | HorizontalSquare => {
+                let w = d / ((h / w) + 1.0);
+                self.set_width(slots, all, w / 2.0);
+                self.set_height(slots, all, (d - w) / 2.0);
+            }
+            VerticalDiamond | HorizontalDiamond => {
+                let b = h / w;
+                let w = d / (4.0 * ((b * b) + 1.0)).sqrt();
+                let h = b * w;
+                self.set_width(slots, all, w);
+                self.set_height(slots, all, h);
+            }
+            VerticalTriangle | VerticalInvertedTriangle | HorizontalTriangle | HorizontalInvertedTriangle => {
+                let b = h / w;
+                let w = d / (2.0 * (b * b + 0.25).sqrt() + 1.0);
+                let h = b * w;
+                self.set_width(slots, all, w);
+                self.set_height(slots, all, h);
+            }
+            VerticalOctagon => self.set_octagon_perimeter(slots, d),
+            _ => self.set_x_width(slots, all, d),
+        }
+    }
+
+    /// `SetPieRound`: a regular octagon of perimeter `d`.
+    fn set_octagon_perimeter(&mut self, slots: &mut [Slot], d: f64) {
+        let l = d / 8.0;
+        let h = l / TAN22R5;
+        self.set_width(slots, false, h);
+        self.set_height(slots, false, h);
+        let rsin = l / 2.0;
+        let (by, bz) = (self.c[Y], self.c[Z]);
+        let (yl, yh, zl, zh) = (self.lo[Y], self.hi[Y], self.lo[Z], self.hi[Z]);
+        for r in &self.refs {
+            let w = &mut slots[r.slot].wire;
+            if w.start.z == zh || w.start.z == zl {
+                w.start.y = if w.start.y > by { by + rsin } else { by - rsin };
+            }
+            if w.end.z == zh || w.end.z == zl {
+                w.end.y = if w.end.y > by { by + rsin } else { by - rsin };
+            }
+            if w.start.y == yh || w.start.y == yl {
+                w.start.z = if w.start.z > bz { bz + rsin } else { bz - rsin };
+            }
+            if w.end.y == yh || w.end.y == yl {
+                w.end.z = if w.end.z > bz { bz + rsin } else { bz - rsin };
+            }
+        }
+    }
+
+    /// `SetR`
+    fn set_radius(&mut self, slots: &mut [Slot], r: f64) {
+        if self.enb_r {
+            for wr in &self.refs {
+                slots[wr.slot].wire.radius = r;
+            }
+        }
+    }
+
+    /// `SetSeg`
+    fn set_segmentation(&mut self, slots: &mut [Slot], s: Segmentation) {
+        if self.enb_seg {
+            for wr in &self.refs {
+                slots[wr.slot].wire.segmentation = s;
+            }
+        }
+    }
+
+    fn same_shape(&self, other: &Group, slots: &[Slot]) -> bool {
+        self.refs.len() == other.refs.len()
+            && self.refs.iter().zip(&other.refs).all(|(a, b)| {
+                let (a, b) = (&slots[a.slot].wire, &slots[b.slot].wire);
+                a.start == b.start && a.end == b.end
+            })
+    }
+}
+
+/// The element table of an antenna (`CWGroupList`): its elements sorted along
+/// X and the spacing between them.
+#[derive(Debug, Clone)]
+pub struct ElementList {
+    slots: Vec<Slot>,
+    groups: Vec<Group>,
+    /// `BaseW`: the element nearest to X = 0, from which intervals count.
+    base: usize,
+    /// `Intval`: for elements before the base, the distance to the next
+    /// element; after it, the distance to the previous one. Like the
+    /// original's fixed array it keeps stale values past the last element.
+    intervals: Vec<f64>,
+    /// `exeenv.rmd`
+    wavelength: f64,
+}
+
+impl ElementList {
+    /// Groups the wires into elements (`SetWire`). `wavelength` is the design
+    /// wavelength (λ = 299.8 / f), used for the sizes of new elements.
+    pub fn new(wires: &[Wire], wavelength: f64) -> Self {
+        let slots: Vec<Slot> = wires.iter().map(|w| Slot { wire: w.clone(), live: true }).collect();
+
+        // wires joined end to end (`Connect`)
+        let n = slots.len();
+        let mut member: Vec<Option<usize>> = vec![None; n];
+        let mut count = 0;
+        for i in 0..n {
+            if member[i].is_some() {
+                continue;
+            }
+            member[i] = Some(count);
+            let mut open = vec![slots[i].wire.start, slots[i].wire.end];
+            while let Some(p) = open.pop() {
+                for k in 0..n {
+                    if member[k].is_some() {
+                        continue;
+                    }
+                    let w = &slots[k].wire;
+                    if w.start == p {
+                        member[k] = Some(count);
+                        open.push(w.end);
+                    } else if w.end == p {
+                        member[k] = Some(count);
+                        open.push(w.start);
+                    }
+                }
+            }
+            count += 1;
+        }
+        let mut groups: Vec<Group> = (0..count).map(|_| Group::new()).collect();
+        for (k, g) in member.iter().enumerate() {
+            groups[g.expect("every wire belongs to an element")].add(k);
+        }
+
+        let mut list = Self { slots, groups: Vec::new(), base: 0, intervals: Vec::new(), wavelength };
+        for g in &mut groups {
+            g.ana_wire(&mut list.slots);
+        }
+        list.groups = groups;
+        list.sort();
+        list
+    }
+
+    /// `Sort`: orders the elements by X (the original's shell sort, so equal
+    /// positions keep its order) and derives the intervals.
+    fn sort(&mut self) {
+        let n = self.groups.len();
+        let mut gap = n / 2;
+        while gap > 0 {
+            for i in gap..n {
+                let mut j = i as isize - gap as isize;
+                while j >= 0 {
+                    let ju = j as usize;
+                    if self.groups[ju].c[X] <= self.groups[ju + gap].c[X] {
+                        break;
+                    }
+                    self.groups.swap(ju, ju + gap);
+                    j -= gap as isize;
+                }
+            }
+            gap /= 2;
+        }
+        // the base element is the one nearest to X = 0
+        let mut minx = f64::MAX;
+        self.base = 0;
+        for (i, g) in self.groups.iter().enumerate() {
+            if minx > g.c[X].abs() {
+                minx = g.c[X].abs();
+                self.base = i;
+            }
+        }
+        self.intervals = vec![0.0; n.max(1)];
+        if n == 0 {
+            return;
+        }
+        let mut d = self.groups[self.base].c[X];
+        for i in (0..=self.base).rev() {
+            self.intervals[i] = d - self.groups[i].c[X];
+            d = self.groups[i].c[X];
+        }
+        let mut d = self.groups[self.base].c[X];
+        for i in self.base + 1..n {
+            self.intervals[i] = self.groups[i].c[X] - d;
+            d = self.groups[i].c[X];
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.groups.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.groups.is_empty()
+    }
+
+    /// The element intervals count from (`BaseW`).
+    pub fn base(&self) -> usize {
+        self.base
+    }
+
+    fn interval(&self, i: usize) -> f64 {
+        self.intervals.get(i).copied().unwrap_or(0.0)
+    }
+
+    fn interval_mut(&mut self, i: usize) -> &mut f64 {
+        if self.intervals.len() <= i {
+            self.intervals.resize(i + 1, 0.0);
+        }
+        &mut self.intervals[i]
+    }
+
+    /// `GetXPosition`: distance of element `n` from the first element.
+    fn position(&self, n: usize) -> f64 {
+        let mut d = 0.0;
+        let (mut i, mut n) = (0, n);
+        while i < n && i < self.groups.len() {
+            if i == self.base {
+                i += 1;
+                n += 1;
+            }
+            d += self.interval(i);
+            i += 1;
+        }
+        d
+    }
+
+    /// `SetXPosition`: moves element `n` without moving the others.
+    fn set_position(&mut self, n: usize, d: f64) {
+        let d = d - self.position(n);
+        let len = self.groups.len();
+        if n == self.base {
+            if n > 0 {
+                *self.interval_mut(n - 1) += d;
+            }
+            if n + 1 < len {
+                *self.interval_mut(n + 1) -= d;
+            }
+        } else if n < self.base {
+            if n > 0 {
+                *self.interval_mut(n - 1) += d;
+            }
+            *self.interval_mut(n) -= d;
+        } else {
+            *self.interval_mut(n) += d;
+            if n + 1 < len {
+                *self.interval_mut(n + 1) -= d;
+            }
+        }
+    }
+
+    pub fn rows(&self) -> Vec<ElementRow> {
+        self.groups
+            .iter()
+            .enumerate()
+            .map(|(i, g)| ElementRow {
+                kind: g.kind,
+                interval: self.interval(i),
+                position: self.position(i),
+                width: g.width(),
+                height: g.height(),
+                perimeter: g.perimeter(),
+                x_width: g.xw,
+                radius: g.enb_r.then(|| g.radius(&self.slots)),
+                segmentation: g.enb_seg.then(|| g.segmentation(&self.slots)),
+                wire_count: g.refs.len(),
+            })
+            .collect()
+    }
+
+    /// `GetNewWire`: the first free slot, or a new one.
+    fn new_slot(&mut self) -> usize {
+        if let Some(i) = self.slots.iter().position(|s| !s.live) {
+            return i;
+        }
+        let blank = Wire {
+            start: Point3::default(),
+            end: Point3::default(),
+            radius: 0.0,
+            segmentation: Segmentation::Auto,
+            note: String::new(),
+        };
+        self.slots.push(Slot { wire: blank, live: false });
+        self.slots.len() - 1
+    }
+
+    /// `AddWire`: a template wire. Like the original, a reused slot keeps its note.
+    #[allow(clippy::too_many_arguments)]
+    fn add_wire(&mut self, x1: f64, y1: f64, z1: f64, x2: f64, y2: f64, z2: f64, r: f64, seg: i32) -> usize {
+        let i = self.new_slot();
+        let s = &mut self.slots[i];
+        s.wire.start = Point3::new(x1, y1, z1);
+        s.wire.end = Point3::new(x2, y2, z2);
+        s.wire.radius = r;
+        s.wire.segmentation = Segmentation::from_code(seg);
+        s.live = true;
+        i
+    }
+
+    /// A new element with copies of the wires of element `src`.
+    fn copy_of(&mut self, src: usize) -> Group {
+        let mut g = Group::new();
+        let from: Vec<usize> = self.groups[src].refs.iter().map(|r| r.slot).collect();
+        for s in from {
+            let i = self.new_slot();
+            self.slots[i] = self.slots[s].clone();
+            g.add(i);
+        }
+        g.ana_wire(&mut self.slots);
+        g
+    }
+
+    /// `CreateWire`: a new last element, copied from the one before it.
+    fn create(&mut self, kind: ElementKind) {
+        let w = self.groups.len();
+        if w == 0 {
+            self.set_kind(w, kind);
+            return;
+        }
+        let g = self.copy_of(w - 1);
+        self.groups.push(g);
+        let d = if self.interval(w - 1) != 0.0 {
+            self.interval(w - 1)
+        } else if w >= 2 && self.interval(w - 2) != 0.0 {
+            self.interval(w - 2)
+        } else {
+            self.wavelength / 6.0
+        };
+        *self.interval_mut(w) = d;
+    }
+
+    /// `InsertItem`
+    fn insert(&mut self, w: usize) {
+        let len = self.groups.len();
+        if w >= len {
+            self.create(ElementKind::HorizontalDipole);
+            return;
+        }
+        let g = self.copy_of(w);
+        self.groups.insert(w, g);
+        self.interval_mut(len);
+        for i in (w + 1..=len).rev() {
+            self.intervals[i] = self.intervals[i - 1];
+        }
+        let d = if self.interval(w + 1) != 0.0 {
+            self.interval(w + 1)
+        } else if w > 0 && self.interval(w - 1) != 0.0 {
+            self.interval(w - 1)
+        } else {
+            self.wavelength / 6.0
+        };
+        *self.interval_mut(w) = d;
+        if w <= self.base {
+            self.base += 1;
+        }
+    }
+
+    /// `DeleteWire`: frees the element's wire slots.
+    fn free_wires(&mut self, n: usize) {
+        for r in &self.groups[n].refs {
+            self.slots[r.slot].live = false;
+        }
+    }
+
+    /// `DeleteItem` (never called for the base element).
+    fn delete(&mut self, n: usize) {
+        let len = self.groups.len();
+        self.free_wires(n);
+        self.groups.remove(n);
+        for i in n..len - 1 {
+            self.intervals[i] = self.interval(i + 1);
+        }
+        if n <= self.base {
+            self.base -= 1;
+        }
+    }
+
+    /// `SetNewType`: rebuilds element `n` (or creates it when `n` is the
+    /// element count) from the template `kind` (see [`ElementKind::template`]),
+    /// keeping its size, radius and height.
+    fn set_kind(&mut self, n: usize, kind: ElementKind) {
+        use ElementKind::*;
+        let len = self.groups.len();
+        if n > len || !kind.is_template() {
+            return;
+        }
+        let rmd = if self.wavelength != 0.0 { self.wavelength } else { 23.0 };
+        let (mut z, mut round, mut width, mut height, mut rad) = (0.0, rmd, rmd / 2.0, rmd / 2.0, 0.005);
+        if n < len {
+            let g = &self.groups[n];
+            if kind == g.kind {
+                return;
+            }
+            z = g.c[Z];
+            round = g.perimeter();
+            width = g.width();
+            height = g.height();
+            rad = g.radius(&self.slots);
+            self.free_wires(n);
+        }
+        // size of the new element: the old perimeter, else twice the width or
+        // height, else λ (scaled for the forms below)
+        let size = |k: f64, k2: f64, fallback: f64| {
+            if round != 0.0 {
+                round * k
+            } else if width != 0.0 {
+                width * k2
+            } else if height != 0.0 {
+                height * k2
+            } else {
+                fallback
+            }
+        };
+        let w = |list: &mut Self, x1, y1, z1, x2, y2, z2, seg| list.add_wire(x1, y1, z1, x2, y2, z2, rad, seg);
+        let mut wires = Vec::new();
+        match kind {
+            HorizontalDipole => wires.push(w(self, 0.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0)),
+            VerticalDipole => wires.push(w(self, 0.0, 0.0, -1.0, 0.0, 0.0, 1.0, 0)),
+            VerticalSquare => {
+                wires.push(w(self, 0.0, -1.0, -1.0, 0.0, 1.0, -1.0, -1));
+                wires.push(w(self, 0.0, 1.0, -1.0, 0.0, 1.0, 1.0, -1));
+                wires.push(w(self, 0.0, 1.0, 1.0, 0.0, -1.0, 1.0, -1));
+                wires.push(w(self, 0.0, -1.0, 1.0, 0.0, -1.0, -1.0, -1));
+            }
+            VerticalDiamond => {
+                wires.push(w(self, 0.0, 1.0, 0.0, 0.0, 0.0, -1.0, -1));
+                wires.push(w(self, 0.0, 0.0, -1.0, 0.0, -1.0, 0.0, -1));
+                wires.push(w(self, 0.0, -1.0, 0.0, 0.0, 0.0, 1.0, -1));
+                wires.push(w(self, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, -1));
+            }
+            VerticalTriangle => {
+                wires.push(w(self, 0.0, COS30, -0.5, 0.0, -COS30, -0.5, -1));
+                wires.push(w(self, 0.0, -COS30, -0.5, 0.0, 0.0, 1.0, -1));
+                wires.push(w(self, 0.0, 0.0, 1.0, 0.0, COS30, -0.5, -1));
+            }
+            VerticalInvertedTriangle => {
+                wires.push(w(self, 0.0, COS30, 0.5, 0.0, -COS30, 0.5, -1));
+                wires.push(w(self, 0.0, -COS30, 0.5, 0.0, 0.0, -1.0, -1));
+                wires.push(w(self, 0.0, 0.0, -1.0, 0.0, COS30, 0.5, -1));
+            }
+            VerticalOctagon => {
+                let (s, c) = (SIN22R5, COS22R5);
+                wires.push(w(self, 0.0, s, -c, 0.0, -s, -c, -1));
+                wires.push(w(self, 0.0, -s, -c, 0.0, -c, -s, -1));
+                wires.push(w(self, 0.0, -c, -s, 0.0, -c, s, -1));
+                wires.push(w(self, 0.0, -c, s, 0.0, -s, c, -1));
+                wires.push(w(self, 0.0, -s, c, 0.0, s, c, -1));
+                wires.push(w(self, 0.0, s, c, 0.0, c, s, -1));
+                wires.push(w(self, 0.0, c, s, 0.0, c, -s, -1));
+                wires.push(w(self, 0.0, c, -s, 0.0, s, -c, -1));
+            }
+            VerticalDoubleSquare => {
+                wires.push(w(self, 0.0, -2.0, 1.0, 0.0, 0.0, 1.0, -1));
+                wires.push(w(self, 0.0, 0.0, 1.0, 0.0, 2.0, 1.0, -1));
+                wires.push(w(self, 0.0, 2.0, 1.0, 0.0, 2.0, -1.0, -1));
+                wires.push(w(self, 0.0, 2.0, -1.0, 0.0, 0.0, -1.0, -1));
+                wires.push(w(self, 0.0, 0.0, -1.0, 0.0, -2.0, -1.0, -1));
+                wires.push(w(self, 0.0, -2.0, -1.0, 0.0, -2.0, 1.0, -1));
+                wires.push(w(self, 0.0, 0.0, 1.0, 0.0, 0.0, -1.0, -1));
+            }
+            VerticalDoubleTriangle => {
+                wires.push(w(self, 0.0, -2.0, 1.0, 0.0, 0.0, 0.01, -1));
+                wires.push(w(self, 0.0, 0.0, 0.01, 0.0, 2.0, 1.0, -1));
+                wires.push(w(self, 0.0, 2.0, 1.0, 0.0, 2.0, -1.0, -1));
+                wires.push(w(self, 0.0, 2.0, -1.0, 0.0, 0.0, -0.01, -1));
+                wires.push(w(self, 0.0, 0.0, -0.01, 0.0, -2.0, -1.0, -1));
+                wires.push(w(self, 0.0, -2.0, -1.0, 0.0, -2.0, 1.0, -1));
+                wires.push(w(self, 0.0, 0.0, 0.01, 0.0, 0.0, -0.01, -1));
+            }
+            HorizontalSquare => {
+                wires.push(w(self, -1.0, -1.0, z, 1.0, -1.0, z, -1));
+                wires.push(w(self, 1.0, -1.0, z, 1.0, 1.0, z, -1));
+                wires.push(w(self, 1.0, 1.0, z, -1.0, 1.0, z, -1));
+                wires.push(w(self, -1.0, 1.0, z, -1.0, -1.0, z, -1));
+            }
+            HorizontalDiamond => {
+                wires.push(w(self, 0.0, -1.0, z, -1.0, 0.0, z, -1));
+                wires.push(w(self, -1.0, 0.0, z, 0.0, 1.0, z, -1));
+                wires.push(w(self, 0.0, 1.0, z, 1.0, 0.0, z, -1));
+                wires.push(w(self, 1.0, 0.0, z, 0.0, -1.0, z, -1));
+            }
+            HorizontalTriangle => {
+                wires.push(w(self, 0.5, COS30, z, 0.5, -COS30, z, -1));
+                wires.push(w(self, 0.5, -COS30, z, -1.0, 0.0, z, -1));
+                wires.push(w(self, -1.0, 0.0, z, 0.5, COS30, z, -1));
+            }
+            HorizontalInvertedTriangle => {
+                wires.push(w(self, -0.5, COS30, z, -0.5, -COS30, z, -1));
+                wires.push(w(self, -0.5, -COS30, z, 1.0, 0.0, z, -1));
+                wires.push(w(self, 1.0, 0.0, z, -0.5, COS30, z, -1));
+            }
+            _ => unreachable!("not a template"),
+        }
+        let mut g = Group::new();
+        for s in wires {
+            g.add(s);
+        }
+        g.ana_wire(&mut self.slots);
+        let slots = &mut self.slots;
+        match kind {
+            HorizontalDipole => g.set_width(slots, false, size(0.5, 1.0, rmd / 2.0)),
+            VerticalDipole => g.set_height(slots, false, size(0.5, 1.0, rmd / 2.0)),
+            VerticalDoubleSquare => g.set_perimeter(slots, false, size(1.5, 1.5 * 2.0, rmd * 1.5)),
+            VerticalDoubleTriangle => {
+                let d = size(0.71, 0.71 * 2.0, rmd * 0.71 * 2.0);
+                g.set_width(slots, false, d);
+                g.set_height(slots, false, d / 2.0);
+            }
+            _ => g.set_perimeter(slots, false, size(1.0, 2.0, rmd)),
+        }
+        if n < len {
+            self.groups[n] = g;
+        } else {
+            self.groups.push(g);
+        }
+    }
+
+    /// `AllRoundUp` (値を丸める) to multiples of 1/`sc`.
+    fn round_values(&mut self, sc: f64, in_wavelengths: bool, all: bool) {
+        let rmd = self.wavelength;
+        let get = |d: f64| if in_wavelengths { d / rmd } else { d };
+        let set = |d: f64| if in_wavelengths { d * rmd } else { d };
+        for i in 0..self.groups.len() {
+            let slots = &mut self.slots;
+            let g = &mut self.groups[i];
+            if g.xw {
+                if g.width() != 0.0 {
+                    let v = set(round_up(get(g.width()), sc));
+                    g.set_width(slots, all, v);
+                }
+                if g.height() != 0.0 {
+                    let v = set(round_up(get(g.height()), sc));
+                    g.set_height(slots, all, v);
+                }
+                if g.perimeter() != 0.0 {
+                    let v = set(round_up(get(g.perimeter()), sc));
+                    g.set_perimeter(slots, all, v);
+                }
+            } else if g.perimeter() != 0.0 {
+                let v = set(round_up(get(g.perimeter()), sc));
+                g.set_perimeter(slots, all, v);
+            }
+            if self.position(i) != 0.0 {
+                let v = set(round_up(get(self.position(i)), sc));
+                self.set_position(i, v);
+            }
+            let g = &mut self.groups[i];
+            let r = g.radius(&self.slots);
+            if g.enb_r && r > 0.0 {
+                let r = if in_wavelengths {
+                    let r = set(round_up(get(r), sc));
+                    if r == 0.0 { set(1.0 / sc) } else { r }
+                } else {
+                    // (the fallback is 1/sc metres in the original, not 1/sc mm)
+                    let r = round_up(r, sc * 1000.0);
+                    if r == 0.0 { 1.0 / sc * 1000.0 } else { r }
+                };
+                g.set_radius(&mut self.slots, r);
+            }
+        }
+    }
+
+    /// Applies one edit with the dialog's rules (`GridSetEditText`, the popup
+    /// menu, `AllRoundUp`). Returns false when the edit is not allowed and
+    /// nothing changed.
+    pub fn apply(&mut self, op: &ElementOp) -> bool {
+        use ElementOp::*;
+        let len = self.groups.len();
+        // an edit in the "新規" row first creates the element (`GridNewLine`)
+        let new_row = |list: &mut Self, row: usize, kind: ElementKind| {
+            if row >= list.groups.len() {
+                list.create(kind);
+            }
+        };
+        match *op {
+            RoundValues { decimals, in_wavelengths, scale_all } => {
+                if decimals > 9 || (in_wavelengths && self.wavelength == 0.0) {
+                    return false;
+                }
+                self.round_values(10f64.powi(decimals as i32), in_wavelengths, scale_all);
+                return true;
+            }
+            SetInterval { row, .. }
+            | SetPosition { row, .. }
+            | SetWidth { row, .. }
+            | SetHeight { row, .. }
+            | SetPerimeter { row, .. }
+            | SetRadius { row, .. }
+            | SetSegmentation { row, .. }
+            | SetKind { row, .. }
+            | Insert { row }
+                if row > len =>
+            {
+                return false;
+            }
+            _ => {}
+        }
+        match *op {
+            SetInterval { row, value } => {
+                if !value.is_finite() || value < 0.0 || row == self.base {
+                    return false;
+                }
+                new_row(self, row, ElementKind::HorizontalDipole);
+                *self.interval_mut(row) = value;
+            }
+            SetPosition { row, value } => {
+                if !value.is_finite() || value < 0.0 || row == 0 {
+                    return false;
+                }
+                new_row(self, row, ElementKind::HorizontalDipole);
+                self.set_position(row, value);
+            }
+            SetWidth { row, value, scale_all } => {
+                if !value.is_finite() || value < 0.001 {
+                    return false;
+                }
+                new_row(self, row, ElementKind::HorizontalDipole);
+                self.groups[row].set_width(&mut self.slots, scale_all, value);
+            }
+            SetHeight { row, value, scale_all } => {
+                if !value.is_finite() || value < 0.001 {
+                    return false;
+                }
+                new_row(self, row, ElementKind::VerticalDipole);
+                self.groups[row].set_height(&mut self.slots, scale_all, value);
+            }
+            SetPerimeter { row, value, scale_all } => {
+                if !value.is_finite() || value < 0.001 {
+                    return false;
+                }
+                new_row(self, row, ElementKind::VerticalSquare);
+                self.groups[row].set_perimeter(&mut self.slots, scale_all, value);
+            }
+            SetRadius { row, value } => {
+                if !value.is_finite() || (row < len && !self.groups[row].enb_r) {
+                    return false;
+                }
+                new_row(self, row, ElementKind::HorizontalDipole);
+                self.groups[row].set_radius(&mut self.slots, value);
+            }
+            SetSegmentation { row, segmentation } => {
+                if row < len && !self.groups[row].enb_seg {
+                    return false;
+                }
+                new_row(self, row, ElementKind::HorizontalDipole);
+                let s = Segmentation::from_code(segmentation.to_code());
+                self.groups[row].set_segmentation(&mut self.slots, s);
+            }
+            SetKind { row, kind } => {
+                let template = kind.template();
+                // (compares the template with the recognised form, as the original does)
+                if !kind.is_template() || (row < len && self.groups[row].kind == template) {
+                    return false;
+                }
+                self.set_kind(row, template);
+            }
+            Insert { row } => self.insert(row),
+            Delete { row } => {
+                if row >= len || row == self.base {
+                    return false;
+                }
+                self.delete(row);
+            }
+            RoundValues { .. } => unreachable!(),
+        }
+        true
+    }
+
+    /// Two identical elements at the same place (`IsSameElement`), which the
+    /// dialog refuses to write back: they would join into one when read again.
+    pub fn duplicate(&self) -> Option<(usize, usize)> {
+        let same = |i: usize, j: usize| self.groups[i].same_shape(&self.groups[j], &self.slots);
+        for i in (1..=self.base).rev() {
+            let mut j = i;
+            while j > 0 && self.interval(j - 1) == 0.0 {
+                j -= 1;
+                if same(i, j) {
+                    return Some((i, j));
+                }
+            }
+        }
+        for i in self.base..self.groups.len().saturating_sub(1) {
+            let mut j = i + 1;
+            while j < self.groups.len() && self.interval(j) == 0.0 {
+                if same(i, j) {
+                    return Some((i, j));
+                }
+                j += 1;
+            }
+        }
+        None
+    }
+
+    /// The wires as the dialog writes them back (`Update`): each element
+    /// placed at its position. When no wire was deleted every wire keeps its
+    /// index (new ones follow); otherwise they are renumbered element by
+    /// element, from the base element backwards and then forwards.
+    pub fn wires(&self) -> EditedWires {
+        let mut out = EditedWires { wires: Vec::new(), elements: Vec::new(), slots: Vec::new() };
+        if self.groups.is_empty() {
+            return out;
+        }
+        let renumber = self.slots.iter().any(|s| !s.live);
+        let b = self.groups[self.base].c[X];
+        let mut placed: Vec<Option<(Wire, usize)>> = vec![None; self.slots.len()];
+        let mut order = Vec::new();
+        let mut put = |i: usize, bx: f64, slots: &[Slot]| {
+            for r in &self.groups[i].refs {
+                let s = &slots[r.slot];
+                if s.live {
+                    let mut w = s.wire.clone();
+                    w.start.x += bx + b;
+                    w.end.x += bx + b;
+                    placed[r.slot] = Some((w, i));
+                    order.push(r.slot);
+                }
+            }
+        };
+        let mut bx = 0.0;
+        for i in (0..=self.base).rev() {
+            bx -= self.interval(i);
+            put(i, bx, &self.slots);
+        }
+        let mut bx = 0.0;
+        for i in self.base + 1..self.groups.len() {
+            bx += self.interval(i);
+            put(i, bx, &self.slots);
+        }
+        if !renumber {
+            order = (0..self.slots.len()).filter(|&s| placed[s].is_some()).collect();
+        }
+        for s in order {
+            let (w, e) = placed[s].take().expect("each wire is placed once");
+            out.wires.push(w);
+            out.elements.push(e);
+            out.slots.push(s);
+        }
+        out
+    }
+}
+
+/// Result of [`edit_antenna`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct ElementEdit {
+    /// The element table after the edits.
+    pub elements: Vec<ElementRow>,
+    /// The element intervals count from.
+    pub base: usize,
+    /// The antenna with the edited wires. Sources and loads follow their
+    /// wires; those on deleted wires are removed. Unchanged when no edit applied.
+    pub antenna: Antenna,
+    /// Element (row) of each wire of `antenna`.
+    pub wire_elements: Vec<usize>,
+    /// Whether each operation was applied (false: not allowed, nothing changed).
+    pub applied: Vec<bool>,
+    /// Two identical elements at the same place (0-based rows). MMANA does
+    /// not write the wires back in this state.
+    pub duplicate: Option<[usize; 2]>,
+    pub warnings: Vec<String>,
+}
+
+/// Opens the element editor on `antenna`, applies `ops` in order and writes
+/// the wires back, as MMANA's element dialog does on OK.
+pub fn edit_antenna(antenna: &Antenna, ops: &[ElementOp]) -> ElementEdit {
+    let f = antenna.frequency_mhz;
+    let wavelength = if f != 0.0 { SPEED_OF_LIGHT_MMANA / f } else { 0.0 };
+    let mut list = ElementList::new(&antenna.wires, wavelength);
+    let applied: Vec<bool> = ops.iter().map(|op| list.apply(op)).collect();
+    let duplicate = list.duplicate().map(|(a, b)| [a, b]);
+    let mut warnings = Vec::new();
+    let mut edited = antenna.clone();
+    let wire_elements;
+    if applied.contains(&true) {
+        let out = list.wires();
+        // new index of each original wire, if it still exists
+        let mut moved: Vec<Option<usize>> = vec![None; antenna.wires.len()];
+        for (i, &s) in out.slots.iter().enumerate() {
+            if s < moved.len() {
+                moved[s] = Some(i);
+            }
+        }
+        edited.wires = out.wires;
+        wire_elements = out.elements;
+        edited.sources.retain_mut(|s| follow_wire(&mut s.pulse, &moved, "source", &mut warnings));
+        edited.loads.retain_mut(|l| follow_wire(&mut l.pulse, &moved, "load", &mut warnings));
+    } else {
+        // nothing changed: the wires are not rewritten (that would round X)
+        let mut of_slot = vec![0; antenna.wires.len()];
+        for (row, g) in list.groups.iter().enumerate() {
+            for r in &g.refs {
+                of_slot[r.slot] = row;
+            }
+        }
+        wire_elements = of_slot;
+    }
+    ElementEdit {
+        elements: list.rows(),
+        base: list.base(),
+        antenna: edited,
+        wire_elements,
+        applied,
+        duplicate,
+        warnings,
+    }
+}
+
+/// Renumbers the wire of a pulse name (`w3c` → `w5c`). False when the wire
+/// was deleted. Raw pulse numbers cannot follow and are kept with a warning.
+fn follow_wire(pulse: &mut String, moved: &[Option<usize>], what: &str, warnings: &mut Vec<String>) -> bool {
+    let name = to_half_width(pulse);
+    let name = name.trim();
+    let Some(rest) = name.strip_prefix(['w', 'W']) else {
+        if !moved.is_empty() {
+            warnings.push(format!("{what} '{pulse}' is a pulse number and may now refer to another wire"));
+        }
+        return true;
+    };
+    let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+    let Ok(n) = rest[..digits].parse::<usize>() else { return true };
+    if n == 0 || n > moved.len() {
+        return true;
+    }
+    match moved[n - 1] {
+        Some(i) => {
+            *pulse = format!("{}{}{}", &name[..1], i + 1, &rest[digits..]);
+            true
+        }
+        None => {
+            warnings.push(format!("{what} '{pulse}' was removed with its wire"));
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn wire(a: (f64, f64, f64), b: (f64, f64, f64)) -> Wire {
+        Wire {
+            start: Point3::new(a.0, a.1, a.2),
+            end: Point3::new(b.0, b.1, b.2),
+            radius: 0.001,
+            segmentation: Segmentation::Taper,
+            note: String::new(),
+        }
+    }
+
+    /// A 3-element Yagi with a quad loop as the driven element at X = 0.
+    fn yagi_with_quad() -> Vec<Wire> {
+        vec![
+            wire((-2.0, -5.0, 0.0), (-2.0, 5.0, 0.0)),
+            wire((0.0, -2.5, -2.5), (0.0, 2.5, -2.5)),
+            wire((0.0, 2.5, -2.5), (0.0, 2.5, 2.5)),
+            wire((0.0, 2.5, 2.5), (0.0, -2.5, 2.5)),
+            wire((0.0, -2.5, 2.5), (0.0, -2.5, -2.5)),
+            wire((3.0, -4.5, 0.0), (3.0, 4.5, 0.0)),
+        ]
+    }
+
+    #[test]
+    fn recognises_elements_and_spacing() {
+        let list = ElementList::new(&yagi_with_quad(), 21.3);
+        let rows = list.rows();
+        assert_eq!(rows.len(), 3);
+        assert_eq!(list.base(), 1);
+        assert_eq!(rows[0].kind, ElementKind::HorizontalDipole);
+        assert_eq!(rows[1].kind, ElementKind::VerticalSquare);
+        assert_eq!((rows[1].width, rows[1].height, rows[1].perimeter), (5.0, 5.0, 20.0));
+        assert_eq!(rows[1].wire_count, 4);
+        assert_eq!([rows[0].interval, rows[1].interval, rows[2].interval], [2.0, 0.0, 3.0]);
+        assert_eq!([rows[0].position, rows[1].position, rows[2].position], [0.0, 2.0, 5.0]);
+        assert_eq!(rows[0].width, 10.0);
+    }
+
+    #[test]
+    fn unchanged_antenna_is_not_rewritten() {
+        let mut ant = Antenna { wires: yagi_with_quad(), ..Antenna::default() };
+        ant.wires[0].start.x = 0.1 + 0.2 - 2.3; // a value that would not survive X - c + c
+        ant.wires[0].end.x = ant.wires[0].start.x;
+        let e = edit_antenna(&ant, &[ElementOp::Delete { row: 1 }]);
+        assert_eq!(e.applied, vec![false]);
+        assert_eq!(e.antenna, ant);
+        assert_eq!(e.wire_elements, vec![0, 1, 1, 1, 1, 2]);
+    }
+
+    #[test]
+    fn perimeter_keeps_the_square() {
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        assert!(list.apply(&ElementOp::SetPerimeter { row: 1, value: 24.0, scale_all: false }));
+        let r = &list.rows()[1];
+        assert_eq!((r.width, r.height, r.perimeter), (6.0, 6.0, 24.0));
+    }
+
+    #[test]
+    fn deleting_renumbers_wires_and_pulses() {
+        let mut ant = Antenna { wires: yagi_with_quad(), ..Antenna::default() };
+        ant.sources = vec![crate::Source { pulse: "w3c".into(), phase_deg: 0.0, voltage: 1.0 }];
+        ant.loads =
+            vec![crate::Load { pulse: "ｗ６ｂ".into(), kind: crate::LoadKind::Impedance { r: 1.0, x: 0.0 } }];
+        let e = edit_antenna(&ant, &[ElementOp::Delete { row: 2 }]);
+        assert_eq!(e.applied, vec![true]);
+        assert_eq!(e.antenna.wires.len(), 5);
+        // renumbered from the base element backwards: the quad, then the reflector
+        assert_eq!(e.antenna.wires[4], ant.wires[0]);
+        assert_eq!(e.wire_elements, vec![1, 1, 1, 1, 0]);
+        assert_eq!(e.antenna.sources[0].pulse, "w2c");
+        assert!(e.antenna.loads.is_empty());
+        assert_eq!(e.warnings.len(), 1);
+    }
+
+    #[test]
+    fn base_element_cannot_be_deleted() {
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        assert!(!list.apply(&ElementOp::Delete { row: 1 }));
+        assert!(!list.apply(&ElementOp::SetInterval { row: 1, value: 1.0 }));
+        assert!(!list.apply(&ElementOp::SetWidth { row: 9, value: 1.0, scale_all: false }));
+        assert!(!list.apply(&ElementOp::SetWidth { row: 0, value: f64::NAN, scale_all: false }));
+    }
+
+    #[test]
+    fn new_row_creates_a_copy_and_duplicates_are_found() {
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        assert!(list.apply(&ElementOp::SetWidth { row: 3, value: 8.0, scale_all: false }));
+        let rows = list.rows();
+        assert_eq!(rows.len(), 4);
+        assert_eq!((rows[3].kind, rows[3].width, rows[3].interval), (ElementKind::HorizontalDipole, 8.0, 3.0));
+        assert_eq!(list.duplicate(), None);
+        assert!(list.apply(&ElementOp::Insert { row: 3 }));
+        assert!(list.apply(&ElementOp::SetInterval { row: 4, value: 0.0 }));
+        assert_eq!(list.duplicate(), Some((3, 4)));
+    }
+
+    #[test]
+    fn empty_antenna_starts_in_the_new_row() {
+        let mut list = ElementList::new(&[], 21.3);
+        assert!(list.is_empty());
+        assert!(!list.apply(&ElementOp::SetInterval { row: 0, value: 1.0 }));
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 10.0, scale_all: false }));
+        let rows = list.rows();
+        assert_eq!((rows.len(), rows[0].kind, rows[0].width), (1, ElementKind::HorizontalDipole, 10.0));
+        let out = list.wires();
+        assert_eq!(out.wires.len(), 1);
+        assert_eq!((out.wires[0].start.y, out.wires[0].end.y), (-5.0, 5.0));
+    }
+
+    #[test]
+    fn templates_are_recognised_as_their_form() {
+        use ElementKind::*;
+        let cases = [
+            (VerticalDipole, VerticalDipole),
+            (VerticalSquare, VerticalSquare),
+            (VerticalDiamond, VerticalDiamond),
+            (VerticalTriangle, VerticalTriangle),
+            (VerticalInvertedTriangle, VerticalInvertedTriangle),
+            (VerticalOctagon, VerticalOctagon),
+            (HorizontalSquare, HorizontalSquare),
+            (HorizontalDiamond, HorizontalDiamond),
+            (HorizontalTriangle, HorizontalTriangle),
+            (HorizontalInvertedTriangle, HorizontalInvertedTriangle),
+            (VerticalDoubleSquare, VerticalSquare),
+            (VerticalDoubleTriangle, VerticalLoop),
+        ];
+        for (kind, recognised) in cases {
+            let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+            assert!(list.apply(&ElementOp::SetKind { row: 0, kind }), "{kind:?}");
+            assert_eq!(list.rows()[0].kind, recognised, "{kind:?}");
+        }
+        // a form is rebuilt only when it differs (by template, like the original)
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        assert!(!list.apply(&ElementOp::SetKind { row: 1, kind: VerticalSquare }));
+        assert!(!list.apply(&ElementOp::SetKind { row: 1, kind: VerticalLoop }));
+    }
+
+    #[test]
+    fn round_up_matches_the_original() {
+        assert_eq!(round_up(1.23456, 1000.0), 1.235);
+        assert_eq!(round_up(-1.2345, 100.0), -1.23);
+        assert_eq!(round_up(0.25, 10.0), 0.3);
+    }
+}

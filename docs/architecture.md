@@ -8,6 +8,7 @@
                 │  maa       .maa の読み書き（Shift_JIS / UTF-8）                 │
                 │  calc      calculate / sweep / far_field / near_field           │
                 │  pattern   パターン走査と利得・F/B・打ち上げ角（CRes 相当）      │
+                │  elements  エレメント編集（CWGroup / CWGroupList の移植）        │
                 │  engine    MININEC3 本体（mininec3.cpp の移植）                  │
                 └──────▲───────────────────▲──────────────────────▲───────────────┘
                        │                   │                      │
@@ -34,7 +35,7 @@
 | `src-tauri` | Tauri 2 | `contract` の関数を `spawn_blocking` で呼ぶコマンド、ファイルの読み書き、起動引数のファイル |
 | `src/api` | 生成型 + `Transport` | Tauri / HTTP の切り替え、エラーを problem+json の形にそろえる |
 | `src/state` | zustand | プロジェクト、元に戻す・やり直す（最大 200 手）、計算結果と「古い」状態、自動計算 |
-| `src/components` | React 19 + Mantine 9 | ワイヤー表（数式入力・Enter で下へ）、各種フォーム、結果パネル |
+| `src/components` | React 19 + Mantine 9 | ワイヤー表（数式入力・Enter で下へ）、エレメント編集ダイアログ、各種フォーム、結果パネル |
 | `src/components/AntennaView` | three.js（react-three-fiber） | 3D 表示（Z 軸上向き）、ワイヤー選択、電流分布の色分け、視点プリセット。別チャンクで遅延読み込み |
 | `src/charts` | SVG | 指向性図（MMANA と同じ向きと 10^(dB/40) スケール）、周波数特性（十字線を全グラフで共有） |
 
@@ -65,6 +66,7 @@
 | `CalCurrent`, `CRes`（パターン・利得・F/B） | `pattern.rs` |
 | `LoadAntStrings` / `SaveAntStrings` | `maa.rs` |
 | `Calc`（数式入力） | `expr.rs` |
+| `CWGroup`, `CWGroupList`, `TGrpWireDlg` の編集規則 | `elements.rs` |
 
 ## 検証の仕組み（Oracle テスト）
 
@@ -93,6 +95,25 @@ reference/oracle/gen_golden.sh
 ```
 
 オリジナルとの意図的な違いは [porting-notes.md](porting-notes.md) にまとめています。
+
+## エレメント編集（elements）
+
+端どうしがつながったワイヤを 1 つのエレメントとして扱い、形式（垂直□、水平DP など）を判定して、
+横幅・縦幅・全周・半径・分割数・間隔・位置をまとめて変更する機能です（オリジナルの `GrpWire.cpp` のダイアログと、
+`ComLib.cpp` の `CWGroup` / `CWGroupList`）。
+
+- **状態を持たない API にしています。** オリジナルのダイアログはワイヤの写しを編集し、OK で書き戻します。
+  `elements::edit_antenna`（API は `POST /v1/elements`）は、ダイアログを開いたときのアンテナと
+  それまでの操作の列を受け取り、毎回最初から再生して、エレメント表と書き戻したアンテナを返します。
+  UI はエレメントの状態を持たず、操作を戻すのは列の末尾を除くだけです。再生は 1 ms もかかりません。
+- **ワイヤはオリジナルとビット単位で一致します。** エレメント編集の計算は四則演算と平方根だけで、
+  IEEE 754 ではどの環境でも同じ値になるため、テストは全プラットフォームで完全一致を要求します。
+- **検証は計算エンジンと同じ方式です。** `extract.sh` が `CWGroup` / `CWGroupList` を行範囲でそのまま抜き出し、
+  `reference/oracle/elements_main.cpp`（ダイアログの編集規則を VCL なしで書き写したもの）が
+  `testdata/elements/scripts/*.txt` の編集手順を全サンプルに適用して `testdata/elements/golden` を作ります
+  （`reference/oracle/gen_elements.sh`）。`crates/mmana-core/tests/elements.rs` がそれと比較します。
+- オリジナルの `AnaLoop` は、ループが閉じないときワイヤ配列の 1 つ先に書き込みます。
+  Oracle では配列の確保に余白を足してこの書き込みを受け止めます（計算用の Oracle とは別のバイナリにしています）。
 
 ## 性能
 
@@ -127,5 +148,5 @@ reference/oracle/bench.sh                            # オリジナルの C++ �
 ## 次のフェーズ
 
 1. 3D ビューでの直接編集（ワイヤー描画、移動・回転ギズモ、スナップ）
-2. エレメント編集（`GrpWire` / `CWGroup` の移植）と最適化（`CACal` の移植）
+2. 最適化（`CACal` の移植。エレメントの寸法を変数にするときは `elements::ElementList` を使う）
 3. 結果の比較、近傍界・遠方界ファイルの書き出し、印刷 / PDF、インストーラとファイル関連付け

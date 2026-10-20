@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
+use crate::elements::{ElementEdit, ElementOp};
 use crate::{
-    AxisRange, CalcError, CalcOptions, CalcResult, FarFieldSample, NearFieldSample, NearFieldSpec, Project, SweepPoint,
-    maa,
+    Antenna, AxisRange, CalcError, CalcOptions, CalcResult, FarFieldSample, NearFieldSample, NearFieldSpec, Project,
+    SweepPoint, elements, maa,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +82,16 @@ pub struct NearFieldResponse {
     pub samples: Vec<NearFieldSample>,
 }
 
+/// Element editing: the edits so far, replayed on the antenna as it was when
+/// the editor opened.
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct ElementEditRequest {
+    pub antenna: Antenna,
+    #[serde(default)]
+    pub operations: Vec<ElementOp>,
+}
+
 /// Number of samples an axis produces (a step of 0 means one sample).
 pub fn axis_len(a: &AxisRange) -> usize {
     if a.step == 0.0 { 1 } else { a.count.max(1) as usize }
@@ -107,4 +118,8 @@ pub fn far_field(req: &FarFieldRequest) -> Result<FarFieldResponse, CalcError> {
 
 pub fn near_field(req: &NearFieldRequest) -> Result<NearFieldResponse, CalcError> {
     Ok(NearFieldResponse { samples: crate::solve(&req.project, &req.options)?.near_field(&req.spec) })
+}
+
+pub fn edit_elements(req: &ElementEditRequest) -> ElementEdit {
+    elements::edit_antenna(&req.antenna, &req.operations)
 }

@@ -3,6 +3,8 @@
 import type {
   CalcResult,
   CalculationRequest,
+  ElementEdit,
+  ElementEditRequest,
   FarFieldRequest,
   FarFieldResponse,
   NearFieldRequest,
@@ -31,6 +33,7 @@ export interface Transport {
   sweep(req: SweepRequest): Promise<SweepResponse>;
   farField(req: FarFieldRequest): Promise<FarFieldResponse>;
   nearField(req: NearFieldRequest): Promise<NearFieldResponse>;
+  editElements(req: ElementEditRequest): Promise<ElementEdit>;
 }
 
 /** File access differs per platform: native dialogs vs. browser upload/download. */
@@ -42,6 +45,8 @@ export interface Files {
    * browser download), or to null overall when the user cancelled.
    */
   save(project: Project, path: string | null, suggestedName: string): Promise<{ path: string | null } | null>;
+  /** Saves a text export (UTF-8 with BOM); resolves to false when cancelled. */
+  saveText(contents: string, suggestedName: string, filter: { name: string; extension: string }): Promise<boolean>;
 }
 
 function toEngineError(e: unknown): EngineError {
@@ -73,6 +78,7 @@ export const tauriTransport: Transport = {
   sweep: (request) => tauriInvoke('sweep', { request }),
   farField: (request) => tauriInvoke('far_field', { request }),
   nearField: (request) => tauriInvoke('near_field', { request }),
+  editElements: (request) => tauriInvoke('edit_elements', { request }),
 };
 
 const FILTERS = [{ name: 'MMANA アンテナ', extensions: ['maa', 'MAA', 'json'] }];
@@ -103,6 +109,13 @@ export const tauriFiles: Files = {
     await tauriInvoke('save_project', { path: target, project });
     return { path: target };
   },
+  async saveText(contents, suggestedName, filter) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const path = await save({ defaultPath: suggestedName, filters: [{ name: filter.name, extensions: [filter.extension] }] });
+    if (!path) return false;
+    await tauriInvoke('save_text', { path, contents });
+    return true;
+  },
 };
 
 // ----------------------------------------------------------------- HTTP ---
@@ -126,7 +139,16 @@ export function httpTransport(baseUrl: string): Transport {
     sweep: (req) => json('/v1/sweeps', req),
     farField: (req) => json('/v1/far-field', req),
     nearField: (req) => json('/v1/near-field', req),
+    editElements: (req) => json('/v1/elements', req),
   };
+}
+
+function download(blob: Blob, name: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 export function browserFiles(transport: Transport, baseUrl: string): Files {
@@ -165,12 +187,12 @@ export function browserFiles(transport: Transport, baseUrl: string): Files {
         if (!res.ok) throw toEngineError(await res.json());
         blob = await res.blob();
       }
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = suggestedName;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      download(blob, suggestedName);
       return { path: null };
+    },
+    async saveText(contents, suggestedName) {
+      download(new Blob(['\ufeff', contents], { type: 'text/plain;charset=utf-8' }), suggestedName);
+      return true;
     },
   };
 }

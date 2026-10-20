@@ -7,9 +7,10 @@ use axum::extract::{FromRequest, Query, State};
 use axum::http::header;
 use axum::response::IntoResponse;
 use mmana_core::contract::{
-    self, CalculationRequest, FarFieldRequest, FarFieldResponse, NearFieldRequest, NearFieldResponse, ParsedProject,
-    SweepRequest, SweepResponse, axis_len,
+    self, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse, NearFieldRequest,
+    NearFieldResponse, ParsedProject, SweepRequest, SweepResponse, axis_len,
 };
+use mmana_core::elements::ElementEdit;
 use mmana_core::{CalcOptions, CalcResult, Project, maa};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -168,4 +169,27 @@ pub async fn near_field(
     }
     let req = NearFieldRequest { options: checked_options(req.options, &state.limits), ..req };
     Ok(ApiJson(blocking(move || Ok(contract::near_field(&req)?)).await?))
+}
+
+/// Element editing: groups the wires into elements, applies the edits in
+/// order and returns the element table and the edited antenna.
+#[utoipa::path(
+    post,
+    path = "/v1/elements",
+    tag = "editing",
+    request_body = ElementEditRequest,
+    responses((status = 200, body = ElementEdit), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn edit_elements(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<ElementEditRequest>,
+) -> Result<ApiJson<ElementEdit>, ApiError> {
+    let work = (req.operations.len() + 1).saturating_mul(req.antenna.wires.len().max(8));
+    if work > state.limits.max_element_work {
+        return Err(ApiError::LimitExceeded(format!(
+            "(operations + 1) × wires must be at most {}",
+            state.limits.max_element_work
+        )));
+    }
+    Ok(ApiJson(blocking(move || Ok(contract::edit_elements(&req))).await?))
 }

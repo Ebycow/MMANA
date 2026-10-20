@@ -145,6 +145,40 @@ async fn sweep_point_limit() {
 }
 
 #[tokio::test]
+async fn element_editing() {
+    let parsed = parse("3EL20.MAA").await;
+    let antenna = &parsed["project"]["antenna"];
+    let (status, _, v) = post_json(
+        "/v1/elements",
+        json!({ "antenna": antenna, "operations": [
+            { "op": "setWidth", "row": 0, "value": 11.0 },
+            { "op": "delete", "row": 1 },
+            { "op": "setKind", "row": 2, "kind": "verticalSquare" },
+        ] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    assert_eq!(v["applied"], json!([true, false, true]));
+    assert_eq!(v["base"], 1);
+    let rows = v["elements"].as_array().unwrap();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0]["width"], 11.0);
+    assert_eq!(rows[2]["kind"], "verticalSquare");
+    assert_eq!(rows[2]["wireCount"], 4);
+    assert_eq!(v["antenna"]["wires"].as_array().unwrap().len(), 6);
+    assert_eq!(v["wireElements"], json!([1, 2, 0, 2, 2, 2]));
+    assert_eq!(v["duplicate"], Value::Null);
+
+    // (1000 edits + 1) × 1000 wires
+    let mut big = antenna.clone();
+    big["wires"] = Value::Array(vec![antenna["wires"][0].clone(); 1000]);
+    let ops: Vec<Value> = (0..1000).map(|_| json!({ "op": "insert", "row": 0 })).collect();
+    let (status, _, v) = post_json("/v1/elements", json!({ "antenna": big, "operations": ops })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{v}");
+    assert_eq!(v["type"], "limit-exceeded");
+}
+
+#[tokio::test]
 async fn openapi_document_lists_every_route() {
     let (status, _, body) = send(Request::get("/openapi.json").body(Body::empty()).unwrap()).await;
     assert_eq!(status, StatusCode::OK);
@@ -157,6 +191,7 @@ async fn openapi_document_lists_every_route() {
         "/v1/sweeps",
         "/v1/far-field",
         "/v1/near-field",
+        "/v1/elements",
     ] {
         assert!(v["paths"][path].is_object(), "missing {path}");
     }

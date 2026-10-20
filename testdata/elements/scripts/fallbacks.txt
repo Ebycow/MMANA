@@ -1,0 +1,11 @@
+# Defaults: λ/6 when no neighbouring interval is set, and the stale interval
+# a new element in the "新規" row inherits after a deletion.
+interval * 0
+insert new
+insert 0
+delete 0
+delete last
+kind new vsq
+kind new hdm
+width last *2
+roundup 3 l

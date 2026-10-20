@@ -1,5 +1,5 @@
 import { ActionIcon, Button, Group, Text, Tooltip } from '@mantine/core';
-import { IconCopy, IconPlus, IconTrash } from '@tabler/icons-react';
+import { IconCopy, IconLayoutRows, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import type { Point3 } from '../api/types';
 import { newWire, wavelength, wireLength } from '../domain/project';
@@ -22,6 +22,7 @@ export function WireTable() {
   const selected = useApp((s) => s.selectedWire);
   const select = useApp((s) => s.selectWire);
   const edit = useApp((s) => s.edit);
+  const setElementEditorOpen = useApp((s) => s.setElementEditorOpen);
   const lambda = wavelength(freq);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
 
@@ -139,9 +140,16 @@ export function WireTable() {
         </tbody>
       </table>
       <Group p="xs" justify="space-between">
-        <Button variant="light" leftSection={<IconPlus size={14} />} onClick={addWire}>
-          ワイヤーを追加
-        </Button>
+        <Group gap="xs">
+          <Button variant="light" leftSection={<IconPlus size={14} />} onClick={addWire}>
+            ワイヤーを追加
+          </Button>
+          <Tooltip label="つながったワイヤをエレメントとして、幅・全周・間隔などをまとめて変更します" multiline w={260}>
+            <Button variant="default" leftSection={<IconLayoutRows size={14} />} onClick={() => setElementEditorOpen(true)}>
+              エレメント編集…
+            </Button>
+          </Tooltip>
+        </Group>
         <Text size="xs" c="dimmed">
           数値欄では R（波長 = {format(lambda, 3)} m）や四則演算が使えます
         </Text>

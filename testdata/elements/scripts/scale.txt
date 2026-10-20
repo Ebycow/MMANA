@@ -1,0 +1,4 @@
+# Size edits that scale every coordinate (全ての座標を同一比率で変更).
+widthall * *1.07
+heightall * *0.93
+roundall * *1.03

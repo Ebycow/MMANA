@@ -15,10 +15,12 @@ pub fn run() {
             commands::startup_file,
             commands::parse_maa,
             commands::save_project,
+            commands::save_text,
             commands::calculate,
             commands::sweep,
             commands::far_field,
             commands::near_field,
+            commands::edit_elements,
         ])
         .run(tauri::generate_context!())
         .expect("error while running the MMANA application");

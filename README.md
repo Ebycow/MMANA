@@ -5,6 +5,7 @@ JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）
 
 **移植した計算エンジンは、オリジナルの C++ エンジンとビット単位で同じ結果を返します**
 （サンプル 81 ファイルとその派生、計 149 ケースで検証済み。詳細は [docs/architecture.md](docs/architecture.md)）。
+エレメント編集も、オリジナルの `CWGroup` / `CWGroupList` とビット単位で同じワイヤを書き出します（81 ファイル × 7 種の編集手順、計 567 ケース）。
 
 ## 構成
 
@@ -58,6 +59,7 @@ cargo run --release -p mmana-api
 | POST | `/v1/sweeps` | 周波数特性 |
 | POST | `/v1/far-field` | 任意方向の遠方界 |
 | POST | `/v1/near-field` | 近傍界（電界・磁界） |
+| POST | `/v1/elements` | エレメント編集（つながったワイヤをエレメントとして、幅・全周・間隔などを変更） |
 
 エラーは [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) の `application/problem+json` で返します。
 

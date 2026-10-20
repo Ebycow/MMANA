@@ -173,6 +173,19 @@ tr:hover .row-actions,
 tr.selected .row-actions {
   opacity: 1;
 }
+/* element editor: the form column opens a menu */
+.kind-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.kind-button:hover {
+  background: var(--mantine-color-default-hover);
+}
 
 /* ---- charts ---- */
 .chart {

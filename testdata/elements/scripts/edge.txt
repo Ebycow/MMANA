@@ -1,0 +1,6 @@
+# Size edits that move only the outermost coordinates (端点のみ変更).
+width * *1.07
+height * *0.93
+round * *1.03
+radius * *1.5
+seg * 15

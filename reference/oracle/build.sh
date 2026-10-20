@@ -9,4 +9,9 @@ ${CXX:-clang++} -std=c++14 -O2 -ffp-contract=off -w \
 	-I"$HERE/shim" -I"$HERE/generated" \
 	"$HERE/generated/mininec3.cpp" "$HERE/generated/comlib_extract.cpp" "$HERE/oracle_main.cpp" \
 	-o "$HERE/build/oracle"
-echo "built $HERE/build/oracle"
+${CXX:-clang++} -std=c++14 -O2 -ffp-contract=off -w \
+	-I"$HERE" -I"$HERE/shim" -I"$HERE/generated" \
+	"$HERE/generated/mininec3.cpp" "$HERE/generated/comlib_extract.cpp" "$HERE/generated/cwgroup_extract.cpp" \
+	"$HERE/elements_main.cpp" \
+	-o "$HERE/build/elements"
+echo "built $HERE/build/oracle and $HERE/build/elements"

@@ -38,6 +38,8 @@ export interface AppState {
 
   sweep: SweepState;
   showCurrents: boolean;
+  /** The element editor (エレメント編集) is open; it edits a copy of the antenna. */
+  elementEditorOpen: boolean;
 
   /** Applies an edit to a copy of the project and records it for undo. */
   edit: (recipe: (draft: Project) => void) => void;
@@ -49,6 +51,7 @@ export interface AppState {
   setOptions: (patch: Partial<CalcOptions>) => void;
   setAutoCalc: (on: boolean) => void;
   setShowCurrents: (on: boolean) => void;
+  setElementEditorOpen: (open: boolean) => void;
   setSweepRange: (patch: Partial<Pick<SweepState, 'startMhz' | 'stopMhz' | 'points'>>) => void;
   calculate: () => Promise<void>;
   runSweep: () => Promise<void>;
@@ -106,6 +109,7 @@ export const useApp = create<AppState>()((set, get) => {
     calcQueued: false,
     lastCalcMs: null,
     showCurrents: true,
+    elementEditorOpen: false,
 
     edit: (recipe) => {
       const { project, past } = get();
@@ -137,6 +141,7 @@ export const useApp = create<AppState>()((set, get) => {
     setOptions: (patch) => set({ options: { ...get().options, ...patch }, ...staleFlags() }),
     setAutoCalc: (on) => set({ autoCalc: on }),
     setShowCurrents: (on) => set({ showCurrents: on }),
+    setElementEditorOpen: (open) => set({ elementEditorOpen: open }),
     setSweepRange: (patch) => set({ sweep: { ...get().sweep, ...patch } }),
 
     calculate: async () => {

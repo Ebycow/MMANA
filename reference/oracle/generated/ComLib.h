@@ -517,7 +517,173 @@ public:
 	void ClearBWC(void);
 };
 extern CRes	res;
+enum CWTYPE {
+	cwNULL,		// 不明
+	cwVDP,		// 垂直DP
+	cwVSQ,		// 垂直□
+	cwVDM,		// 垂直◇
+	cwVTA,		// 垂直△
+	cwVITA,		// 垂直▽
+	cwVPIE,		// 垂直○
+	cwVLP,		// 垂直ループ
+	cwHDP,		// 水平DP
+	cwHSQ,		// 水平□
+	cwHDM,		// 水平◇
+	cwHTA,		// 水平△
+	cwHITA,		// 水平▽
+	cwHLP,		// 水平ループ
+	cwHANT,		// 水平系
+	cwVANT,		// 垂直系
+	cwVSQ2,		// 垂直双□
+	cwVTA2,		// 垂直双▽
+};
+typedef struct {
+	int		ref;
+	WDEF	*wp;
+	double	D;				// ワイヤの距離
+	double	XX;
+	double	YY;
+	double	ZZ;
+	double	VXY;
+	double	VYZ;
+	int		LCF;
+}WREF;
+typedef struct {
+	double	X, Y, Z;		// 頂点の座標
+	double	VXY;
+	double	VYZ;
+}LOOPS;
+
+class CWGroup
+{
+private:
+	int		bmax;		// ワイヤ配列の数
+	WDEF	*pW;		// ワイヤ定義配列のポインタ
+	double	YL;
+	double	YH;
+	double	ZL;
+	double	ZH;
+	double	XL;
+	double	XH;
+	int		XwF;		// ループアンテナフラグ
+public:
+	int		Type;		// 形式
+	int		bcnt;		// ワイヤの数
+	int		EnbR;		// Ｒ変更可能フラグ
+	int		EnbSeg;		// SEG変更可能フラグ
+	WREF	*pB;		// ワイヤリストの配列
+
+	double	BX;				// 中心位置の座標
+	double	BY;
+	double	BZ;
+private:
+	int AnaLoop(int N, double OX, double OY, double OZ, double X, double Y, double Z);
+	void AnaType(void);
+	void SetPieRound(double d);
+public:
+	CWGroup(void);
+	inline ~CWGroup(){
+		Delete();
+	};
+	void Clear(void);
+	void Init(WDEF *p);
+	void Delete(void);
+	void Alloc(void);
+	void AddWire(int Index);
+	void AnaWire(void);
+	inline double GetX(void){			// Ｘ軸ポジションを得る
+		return BX;
+	};
+	inline double GetHeight(void){		// 高さを得る
+		return (ZH != ZL) ? ZH - ZL : (XwF == 0) ? XH - XL : 0.0;
+	};
+	inline double GetWidth(void){		// 横幅を得る
+		return (YH != YL) ? YH - YL : (XwF == 0) ? XH - XL : 0.0;
+	};
+	double GetRound(void);		// 全周を得る
+	void SetRound(double d);	// 全周を設定する
+	inline double GetR(void){
+		if( bcnt ){
+			return pB->wp->R;
+		}
+		else {
+			return 0.005;
+		}
+	}
+	inline int GetSEG(void){
+		if( bcnt ){
+			return pB->wp->SEG;
+		}
+		else {
+			return 0;
+		}
+	}
+	void SetXWidth(double W);
+	void SetWidth(double W);
+	void SetHeight(double W);
+	void SetRoundAll(double d);	// 全周を設定する
+	void SetXWidthAll(double W);
+	void SetWidthAll(double W);
+	void SetHeightAll(double W);
+	void SetR(double r);
+	void SetSeg(int s);
+	inline int EnbXw(void){
+		return XwF;
+	};
+
+	void SetXWidth(int all, double W);
+	void SetWidth(int all, double W);
+	void SetHeight(int all, double W);
+	void SetRound(int all, double d);	// 全周を設定する
+};
+
+#define	CWMAX	256
+class CWGroupList
+{
+private:
+	BYTE	Con[WMAX];
+	int		Edit;
+	double	OffX;
+public:
+	int		gmax;
+	CWGroup	List[CWMAX];
+	int		BaseW;			// 基準ワイヤ位置
+	double	Intval[CWMAX];
+
+	ANTDEF	*ap;
+	WDEF	wdef[WMAX];
+	int		wmax;
+private:
+	int GetNewWire(void);
+	int AddWire(double x1, double y1, double z1, double x2, double y2, double z2, double r, int seg);
+	void Connect(int w, double X, double Y, double Z);
+	void Sort(void);
+public:
+	inline CWGroupList(void){
+		gmax = 0;
+		wmax = 0;
+		memset(Intval, 0, sizeof(Intval));
+	};
+	inline ~CWGroupList(){
+	};
+	void Delete(void);
+	double GetXPosition(int n);
+	int SetXPosition(int n, double d);
+
+	void SetWire(ANTDEF *p);
+	void Update(void);
+	void CreateWire(int w, int type);
+	void InsertItem(int w);
+	void DeleteItem(int n);
+	void DeleteWire(int n);
+	void SetNewType(int n, int type);
+	int GetEleNo(int w);
+	CWGroup* GetCW(int w);
+	double GetXAbs(int w);
+};
 void ZSCopy(LPSTR t, LPCSTR p, int n);
+double RoundUp(double d);
+double RoundUp(double d, double s);
 double CalcSWR(double Rl, double Xl, double Ro, double Xo);
 void CalcParaZ(double &R, double &X, double f, double L, double C, double Q);
 LPSTR SkipSpace(LPSTR sp);

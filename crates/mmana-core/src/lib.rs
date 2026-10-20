@@ -16,6 +16,7 @@
 
 mod calc;
 pub mod contract;
+pub mod elements;
 pub mod engine;
 mod error;
 pub mod expr;

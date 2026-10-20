@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { EngineError, files, isTauri, startupFile, transport } from './api/transport';
 import { AppHeader, type FileActions } from './components/AppHeader';
 import { EditorPanel } from './components/EditorPanel';
+import { ElementEditor } from './components/ElementEditor';
 import { Panel } from './components/Panel';
 import { ResultsPanel } from './components/ResultsPanel';
 import { SamplesModal } from './components/SamplesModal';
@@ -104,8 +105,9 @@ export function App() {
     ['mod+O', actions.open],
     ['mod+S', actions.save],
     ['mod+shift+S', actions.saveAs],
-    ['mod+Z', () => s.getState().undo()],
-    ['mod+shift+Z', () => s.getState().redo()],
+    // the element editor has its own undo while it is open
+    ['mod+Z', () => !s.getState().elementEditorOpen && s.getState().undo()],
+    ['mod+shift+Z', () => !s.getState().elementEditorOpen && s.getState().redo()],
     ['Escape', () => s.getState().selectWire(null)],
   ]);
   // Cmd+Enter must also work while typing in a cell
@@ -188,6 +190,7 @@ export function App() {
         <StatusBar />
       </AppShell.Footer>
       <SamplesModal opened={samplesOpen} onClose={samples.close} onPick={pickSample} />
+      <ElementEditor />
     </AppShell>
   );
 }

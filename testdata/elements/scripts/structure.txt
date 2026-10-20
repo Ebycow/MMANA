@@ -1,0 +1,16 @@
+# Inserting, deleting and creating elements in the new row.
+insert 0
+insert base
+insert new
+delete 1
+delete last
+delete base
+interval new 0.4
+width new 3.3
+round new 7.5
+height new 2.2
+radius new 0.002
+seg new 9
+position last +0.5
+insert last
+interval last 0

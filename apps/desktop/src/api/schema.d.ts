@@ -38,6 +38,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/elements": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Element editing: groups the wires into elements, applies the edits in
+         *     order and returns the element table and the edited antenna.
+         */
+        post: operations["edit_elements"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/far-field": {
         parameters: {
             query?: never;
@@ -274,6 +294,150 @@ export interface components {
             im: number;
             /** Format: double */
             re: number;
+        };
+        /** @description Result of [`edit_antenna`]. */
+        ElementEdit: {
+            /**
+             * @description The antenna with the edited wires. Sources and loads follow their
+             *     wires; those on deleted wires are removed. Unchanged when no edit applied.
+             */
+            antenna: components["schemas"]["Antenna"];
+            /** @description Whether each operation was applied (false: not allowed, nothing changed). */
+            applied: boolean[];
+            /** @description The element intervals count from. */
+            base: number;
+            /**
+             * @description Two identical elements at the same place (0-based rows). MMANA does
+             *     not write the wires back in this state.
+             */
+            duplicate?: number[] | null;
+            /** @description The element table after the edits. */
+            elements: components["schemas"]["ElementRow"][];
+            warnings: string[];
+            /** @description Element (row) of each wire of `antenna`. */
+            wireElements: number[];
+        };
+        /**
+         * @description Element editing: the edits so far, replayed on the antenna as it was when
+         *     the editor opened.
+         */
+        ElementEditRequest: {
+            antenna: components["schemas"]["Antenna"];
+            operations?: components["schemas"]["ElementOp"][];
+        };
+        /**
+         * @description The form of an element (`CWTYPE`), as recognised from its wires.
+         * @enum {string}
+         */
+        ElementKind: "unknown" | "verticalDipole" | "verticalSquare" | "verticalDiamond" | "verticalTriangle" | "verticalInvertedTriangle" | "verticalOctagon" | "verticalLoop" | "horizontalDipole" | "horizontalSquare" | "horizontalDiamond" | "horizontalTriangle" | "horizontalInvertedTriangle" | "horizontalLoop" | "horizontalOther" | "verticalOther" | "verticalDoubleSquare" | "verticalDoubleTriangle";
+        /**
+         * @description One edit in the element editor. `row` is the 0-based element; the row
+         *     after the last one (`row` = element count) is the dialog's "新規" row,
+         *     where an edit first creates a new element.
+         */
+        ElementOp: {
+            /** @enum {string} */
+            op: "setInterval";
+            row: number;
+            /** Format: double */
+            value: number;
+        } | {
+            /** @enum {string} */
+            op: "setPosition";
+            row: number;
+            /** Format: double */
+            value: number;
+        } | {
+            /** @enum {string} */
+            op: "setWidth";
+            row: number;
+            scaleAll?: boolean;
+            /** Format: double */
+            value: number;
+        } | {
+            /** @enum {string} */
+            op: "setHeight";
+            row: number;
+            scaleAll?: boolean;
+            /** Format: double */
+            value: number;
+        } | {
+            /** @enum {string} */
+            op: "setPerimeter";
+            row: number;
+            scaleAll?: boolean;
+            /** Format: double */
+            value: number;
+        } | {
+            /** @enum {string} */
+            op: "setRadius";
+            row: number;
+            /** Format: double */
+            value: number;
+        } | {
+            /** @enum {string} */
+            op: "setSegmentation";
+            row: number;
+            segmentation: components["schemas"]["Segmentation"];
+        } | {
+            kind: components["schemas"]["ElementKind"];
+            /** @enum {string} */
+            op: "setKind";
+            row: number;
+        } | {
+            /** @enum {string} */
+            op: "insert";
+            row: number;
+        } | {
+            /** @enum {string} */
+            op: "delete";
+            row: number;
+        } | {
+            /** Format: int32 */
+            decimals: number;
+            inWavelengths?: boolean;
+            /** @enum {string} */
+            op: "roundValues";
+            scaleAll?: boolean;
+        };
+        /** @description One line of the element table. */
+        ElementRow: {
+            /**
+             * Format: double
+             * @description Extent along Z (縦幅).
+             */
+            height: number;
+            /**
+             * Format: double
+             * @description Distance to the neighbouring element on the base element's side
+             *     (0 for the base element).
+             */
+            interval: number;
+            kind: components["schemas"]["ElementKind"];
+            /**
+             * Format: double
+             * @description Perimeter (全周), or the extent along X when `xWidth` is set.
+             */
+            perimeter: number;
+            /**
+             * Format: double
+             * @description Distance from the first element.
+             */
+            position: number;
+            /**
+             * Format: double
+             * @description Radius of the wires, or `None` when they differ (複合).
+             */
+            radius?: number | null;
+            segmentation?: components["schemas"]["Segmentation"] | null;
+            /**
+             * Format: double
+             * @description Extent along Y (横幅).
+             */
+            width: number;
+            wireCount: number;
+            /** @description `perimeter` is the extent along X (Ｘ幅), not a loop's perimeter. */
+            xWidth: boolean;
         };
         Environment: {
             fbRange: components["schemas"]["FbRange"];
@@ -660,6 +824,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalcResult"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    edit_elements: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ElementEditRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ElementEdit"];
                 };
             };
             400: {
