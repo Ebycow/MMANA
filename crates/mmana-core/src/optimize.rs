@@ -1277,9 +1277,36 @@ enum Stop {
     Failed(CalcError),
 }
 
+/// Which wire ends meet: for each end (start, end of each wire in turn) the
+/// first end at the same point.
+fn joints(wires: &[Wire]) -> Vec<usize> {
+    let ends: Vec<[f64; 3]> =
+        wires.iter().flat_map(|w| [[w.start.x, w.start.y, w.start.z], [w.end.x, w.end.y, w.end.z]]).collect();
+    // (+0.0 for -0.0, which is the same point)
+    let key = |k: usize| ends[k].map(|c| (c + 0.0).to_bits());
+    let mut order: Vec<usize> = (0..ends.len()).collect();
+    order.sort_by_key(|&k| (key(k), k));
+    let mut first = vec![0; ends.len()];
+    for (i, &k) in order.iter().enumerate() {
+        first[k] = if i > 0 && key(order[i - 1]) == key(k) { first[order[i - 1]] } else { k };
+    }
+    first
+}
+
+/// How many wires are a billionth of the antenna long or shorter: ends
+/// that close no longer meet exactly, but the matrix is singular all the
+/// same, and the next resize no longer tells them apart.
+fn short_wires(wires: &[Wire]) -> usize {
+    let length = |w: &Wire| (w.end.x - w.start.x).hypot(w.end.y - w.start.y).hypot(w.end.z - w.start.z);
+    let size = wires.iter().map(length).fold(0.0, f64::max);
+    wires.iter().filter(|w| length(w) <= 1e-9 * size).count()
+}
+
 /// `CACal` with its goal state (`ATRG`).
 struct Search<'a, F> {
     model: Model,
+    /// The antenna the values are set on when a trial is written back.
+    start: Model,
     vars: Vec<Variable>,
     state: Vec<VarState>,
     setup: &'a OptimizerSetup,
@@ -1340,6 +1367,82 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
     /// `SetMinMax` on the value of variable `n`.
     fn clamp(&self, n: usize, d: &mut f64) -> bool {
         clamp(&self.model, &self.vars, &self.state, n, d)
+    }
+
+    /// Whether variable `n` at `d` would leave an antenna that the values
+    /// do not give, so that writing a trial back (`apply_trial`, and the
+    /// antenna the run ends with) would give another antenna than the one
+    /// scored. The search turns there as at a bound. (The original carries
+    /// on.) That is when
+    /// - an element size moves only the outermost points past other points
+    ///   of the element, which then lie over other wires and move with the
+    ///   ends afterwards;
+    /// - wire ends that did not meet come to meet (or a wire shrinks to
+    ///   nothing, or to a billionth of the antenna), or ends that met part:
+    ///   ends that meet move together, so writing the values back from there
+    ///   would move other points;
+    /// - an element size takes its bounds across 0 (or onto it): they then
+    ///   scale in proportion about 0 instead of moving about the centre, so
+    ///   the way back to the best value would end elsewhere;
+    /// - a wire in polar form does not read back what was set, or loses one
+    ///   of its other two quantities: a zenith angle past 180° reads back as
+    ///   less with the azimuth turned round, and at 0° the azimuth is gone;
+    /// - otherwise the antenna differs from the values set on the starting
+    ///   antenna (to 10 ppm of its size), as when a wire end met another one
+    ///   on the way and moved on with it.
+    fn breaks(&self, n: usize, d: f64) -> bool {
+        use VariableTarget as T;
+        let moved: Vec<usize> =
+            (0..self.vars.len()).filter(|&i| i == n || self.vars[i].link.followed() == Some(n)).collect();
+        let checked = |t: &VariableTarget| matches!(t, T::Element { .. } | T::PolarWire { .. } | T::Wire { .. });
+        if !moved.iter().any(|&i| checked(&self.vars[i].target)) {
+            return false;
+        }
+        let value = |i: usize| match i {
+            _ if i == n => d,
+            _ if moved.contains(&i) => self.vars[i].link.apply(d),
+            _ => self.state[i].dc,
+        };
+        let mut m = self.model.clone();
+        for &i in &moved {
+            let t = &self.vars[i].target;
+            let before = match *t {
+                T::PolarWire { wire, .. } => Some(polar(m.list.wire(wire))),
+                _ => None,
+            };
+            m.set(t, value(i));
+            if let (T::PolarWire { wire, quantity, .. }, Some((l, a, z))) = (*t, before) {
+                let mut want = [l, a, z];
+                want[quantity as usize] = value(i);
+                let (l, a, z) = polar(m.list.wire(wire));
+                let near = |x: f64, y: f64, scale: f64| (x - y).abs() <= 1e-9 * scale;
+                if !(near(l, want[0], want[0].abs()) && near(a, want[1], 360.0) && near(z, want[2], 360.0)) {
+                    return true;
+                }
+            }
+        }
+        let (before, after) = (self.model.list.wires().wires, m.list.wires().wires);
+        if joints(&before) != joints(&after) || short_wires(&before) < short_wires(&after) {
+            return true;
+        }
+        if moved.iter().any(|&i| matches!(self.vars[i].target, T::Element { .. })) {
+            let (described, now) = (self.model.list.described(), m.list.described());
+            if described.iter().zip(&now).any(|(was, now)| was.iter().zip(now).any(|(was, now)| *was && !now))
+                || self.model.list.bound_rules() != m.list.bound_rules()
+            {
+                return true;
+            }
+        }
+        // as `apply_trial` writes it
+        let mut fresh = self.start.clone();
+        for i in 0..self.vars.len() {
+            fresh.set(&self.vars[i].target, value(i));
+        }
+        let (a, b) = (m.list.wires().wires, fresh.list.wires().wires);
+        let coords = |w: &Wire| [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z];
+        let size = a.iter().flat_map(coords).fold(0.0, |s: f64, c| s.max(c.abs()));
+        let near = |x: f64, y: f64| (x - y).abs() <= 1e-5 * size;
+        a.iter().zip(&b).any(|(a, b)| coords(a).into_iter().zip(coords(b)).any(|(x, y)| !near(x, y)))
     }
 
     /// `IsSameMax`: the values are those of the best trial.
@@ -1580,7 +1683,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                         // original loops on its memo forever, never calculating
                         // again, so it could not even be stopped
                         let stuck = self.setup.sweep_only && dc == before;
-                        if self.clamp(n, &mut dc) || stuck {
+                        if self.clamp(n, &mut dc) || stuck || self.breaks(n, dc) {
                             // back to the best value, and the other way
                             let mut d = max_d;
                             self.clamp(n, &mut d);
@@ -1682,6 +1785,7 @@ pub fn optimize(
     progress: impl FnMut(&Progress) -> bool,
 ) -> Result<OptimizeOutcome, OptimizeError> {
     let mut model = Model::new(project, options);
+    let start = model.clone();
     let start_frequency = model.frequency;
     let (errors, warnings) = check(&mut model, setup);
     if !errors.is_empty() {
@@ -1701,6 +1805,7 @@ pub fn optimize(
     let mut search = Search {
         bands: model.bands.len(),
         model,
+        start,
         vars,
         state,
         setup,
@@ -1725,6 +1830,13 @@ pub fn optimize(
         Err(Stop::Failed(e)) => StopReason::Failed { message: e.to_string() },
     };
     let (project, frequency_mhz) = if search.best.is_some() {
+        if matches!(stop, StopReason::Failed { .. }) {
+            // the antenna that failed may be past mending (a wire a few
+            // femtometres long, whose ends the next resize no longer tells
+            // apart): the best values go on the starting antenna instead, as
+            // `apply_trial` writes them
+            search.model = search.start.clone();
+        }
         if search.bands > 1 {
             // (the original keeps the last band's frequency and sources)
             search.model.antenna.sources = project.antenna.sources.clone();
@@ -2632,5 +2744,27 @@ mod tests {
         let sizes =
             [Element { element: 0, part: ElementPart::Width }, Element { element: 0, part: ElementPart::Height }];
         assert_eq!(errors_of("LOOP20.MAA", &sizes, &[]), vec![]);
+    }
+
+    #[test]
+    fn an_element_size_turns_before_passing_its_inner_points() {
+        // element 0 is a 20 m dipole with 15 m tips; narrower than the 20 m
+        // part, the tips would lie over it and the antenna would depend on
+        // the way the search took
+        let project = sample("DUAL2EL.MAA");
+        let opts = CalcOptions::default();
+        let base = OptimizerSetup { absolute_pitch: false, ..Default::default() };
+        let op =
+            SetupOp::SetTarget { index: 0, target: VariableTarget::Element { element: 0, part: ElementPart::Width } };
+        let setup = edit_setup(&project, &opts, &base, &[op]).setup;
+        let out = optimize(&project, &opts, &setup, Some(40), |_| true).unwrap();
+        let best = out.best.as_ref().unwrap();
+        let (written, _) = apply_trial(&project, &opts, &setup, &best.values).unwrap();
+        for (a, b) in written.antenna.wires.iter().zip(&out.project.antenna.wires) {
+            let d = [a.start.y - b.start.y, a.end.y - b.end.y];
+            assert!(d.iter().all(|d| d.abs() < 1e-9), "{a:?} != {b:?}");
+        }
+        let list = ElementList::new(&out.project.antenna.wires, SPEED_OF_LIGHT_MMANA / project.antenna.frequency_mhz);
+        assert!(list.described().iter().all(|d| d[1]), "the widths are not those of the wires");
     }
 }

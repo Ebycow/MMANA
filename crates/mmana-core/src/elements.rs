@@ -1703,6 +1703,24 @@ impl ElementList {
     pub(crate) fn set_element_radius(&mut self, n: usize, d: f64) {
         self.groups[n].set_radius(&mut self.slots, d);
     }
+
+    /// For each element, along which axes its sizes are those of its wires
+    /// (see [`ElementList::apply`]).
+    pub(crate) fn described(&self) -> Vec<[bool; 4]> {
+        self.groups.iter().map(|g| g.describes_wires(&self.slots)).collect()
+    }
+
+    /// For each element, which rule `new_bounds` takes along Y and Z: from
+    /// 0, to 0, in proportion across 0, or about the centre.
+    pub(crate) fn bound_rules(&self) -> Vec<[u8; 2]> {
+        let rule = |g: &Group, axis: usize| match (g.lo[axis], g.hi[axis]) {
+            (0.0, _) => 0,
+            (_, 0.0) => 1,
+            (lo, hi) if lo < 0.0 && hi > 0.0 && hi - lo != 0.0 => 2,
+            _ => 3,
+        };
+        self.groups.iter().map(|g| [rule(g, Y), rule(g, Z)]).collect()
+    }
 }
 
 /// Result of [`edit_antenna`].
