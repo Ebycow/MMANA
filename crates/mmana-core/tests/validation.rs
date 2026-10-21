@@ -24,8 +24,13 @@ type Edit = fn(&mut Project);
 
 #[test]
 fn rejects_auto_segmentation_that_never_finishes() {
-    let cases: [(&str, Edit); 7] = [
+    let cases: [(&str, Edit); 9] = [
         ("sc = 1", |p| p.antenna.auto_segmentation.sc = 1.0),
+        ("sc just above 1", |p| {
+            p.antenna.auto_segmentation.sc = 1.000000000000001;
+            p.antenna.wires[0].segmentation = Segmentation::from_code(-1);
+        }),
+        ("sc < 1.01", |p| p.antenna.auto_segmentation.sc = 1.009),
         ("sc < 1", |p| p.antenna.auto_segmentation.sc = 0.5),
         ("sc > 3", |p| p.antenna.auto_segmentation.sc = 3.5),
         ("sc NaN", |p| p.antenna.auto_segmentation.sc = f64::NAN),
@@ -74,6 +79,8 @@ fn accepts_settings_in_range() {
     let mut p = dp20();
     p.antenna.auto_segmentation.sc = 3.0;
     p.antenna.wires[0].segmentation = Segmentation::TaperCustom { dm1: 800, dm2: Some(20) };
+    calc(p.clone()).unwrap();
+    p.antenna.auto_segmentation.sc = 1.01;
     calc(p).unwrap();
 }
 

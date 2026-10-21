@@ -189,16 +189,20 @@ fn engine_config(project: &Project, opts: &CalcOptions) -> EngineConfig {
     }
 }
 
+/// The smallest `SC`, as in the desktop's dialog.
+const MIN_SC: f64 = 1.01;
+
 /// Rejects segmentation settings the tapering loops never finish with
-/// (`SC <= 1`, `DM2 <= 0`). MMANA's dialogs and the .maa reader keep them in
+/// (`DM2 <= 0`, or `SC` at or barely above 1: 1.000000000000001 divides by so
+/// little that the loop runs on for ever). MMANA's dialogs keep them in
 /// range; project JSON and API requests do not.
 fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
     let s = &ant.auto_segmentation;
     if s.dm1 < 1 || s.dm2 < 1 {
         return Err(CalcError::InvalidAutoSegmentation("DM1 and DM2 must be at least 1"));
     }
-    if !(s.sc > 1.0 && s.sc <= 3.0) {
-        return Err(CalcError::InvalidAutoSegmentation("SC must be greater than 1 and at most 3"));
+    if !(s.sc >= MIN_SC && s.sc <= 3.0) {
+        return Err(CalcError::InvalidAutoSegmentation("SC must be from 1.01 to 3"));
     }
     if s.ec < 1 {
         return Err(CalcError::InvalidAutoSegmentation("EC must be at least 1"));
