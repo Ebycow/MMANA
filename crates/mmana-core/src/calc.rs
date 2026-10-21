@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 use crate::engine::antdef::AntDef;
 use crate::engine::{EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec};
 use crate::error::CalcError;
-use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation, Wire};
+use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation, Stack, StackDirection, Wire};
 use crate::pattern::{self, PatternState};
 
 /// Angular resolution of the stored pattern cuts.
@@ -426,8 +426,9 @@ pub struct WirePulses {
     pub pulses: Vec<PulsePoint>,
 }
 
-/// Where the pulses of the antenna (without stacking) lie, for placing
-/// sources and loads, and where its sources and loads are.
+/// Where the pulses of the antenna lie, for placing sources and loads, and
+/// where its sources and loads are. With stacking, these are the pulses of the
+/// first copy (the one the names address), moved back onto the wires as defined.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
@@ -442,7 +443,7 @@ pub struct PulseLayout {
 
 /// Segments the antenna as the calculation would, without solving it.
 pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout, CalcError> {
-    let mut ant = project.antenna.clone();
+    let ant = &project.antenna;
     let cfq = opts.frequency_mhz.unwrap_or(ant.frequency_mhz);
     if !(cfq.is_finite() && cfq > 0.0) {
         return Err(CalcError::InvalidFrequency(cfq));
@@ -450,16 +451,18 @@ pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout
     if ant.wires.is_empty() {
         return Err(CalcError::NoWires);
     }
-    check_segmentation(&ant)?;
-    // names address the wires as defined; the stacked copies only repeat them
-    ant.stack.horizontal = 1;
-    ant.stack.vertical = 1;
-    let mut ap = AntDef::from_model(&ant, cfq);
+    check_segmentation(ant)?;
+    // segmented stacked, as calculated: a copy that reaches the ground is
+    // divided differently from the wire as defined
+    let mut ap = AntDef::from_model(ant, cfq);
     let e = Mininec::layout(&mut ap, &engine_config(project, opts))?;
+    // names address the first copy, whose pulses come first
+    let own = ap.wires[ant.wires.len()..].iter().find(|w| w.pmax > 0).map_or(e.n, |w| (w.pno - 1) as usize);
+    let (dy, dz) = first_copy_offset(&ant.stack);
     let position = |p: i32| -> Option<Point3> {
-        let p = usize::try_from(p).ok().filter(|p| (1..=e.n).contains(p))?;
+        let p = usize::try_from(p).ok().filter(|p| (1..=own).contains(p))?;
         let (x, y, z) = e.seg_pos((2 * e.wi[p] - 1 + p as i32) as usize);
-        Some(Point3::new(x, y, z))
+        Some(Point3::new(x, y - dy, z - dz))
     };
     let wires = ant
         .wires
@@ -491,9 +494,24 @@ pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout
     Ok(PulseLayout {
         pulse_count: e.n,
         wires,
-        sources: ap.sources.iter().map(|c| position(c.plus_no)).collect(),
-        loads: ap.loads.iter().map(|l| position(l.plus_no)).collect(),
+        sources: ap.sources.iter().take(ant.sources.len()).map(|c| position(c.plus_no)).collect(),
+        loads: ap.loads.iter().take(ant.loads.len()).map(|l| position(l.plus_no)).collect(),
     })
+}
+
+/// How far `AntDef::stack` moves the first copy: along Y, along Z.
+fn first_copy_offset(st: &Stack) -> (f64, f64) {
+    let dy = if st.horizontal > 1 { -((st.horizontal - 1) as f64 * st.horizontal_spacing) / 2.0 } else { 0.0 };
+    let dz = if st.vertical > 1 {
+        match st.direction {
+            StackDirection::Up => 0.0,
+            StackDirection::Down => -((st.vertical - 1) as f64 * st.vertical_spacing),
+            StackDirection::Centered => -((st.vertical - 1) as f64 * st.vertical_spacing) / 2.0,
+        }
+    } else {
+        0.0
+    };
+    (dy, dz)
 }
 
 /// Whether `p` lies on the wire, allowing for rounding in the segmentation.

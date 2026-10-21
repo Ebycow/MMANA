@@ -29,7 +29,7 @@ const layout: PulseLayout = {
 const fitFor = (pr: Project): LayoutFor => ({ layout, project: pr, frequencyMhz: pr.antenna.frequencyMhz });
 
 describe('pulse layout', () => {
-  it('fits while the wires, segmentation, ground and frequency are the same', () => {
+  it('fits while the wires, segmentation, stacking, ground and frequency are the same', () => {
     const pr = project();
     const l = fitFor(pr);
     expect(pulsesFit(l, pr, pr.antenna.frequencyMhz)).toBe(true);
@@ -38,6 +38,7 @@ describe('pulse layout', () => {
     expect(pulsesFit(l, pr, pr.antenna.frequencyMhz + 1)).toBe(false);
     expect(pulsesFit(l, { ...pr, antenna: { ...pr.antenna, wires: [...pr.antenna.wires] } }, pr.antenna.frequencyMhz)).toBe(false);
     expect(pulsesFit(l, { ...pr, environment: { ...pr.environment } }, pr.antenna.frequencyMhz)).toBe(false);
+    expect(pulsesFit(l, { ...pr, antenna: { ...pr.antenna, stack: { ...pr.antenna.stack, vertical: 2 } } }, pr.antenna.frequencyMhz)).toBe(false);
   });
 
   it('finds a pulse by the name it gives, however it is typed', () => {

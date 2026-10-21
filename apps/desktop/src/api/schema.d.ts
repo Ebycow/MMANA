@@ -1029,8 +1029,9 @@ export interface components {
             wire: number;
         };
         /**
-         * @description Where the pulses of the antenna (without stacking) lie, for placing
-         *     sources and loads, and where its sources and loads are.
+         * @description Where the pulses of the antenna lie, for placing sources and loads, and
+         *     where its sources and loads are. With stacking, these are the pulses of the
+         *     first copy (the one the names address), moved back onto the wires as defined.
          */
         PulseLayout: {
             loads: (components["schemas"]["Point3"] | null)[];

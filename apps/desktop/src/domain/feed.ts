@@ -26,7 +26,7 @@ export interface FeedPositions {
 
 /**
  * Whether the layout's pulses are still where it says: the same wires,
- * segmentation, ground and frequency. Sources and loads may have changed.
+ * segmentation, stacking, ground and frequency. Sources and loads may have changed.
  */
 export function pulsesFit(l: LayoutFor, project: Project, frequencyMhz: number): boolean {
   const a = l.project.antenna;
@@ -36,6 +36,7 @@ export function pulsesFit(l: LayoutFor, project: Project, frequencyMhz: number):
     a.wires === b.wires &&
     a.autoSegmentation === b.autoSegmentation &&
     a.combinedWires === b.combinedWires &&
+    a.stack === b.stack &&
     l.project.environment === project.environment
   );
 }

@@ -1,5 +1,6 @@
 //! Pulse layout: the pulses sources and loads can be placed on, by name.
 
+use mmana_core::model::{GroundKind, Point3, Segmentation, StackDirection};
 use mmana_core::{CalcOptions, Project, calculate, maa, pulse_layout};
 use std::path::Path;
 
@@ -60,15 +61,52 @@ fn a_joint_belongs_to_both_wires() {
 }
 
 #[test]
-fn ignores_stacking_and_unresolved_names() {
+fn names_the_first_stacked_copy_and_leaves_out_the_others() {
     let mut p = sample("DP20.MAA");
     let plain = pulse_layout(&p, &CalcOptions::default()).unwrap();
     p.antenna.stack.horizontal = 2;
     p.antenna.stack.horizontal_spacing = 5.0;
-    p.antenna.sources[0].pulse = "w9c".into();
     let stacked = pulse_layout(&p, &CalcOptions::default()).unwrap();
-    assert_eq!(stacked.wires, plain.wires);
-    assert_eq!(stacked.sources, vec![None]);
+    let names = |l: &mmana_core::PulseLayout| -> Vec<(usize, String)> {
+        l.wires.iter().flat_map(|w| w.pulses.iter().map(|q| (q.pulse, q.name.clone()))).collect()
+    };
+    assert_eq!(names(&stacked), names(&plain));
+    for (a, b) in stacked.wires[0].pulses.iter().zip(&plain.wires[0].pulses) {
+        assert!((a.position.y - b.position.y).abs() < 1e-9, "{}", a.name);
+    }
+    // w2c is the second copy's wire 1, which no name of the antenna addresses
+    p.antenna.sources[0].pulse = "w2c".into();
+    assert_eq!(pulse_layout(&p, &CalcOptions::default()).unwrap().sources, vec![None]);
+}
+
+#[test]
+fn a_stacked_copy_on_the_ground_is_divided_as_calculated() {
+    // a 5 m vertical in 10, 5 m up, stacked 2 high 10 m apart: the lower copy
+    // (the first) stands on the ground and gains a pulse there
+    let mut p = sample("DP20.MAA");
+    let mut w = p.antenna.wires[0].clone();
+    w.start = Point3::new(0.0, 0.0, 0.0);
+    w.end = Point3::new(0.0, 0.0, 5.0);
+    w.segmentation = Segmentation::from_code(10);
+    p.antenna.wires = vec![w];
+    p.antenna.sources.truncate(1);
+    p.antenna.sources[0].pulse = "w1b".into();
+    p.antenna.loads.clear();
+    p.environment.ground = GroundKind::Perfect;
+    p.environment.height = 5.0;
+    p.antenna.stack.vertical = 2;
+    p.antenna.stack.vertical_spacing = 10.0;
+    p.antenna.stack.direction = StackDirection::Centered;
+    let opts = CalcOptions::default();
+    let layout = pulse_layout(&p, &opts).unwrap();
+    let result = calculate(&p, &opts).unwrap();
+    assert_eq!(layout.pulse_count, result.pulse_count);
+    assert_eq!(layout.wires[0].pulses.len(), 10);
+    for pt in &layout.wires[0].pulses {
+        let c = &result.currents[pt.pulse - 1];
+        assert!((c.position.z - (pt.position.z - 5.0)).abs() < 1e-9, "{}", pt.name);
+    }
+    assert_eq!(layout.sources, vec![Some(Point3::new(0.0, 0.0, 0.0))]);
 }
 
 #[test]
