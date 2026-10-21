@@ -529,6 +529,49 @@ fn a_result_that_takes_no_power_says_so() {
     assert!(calc(&yagi()).warnings.is_empty());
 }
 
+fn drift_warned(p: &Project) -> bool {
+    calc(p).warnings.iter().any(|w| w.contains("segments: beyond about 250 on one conductor"))
+}
+
+#[test]
+fn a_conductor_divided_too_finely_is_warned_about() {
+    // the drift that segmentation_in_the_usable_range... stops short of
+    let divided = |n| {
+        let mut p = dipole();
+        p.antenna.wires[0].segmentation = Segmentation::Fixed { count: n };
+        p
+    };
+    assert!(!drift_warned(&divided(250)));
+    assert!(drift_warned(&divided(320)));
+    // a conductor counts whole however it is split into wires...
+    let halves = project(
+        vec![wire((0.0, -5.2, 0.0), (0.0, 0.0, 0.0), 160), wire((0.0, 0.0, 0.0), (0.0, 5.2, 0.0), 160)],
+        vec![source("160", 1.0, 0.0)],
+    );
+    assert!(drift_warned(&halves));
+    // ...and separate conductors do not add up, stacked copies included
+    let apart = project(
+        vec![wire((0.0, -5.2, 0.0), (0.0, 5.2, 0.0), 160), wire((5.0, -5.2, 0.0), (5.0, 5.2, 0.0), 160)],
+        vec![source("w1c", 1.0, 0.0)],
+    );
+    assert!(!drift_warned(&apart));
+    let mut stacked = divided(200);
+    stacked.antenna.stack.horizontal = 3;
+    assert!(!drift_warned(&stacked));
+    // of the samples, only the two whose results move with the segmentation
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa");
+    let mut warned: Vec<String> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| {
+            calculate(&sample(name), &CalcOptions::default())
+                .is_ok_and(|r| r.warnings.iter().any(|w| w.contains("on one conductor")))
+        })
+        .collect();
+    warned.sort();
+    assert_eq!(warned, ["CR2.MAA", "LPDA.MAA"]);
+}
+
 #[test]
 fn moving_the_antenna_in_free_space_changes_nothing() {
     for (name, p) in [("dipole", dipole()), ("yagi", yagi())] {
@@ -614,8 +657,9 @@ fn reversing_a_wire_does_not_change_its_feed_impedance() {
 
 #[test]
 fn segmentation_in_the_usable_range_barely_changes_the_impedance() {
-    // from λ/40 to λ/330 per segment. Finer than about λ/400 the original
-    // drifts (docs/guarantees.md, "既知の限界"), so this stops short of it
+    // from λ/40 to λ/330 per segment. Beyond about 250 segments on one
+    // conductor the original drifts (docs/guarantees.md, "既知の限界"), so
+    // this stops short of it
     let z: Vec<Complex> = [20, 40, 80, 160]
         .iter()
         .map(|&n| {

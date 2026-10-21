@@ -228,7 +228,57 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
             engine.pwr
         ));
     }
+    if let Some((wire, segments)) = most_divided_conductor(&ap) {
+        warnings.push(format!(
+            "wire {wire} and the wires joined to it are divided into {segments} segments: beyond about \
+             {MAX_STEADY_SEGMENTS} on one conductor the results drift as segments are added (the reactance \
+             by several ohms), so compare with fewer segments"
+        ));
+    }
     Ok(Solved { ap, engine, warnings })
+}
+
+/// Segments one conductor can be divided into before MININEC's results start
+/// to drift. Beyond it the error grows with each segment added, whatever
+/// their length in wavelengths or the wire radius (the original gives the
+/// same values): a half-wave dipole in 320 segments is about 6 Ω off in X,
+/// in 640 about 25 Ω. Separate conductors do not add up.
+const MAX_STEADY_SEGMENTS: i64 = 250;
+
+/// The conductor (segment wires joined end to end, as `connect` joins them)
+/// with the most segments, when it has more than [`MAX_STEADY_SEGMENTS`]:
+/// the 1-based number of a wire of it as defined (in a stacked copy, the
+/// wire it copies) and its segment count.
+fn most_divided_conductor(ap: &AntDef) -> Option<(usize, i64)> {
+    let wz = &ap.wz;
+    let mut root: Vec<usize> = (0..wz.len()).collect();
+    fn find(root: &mut [usize], mut i: usize) -> usize {
+        while root[i] != i {
+            root[i] = root[root[i]];
+            i = root[i];
+        }
+        i
+    }
+    // ends compare with ==, so -0.0 is 0.0 (adding 0.0 makes it so)
+    let key = |x: f64, y: f64, z: f64| [(x + 0.0).to_bits(), (y + 0.0).to_bits(), (z + 0.0).to_bits()];
+    let mut first_at = std::collections::HashMap::new();
+    for (i, w) in wz.iter().enumerate() {
+        for end in [key(w.x1, w.y1, w.z1), key(w.x2, w.y2, w.z2)] {
+            let j = *first_at.entry(end).or_insert(i);
+            let (a, b) = (find(&mut root, i), find(&mut root, j));
+            root[a] = b;
+        }
+    }
+    let mut segments = vec![0i64; wz.len()];
+    for (i, w) in wz.iter().enumerate() {
+        let r = find(&mut root, i);
+        segments[r] += i64::from(w.seg.max(0));
+    }
+    let (r, &most) = segments.iter().enumerate().max_by_key(|(_, s)| **s)?;
+    (most > MAX_STEADY_SEGMENTS).then(|| {
+        let first = (0..wz.len()).find(|&i| find(&mut root, i) == r).unwrap_or(r);
+        (wz[first].wno % ap.base_wires.max(1) + 1, most)
+    })
 }
 
 impl Solved {
