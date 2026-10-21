@@ -1,7 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "MMANA",
-  "version": "0.1.0",
   "identifier": "net.ebycow.mmana",
   "build": {
     "frontendDist": "../dist",
