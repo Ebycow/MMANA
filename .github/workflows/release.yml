@@ -44,6 +44,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       # builds the installers and attaches them to a draft release for the pushed tag
       - uses: tauri-apps/tauri-action@v0
+        id: tauri
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -52,3 +53,13 @@ jobs:
           releaseName: MMANA ${{ github.ref_name }}
           releaseDraft: true
           args: ${{ matrix.args }}
+      # the exe runs without installing (Windows 10/11 ship WebView2), so offer it on its own too
+      - name: Attach the portable exe
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          exe="MMANA_${{ steps.tauri.outputs.appVersion }}_x64_portable.exe"
+          cp target/release/mmana-desktop.exe "$exe"
+          gh release upload "$GITHUB_REF_NAME" "$exe" --clobber
