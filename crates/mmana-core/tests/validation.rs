@@ -1,6 +1,6 @@
 //! Inputs MMANA's dialogs never produce but project JSON and API requests can.
 
-use mmana_core::{CalcError, CalcOptions, Point3, Project, Segmentation, calculate, maa};
+use mmana_core::{CalcError, CalcOptions, Load, LoadKind, Point3, Project, Segmentation, calculate, maa};
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -159,4 +159,15 @@ fn accepts_a_disabled_copy_of_a_wire() {
     off.radius = 0.0;
     p.antenna.wires.push(off);
     assert_eq!(calc(p), Ok(()));
+}
+
+#[test]
+fn rejects_loads_that_do_not_exist() {
+    // w99c resolves to no pulse; the original calculates as if it were absent
+    for (name, max) in [("w99c", 17), ("0", 17), ("18", 17)] {
+        let mut p = dp20();
+        p.antenna.loads_enabled = true;
+        p.antenna.loads.push(Load { pulse: name.into(), kind: LoadKind::Impedance { r: 100.0, x: 0.0 } });
+        assert_eq!(calc(p), Err(CalcError::PulseOutOfRange { what: "load", name: name.into(), max }), "{name}");
+    }
 }

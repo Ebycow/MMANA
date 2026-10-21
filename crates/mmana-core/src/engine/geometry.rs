@@ -417,10 +417,12 @@ impl Mininec {
         let n = self.n as i32;
         if ap.loads_enabled {
             for l in &ap.loads {
-                if l.plus_no > n {
+                // 0 is a name that did not resolve (`w99c`); the original
+                // loads no pulse and calculates as if the load were absent
+                if l.plus_no > n || l.plus_no < 1 {
                     return Err(CalcError::PulseOutOfRange { what: "load", name: l.plus.clone(), max: self.n });
                 }
-                let mut d = LoadDef { pulse: l.plus_no.max(0) as usize, ls: 0, la: [[0.0; SMAX + 1]; 3] };
+                let mut d = LoadDef { pulse: l.plus_no as usize, ls: 0, la: [[0.0; SMAX + 1]; 3] };
                 match l.ty {
                     0 => {
                         let (lu, cp, q) = (l.a[0], l.b[0], l.a[1]);
