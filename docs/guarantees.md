@@ -82,6 +82,7 @@ API は計算を始める前に、サーバーの設定（`mmana_api::Limits`）
 | 入力電力が 0 以下の結果には警告が付く | 同上と `a_result_that_takes_no_power_says_so` |
 | `.maa` に書いて読み直したものは、もう一度書いて読み直しても変わらない（1 回目は小数点以下 6 桁に丸まる） | 同上 |
 | プロジェクトの JSON は値を失わずに往復する | 同上 |
+| 壊れた `.maa`（サンプル 81 件の行を消す・重ねる・途中で切る・欄を `1e999`、`99999999999`、`nan` などにする）も panic せずに読め、計算は時間内に終わり、結果のつじつまが合う | 同上 |
 
 自動生成は `cargo test` で 256 件、夜間の CI（[quality.yml](../.github/workflows/quality.yml)）で 20,000 件を試します。
 見つかった失敗は `random_models.proptest-regressions` に保存され、次回から最初に再実行されます。

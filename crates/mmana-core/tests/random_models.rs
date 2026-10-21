@@ -2,6 +2,8 @@
 //! segmentation, combined wires, sources and loads by any kind of name,
 //! stacking and the three grounds. Whatever the model, the calculation must
 //! end in time without a panic, and a result it returns must hold together.
+//! The same goes for the sample `.maa` files with lines dropped, repeated,
+//! cut short or given broken values.
 //!
 //! The default 256 cases run with `cargo test`; `PROPTEST_CASES=20000` runs
 //! the long version (`.github/workflows/quality.yml` does so every night).
@@ -17,8 +19,36 @@ use mmana_core::{
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
 use serde_json::Value;
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::sync::OnceLock;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::time::Duration;
+
+/// Refuses any single allocation over 256 MB: a model or file that slips
+/// past a limit then stops this test binary at once ("memory allocation of …
+/// bytes failed") instead of filling memory and swap. The models here need a
+/// few MB.
+struct Capped;
+
+const CAP: usize = 256 << 20;
+
+unsafe impl GlobalAlloc for Capped {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout.size() > CAP { std::ptr::null_mut() } else { unsafe { System.alloc(layout) } }
+    }
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        if layout.size() > CAP { std::ptr::null_mut() } else { unsafe { System.alloc_zeroed(layout) } }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) }
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        if new_size > CAP { std::ptr::null_mut() } else { unsafe { System.realloc(ptr, layout, new_size) } }
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: Capped = Capped;
 
 /// Generous for models of a few hundred pulses, which take milliseconds.
 const LIMIT: Duration = Duration::from_secs(20);
@@ -218,6 +248,87 @@ fn holds_together(p: &Project, o: &CalcOptions, r: &CalcResult) -> Result<(), Te
     Ok(())
 }
 
+/// The sample files as text, one string each.
+fn samples() -> &'static [String] {
+    static SAMPLES: OnceLock<Vec<String>> = OnceLock::new();
+    SAMPLES.get_or_init(|| {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa");
+        let mut paths: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+        paths.sort();
+        paths.iter().map(|p| maa::decode(&std::fs::read(p).unwrap())).collect()
+    })
+}
+
+#[derive(Debug, Clone)]
+enum Edit {
+    Drop(usize),
+    Repeat(usize),
+    Insert(usize, &'static str),
+    /// Replaces one comma-separated field of a line.
+    Field(usize, usize, &'static str),
+    CutAt(usize),
+}
+
+/// Values a hand-edited or damaged file may hold.
+const BROKEN: [&str; 16] = [
+    "",
+    "0",
+    "-1",
+    "1e999",
+    "-1e999",
+    "99999999999",
+    "-2147483648",
+    "1e-300",
+    "nan",
+    "1/0",
+    "abc",
+    ",,,,",
+    "w99c",
+    "*** Wires ***",
+    "１２",
+    "0.0000001",
+];
+
+fn edit() -> impl Strategy<Value = Edit> {
+    let at = 0..60usize;
+    let value = prop::sample::select(BROKEN.to_vec());
+    prop_oneof![
+        1 => at.clone().prop_map(Edit::Drop),
+        1 => at.clone().prop_map(Edit::Repeat),
+        1 => (at.clone(), value.clone()).prop_map(|(l, v)| Edit::Insert(l, v)),
+        3 => (at.clone(), 0..9usize, value).prop_map(|(l, f, v)| Edit::Field(l, f, v)),
+        1 => at.prop_map(Edit::CutAt),
+    ]
+}
+
+fn damaged(sample: usize, edits: &[Edit]) -> String {
+    let text = &samples()[sample % samples().len()];
+    let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
+    for e in edits {
+        let n = lines.len().max(1);
+        match *e {
+            Edit::Drop(l) if !lines.is_empty() => {
+                lines.remove(l % n);
+            }
+            Edit::Repeat(l) if !lines.is_empty() => {
+                let line = lines[l % n].clone();
+                lines.insert(l % n, line);
+            }
+            Edit::Insert(l, v) => lines.insert(l % (lines.len() + 1), v.to_owned()),
+            Edit::Field(l, f, v) if !lines.is_empty() => {
+                let line = &mut lines[l % n];
+                let mut fields: Vec<String> = line.split(',').map(str::to_owned).collect();
+                let k = f % fields.len();
+                fields[k] = v.to_owned();
+                *line = fields.join(",");
+            }
+            Edit::CutAt(l) => lines.truncate(l % (lines.len() + 1)),
+            _ => {}
+        }
+    }
+    lines.join("\r\n")
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
         failure_persistence: Some(Box::new(FileFailurePersistence::WithSource("proptest-regressions"))),
@@ -290,5 +401,24 @@ proptest! {
     fn project_json_round_trips_exactly(p in model()) {
         let back: Project = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
         prop_assert_eq!(back, p);
+    }
+
+    #[test]
+    fn a_damaged_maa_file_reads_and_calculates_without_a_panic(
+        sample in 0..1000usize,
+        edits in prop::collection::vec(edit(), 1..6),
+    ) {
+        let text = damaged(sample, &edits);
+        let p = maa::parse(&text).project;
+        let o = CalcOptions { max_pulses: 600, ..CalcOptions::default() };
+        let (q, oo) = (p.clone(), o.clone());
+        let (result, layout) = within(&p, move || (calculate(&q, &oo), pulse_layout(&q, &oo)));
+        if let Ok(r) = &result {
+            holds_together(&p, &o, r)?;
+            prop_assert!(layout.is_ok(), "calculated, but the layout failed: {:?}", layout.err());
+        }
+        // what was read writes back stably
+        let once = maa::parse(&maa::write(&p)).project;
+        prop_assert_eq!(&maa::parse(&maa::write(&once)).project, &once);
     }
 }
