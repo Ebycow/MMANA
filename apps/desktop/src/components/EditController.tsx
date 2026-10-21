@@ -184,8 +184,9 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       }
       return best;
     };
-    const pickWire = (p: Pt2, px = WIRE_PICK_PX): (Hit & { kind: 'wire' }) | null => {
-      let best: (Hit & { kind: 'wire' }) | null = null;
+    /** The wire under the pointer; `shift` takes the first stacked copy onto the copy hit. */
+    const pickWire = (p: Pt2, px = WIRE_PICK_PX): (Hit & { kind: 'wire'; shift: Point3 }) | null => {
+      let best: (Hit & { kind: 'wire'; shift: Point3 }) | null = null;
       let bestD = px;
       const selected = new Set(useApp.getState().selectedWires);
       for (const w of latest.current.display) {
@@ -198,7 +199,12 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
           bestD = d;
           const l2 = (b.x - a.x) ** 2 + (b.y - a.y) ** 2;
           const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / l2));
-          best = { kind: 'wire', wire: w.base, grab: add(w.start, scale(sub(w.end, w.start), t)) };
+          best = {
+            kind: 'wire',
+            wire: w.base,
+            grab: add(w.start, scale(sub(w.end, w.start), t)),
+            shift: sub(w.start, toWorld(latest.current.wires[w.base].start)),
+          };
         }
       }
       return best;
@@ -232,7 +238,8 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       let best: PulsePoint | null = null;
       let bestD = Infinity;
       for (const q of pulsesOnWire(layout.layout, wires, hit.wire)) {
-        const s = toScreen(toWorld(q.position));
+        // measured on the copy under the pointer, though the names follow the first
+        const s = toScreen(add(toWorld(q.position), hit.shift));
         const d = s ? Math.hypot(s.x - p.x, s.y - p.y) : Infinity;
         if (d < bestD) {
           bestD = d;
