@@ -17,6 +17,7 @@ import type {
   ParsedProject,
   Progress,
   Project,
+  PulseLayout,
   SetupEdit,
   SweepRequest,
   SweepResponse,
@@ -37,6 +38,8 @@ export interface Transport {
   readonly kind: 'tauri' | 'http';
   parseMaa(bytes: Uint8Array): Promise<ParsedProject>;
   calculate(req: CalculationRequest): Promise<CalcResult>;
+  /** Where the pulses lie, without solving (for placing sources and loads). */
+  pulseLayout(req: CalculationRequest): Promise<PulseLayout>;
   sweep(req: SweepRequest): Promise<SweepResponse>;
   farField(req: FarFieldRequest): Promise<FarFieldResponse>;
   nearField(req: NearFieldRequest): Promise<NearFieldResponse>;
@@ -93,6 +96,7 @@ export const tauriTransport: Transport = {
   kind: 'tauri',
   parseMaa: (bytes) => tauriInvoke('parse_maa', { bytes: Array.from(bytes) }),
   calculate: (request) => tauriInvoke('calculate', { request }),
+  pulseLayout: (request) => tauriInvoke('pulse_layout', { request }),
   sweep: (request) => tauriInvoke('sweep', { request }),
   farField: (request) => tauriInvoke('far_field', { request }),
   nearField: (request) => tauriInvoke('near_field', { request }),
@@ -164,6 +168,7 @@ export function httpTransport(baseUrl: string): Transport {
     kind: 'http',
     parseMaa: (bytes) => post('/v1/maa/parse', new Blob([bytes as BlobPart]), 'application/octet-stream'),
     calculate: (req) => json('/v1/calculations', req),
+    pulseLayout: (req) => json('/v1/pulses', req),
     sweep: (req) => json('/v1/sweeps', req),
     farField: (req) => json('/v1/far-field', req),
     nearField: (req) => json('/v1/near-field', req),

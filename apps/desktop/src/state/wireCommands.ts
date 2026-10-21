@@ -18,6 +18,7 @@ import {
   type Axis,
   type Edited,
 } from '../domain/wireEdit';
+import type { FeedRef } from '../domain/feed';
 import { useEditor } from './editor';
 import { useApp } from './store';
 
@@ -40,6 +41,18 @@ export function commitWires(next: Wire[], selected?: number[]) {
   if (next === app.project.antenna.wires) return;
   app.edit((p) => void (p.antenna.wires = structuredClone(next)));
   if (selected) app.setSelection(selected);
+}
+
+/** Puts a source or load on the pulse with this name, as one undoable step. */
+export function placeFeed(ref: FeedRef, name: string) {
+  if (!canEditWires()) return;
+  const app = useApp.getState();
+  const items = ref.kind === 'source' ? app.project.antenna.sources : app.project.antenna.loads;
+  if (!items[ref.index] || items[ref.index].pulse === name) return;
+  app.edit((p) => {
+    const list: { pulse: string }[] = ref.kind === 'source' ? p.antenna.sources : p.antenna.loads;
+    list[ref.index].pulse = name;
+  });
 }
 
 const commitEdited = (e: Edited) => commitWires(e.wires, e.selection);

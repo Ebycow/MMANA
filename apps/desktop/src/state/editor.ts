@@ -2,10 +2,11 @@
 // clipboard and what a drag in progress shows. None of it is part of the
 // document or its undo history.
 import { create } from 'zustand';
-import type { Point3, Wire } from '../api/types';
+import type { Point3, PulsePoint, Wire } from '../api/types';
+import type { FeedRef } from '../domain/feed';
 import type { End, Plane } from '../domain/wireEdit';
 
-export type Tool = 'select' | 'move' | 'rotate' | 'wire' | 'rect' | 'polygon';
+export type Tool = 'select' | 'move' | 'rotate' | 'wire' | 'rect' | 'polygon' | 'feed';
 export const DRAW_TOOLS: Tool[] = ['wire', 'rect', 'polygon'];
 export const isDrawTool = (t: Tool) => DRAW_TOOLS.includes(t);
 
@@ -46,6 +47,10 @@ export interface EditorState {
   cursor: DrawCursor | null;
   /** A length typed while drawing. */
   typed: string;
+  /** The source or load marker under the pointer (feed tool). */
+  feedHover: FeedRef | null;
+  /** The source or load being dragged and the pulse it would go on. */
+  feedDrag: { item: FeedRef; to: PulsePoint | null } | null;
   /** Read-out of the drag in progress (distance, angle). */
   hud: string | null;
   /** The box being dragged for selection, in canvas pixels. */
@@ -74,12 +79,14 @@ export const useEditor = create<EditorState>()((set, get) => ({
   draftPlane: null,
   cursor: null,
   typed: '',
+  feedHover: null,
+  feedDrag: null,
   hud: null,
   box: null,
   transformOpen: false,
 
   set: (patch) => set(patch),
-  setTool: (tool) => set({ tool, draft: [], draftPlane: null, typed: '', cursor: null, hud: null }),
+  setTool: (tool) => set({ tool, draft: [], draftPlane: null, typed: '', cursor: null, hud: null, feedHover: null, feedDrag: null }),
   cancelDraft: () => {
     if (get().draft.length === 0) return false;
     set({ draft: [], draftPlane: null, typed: '' });

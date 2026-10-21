@@ -1,6 +1,6 @@
 // Direct editing inside the 3D canvas: picking, selection, dragging wires and
-// their ends, box selection, drawing wires and loops, the move / rotate gizmo
-// and the overlays that go with them.
+// their ends, box selection, drawing wires and loops, the move / rotate gizmo,
+// moving sources and loads between pulses, and the overlays that go with them.
 //
 // Picking is done in screen space, in a capture listener on the canvas
 // container that runs before OrbitControls and the gizmo: when the pointer
@@ -12,7 +12,8 @@ import { useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
 import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3, type Camera } from 'three';
 import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
-import type { Point3, Wire } from '../api/types';
+import type { Point3, PulsePoint, Wire } from '../api/types';
+import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
 import type { DisplayWire } from '../domain/geometry';
 import { isHeld } from '../domain/shortcuts';
 import {
@@ -47,10 +48,13 @@ import {
 import { isDrawTool, useEditor, type DrawCursor, type Hover } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
-import { addWires, canEditWires, commitWires, selectConnected } from '../state/wireCommands';
+import { addWires, canEditWires, commitWires, placeFeed, selectConnected } from '../state/wireCommands';
 
 const WIRE_PICK_PX = 6;
 const END_PICK_PX = 9;
+const FEED_PICK_PX = 10;
+/** How far from a wire a dragged source or load still lands on it. */
+const FEED_WIRE_PX = 16;
 const SNAP_PX = 10;
 const DRAG_PX = 4;
 /** The view cube in the bottom-right corner keeps its own clicks. */
@@ -93,6 +97,10 @@ export interface EditSceneProps {
   editable: boolean;
   /** Size of the antenna, for the drawing grid. */
   radius: number;
+  /** Source and load markers in wire coordinates. */
+  feeds: FeedPositions;
+  /** The pulse layout, when it fits the wires. */
+  layout: LayoutFor | null;
 }
 
 type Pending = {
@@ -108,9 +116,10 @@ type Drag =
   | Pending
   | { kind: 'move'; plane: Plane; through: Point3; anchor: Point3; base: Wire[]; sel: number[] }
   | { kind: 'end'; wire: number; end: End; plane: Plane; origin: Point3; base: Wire[]; sel: number[] }
-  | { kind: 'box'; from: Pt2 };
+  | { kind: 'box'; from: Pt2 }
+  | { kind: 'feed'; item: FeedRef };
 
-type Hit = { kind: 'wire'; wire: number; grab: Point3 } | { kind: 'end'; wire: number; end: End };
+type Hit = { kind: 'wire'; wire: number; grab: Point3 } | { kind: 'end'; wire: number; end: End } | { kind: 'feed'; item: FeedRef };
 
 export function EditScene(props: EditSceneProps) {
   const gizmo = useRef<TransformControlsImpl>(null);
@@ -120,14 +129,15 @@ export function EditScene(props: EditSceneProps) {
       <EndHandles wires={props.wires} offset={props.offset} />
       <SelectionGizmo {...props} gizmo={gizmo} />
       <DrawPreview offset={props.offset} step={props.step} radius={props.radius} />
+      <PulseTicks wires={props.wires} offset={props.offset} layout={props.layout} />
     </>
   );
 }
 
-function PointerController({ wires, display, offset, step, editable, gizmo }: EditSceneProps & { gizmo: RefObject<TransformControlsImpl | null> }) {
+function PointerController({ wires, display, offset, step, editable, feeds, layout, gizmo }: EditSceneProps & { gizmo: RefObject<TransformControlsImpl | null> }) {
   const { camera, gl, size, events } = useThree();
-  const latest = useRef({ wires, display, offset, step, editable, camera, size });
-  latest.current = { wires, display, offset, step, editable, camera, size };
+  const latest = useRef({ wires, display, offset, step, editable, feeds, layout, camera, size });
+  latest.current = { wires, display, offset, step, editable, feeds, layout, camera, size };
 
   useEffect(() => {
     const el = (events.connected as HTMLElement | undefined) ?? gl.domElement;
@@ -158,9 +168,9 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
     const toWorld = (p: Point3) => add(p, latest.current.offset);
     const toWire = (p: Point3) => sub(p, latest.current.offset);
 
-    const pickEnd = (p: Pt2): Hit | null => {
+    const pickEnd = (p: Pt2): (Hit & { kind: 'end' }) | null => {
       const { wires } = latest.current;
-      let best: Hit | null = null;
+      let best: (Hit & { kind: 'end' }) | null = null;
       let bestD = END_PICK_PX;
       for (const i of useApp.getState().selectedWires) {
         for (const end of ['start', 'end'] as End[]) {
@@ -174,9 +184,9 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       }
       return best;
     };
-    const pickWire = (p: Pt2): Hit | null => {
-      let best: Hit | null = null;
-      let bestD = WIRE_PICK_PX;
+    const pickWire = (p: Pt2, px = WIRE_PICK_PX): (Hit & { kind: 'wire' }) | null => {
+      let best: (Hit & { kind: 'wire' }) | null = null;
+      let bestD = px;
       const selected = new Set(useApp.getState().selectedWires);
       for (const w of latest.current.display) {
         const a = toScreen(w.start);
@@ -192,6 +202,44 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         }
       }
       return best;
+    };
+
+    /** The source or load marker under the pointer. */
+    const pickFeed = (p: Pt2): Hit | null => {
+      const { feeds } = latest.current;
+      let best: Hit | null = null;
+      let bestD = FEED_PICK_PX;
+      const consider = (kind: FeedRef['kind'], at: (Point3 | null)[]) =>
+        at.forEach((q, index) => {
+          const s = q && toScreen(toWorld(q));
+          const d = s ? Math.hypot(s.x - p.x, s.y - p.y) : Infinity;
+          if (d < bestD) {
+            bestD = d;
+            best = { kind: 'feed', item: { kind, index } };
+          }
+        });
+      // a source wins over a load on the same pulse
+      consider('source', feeds.sources);
+      consider('load', feeds.loads);
+      return best;
+    };
+
+    /** The pulse nearest the pointer on the wire under it. */
+    const pickPulse = (p: Pt2): { wire: number; pulse: PulsePoint } | null => {
+      const { layout, wires } = latest.current;
+      const hit = layout && pickWire(p, FEED_WIRE_PX);
+      if (!layout || !hit) return null;
+      let best: PulsePoint | null = null;
+      let bestD = Infinity;
+      for (const q of pulsesOnWire(layout.layout, wires, hit.wire)) {
+        const s = toScreen(toWorld(q.position));
+        const d = s ? Math.hypot(s.x - p.x, s.y - p.y) : Infinity;
+        if (d < bestD) {
+          bestD = d;
+          best = q;
+        }
+      }
+      return best && { wire: hit.wire, pulse: best };
     };
 
     /** The nearest end or midpoint on screen (wire coordinates), skipping `except`. */
@@ -322,6 +370,17 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         return;
       }
       if (p.x > latest.current.size.width - VIEW_GIZMO_PX && p.y > latest.current.size.height - VIEW_GIZMO_PX) return setHover(null);
+      if (ed.tool === 'feed') {
+        const f = pickFeed(p);
+        const item = f?.kind === 'feed' ? f.item : null;
+        const cur = ed.feedHover;
+        if (cur?.kind !== item?.kind || cur?.index !== item?.index) ed.set({ feedHover: item });
+        // the wire under the pointer shows its pulses
+        const w = item ? null : pickWire(p, FEED_WIRE_PX);
+        setHover(w && { kind: 'wire', wire: w.wire });
+        el.style.cursor = item ? 'grab' : '';
+        return;
+      }
       const h = pickEnd(p) ?? pickWire(p);
       setHover(h && (h.kind === 'end' ? h : { kind: 'wire', wire: h.wire }));
     };
@@ -336,6 +395,13 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       const hit = d.hit!;
       if (!latest.current.editable) {
         drag = null;
+        return;
+      }
+      if (hit.kind === 'feed') {
+        drag = { kind: 'feed', item: hit.item };
+        ed.set({ hover: null, feedHover: null, feedDrag: { item: hit.item, to: null } });
+        el.style.cursor = 'grabbing';
+        updateDrag(e);
         return;
       }
       const plane = facingPlane(latest.current.camera);
@@ -373,7 +439,21 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       const step = latest.current.step;
       const constrain = held('constrain', e);
       const follow = ed.follow !== held('followToggle', e);
-      if (drag.kind === 'box') {
+      if (drag.kind === 'feed') {
+        const label = feedLabel(drag.item);
+        if (!latest.current.layout) {
+          ed.set({ hud: `${label}: ワイヤーをパルスに分けられないため移動できません（計算できる形状か確認してください）` });
+          return;
+        }
+        const target = pickPulse(p);
+        ed.set({
+          hover: target && { kind: 'wire', wire: target.wire },
+          feedDrag: { item: drag.item, to: target?.pulse ?? null },
+          hud: target
+            ? `${label} → ${describePulse(target.pulse, latest.current.wires[target.wire])}`
+            : `${label}: ワイヤーの上で離すとそのパルスに移動します`,
+        });
+      } else if (drag.kind === 'box') {
         ed.set({ hud: null, box: { x0: Math.min(drag.from.x, p.x), y0: Math.min(drag.from.y, p.y), x1: Math.max(drag.from.x, p.x), y1: Math.max(drag.from.y, p.y) } });
       } else if (drag.kind === 'move') {
         const q = onPlane(p, drag.plane, drag.through);
@@ -418,8 +498,14 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       window.removeEventListener('pointerup', onWindowUp);
       const ed = useEditor.getState();
       const preview = ed.preview;
-      ed.set({ preview: null, hud: null, box: null });
+      const to = ed.feedDrag?.to;
+      ed.set({ preview: null, hud: null, box: null, feedDrag: null });
+      if (d?.kind === 'feed') {
+        el.style.cursor = '';
+        ed.set({ hover: null });
+      }
       if (!cancel && d && (d.kind === 'move' || d.kind === 'end') && preview) commitWires(preview);
+      if (!cancel && d?.kind === 'feed' && to) placeFeed(d.item, to.name);
       return d;
     };
 
@@ -432,7 +518,14 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       // the gizmo under the pointer takes the drag (`axis` is set while it is hovered)
       if ((gizmo.current as unknown as { axis: string | null } | null)?.axis) return;
       const add = held('addToSelection', e);
-      if (isDrawTool(ed.tool)) {
+      if (ed.tool === 'feed') {
+        if (e.button !== 0) return;
+        // anything but a marker turns the camera
+        const hit = pickFeed(p);
+        if (!hit) return;
+        e.stopPropagation();
+        drag = { kind: 'pending', at: p, hit, add: false, box: false, draw: false };
+      } else if (isDrawTool(ed.tool)) {
         if (e.button === 2 && ed.draft.length) {
           // right click ends the line instead of panning
           e.stopPropagation();
@@ -480,6 +573,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         }
         app.setSelection([...app.selectedWires, ...hits]);
       } else if (d.kind === 'pending') {
+        if (d.hit?.kind === 'feed') return;
         if (d.draw) {
           const c = drawCursor(local(e), held('constrain', e));
           if (c) placePoint(c.point, c.plane);
@@ -498,7 +592,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
     const onLeave = () => {
       if (drag) return;
       setHover(null);
-      useEditor.getState().set({ cursor: null });
+      useEditor.getState().set({ cursor: null, feedHover: null });
     };
     const onDblClick = (e: MouseEvent) => {
       const ed = useEditor.getState();
@@ -506,6 +600,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         ed.cancelDraft();
         return;
       }
+      if (ed.tool === 'feed') return;
       const hit = pickWire(local(e));
       if (hit) selectConnected(hit.wire, held('addToSelection', e));
     };
@@ -730,6 +825,26 @@ function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; r
           <div className={`snap-marker ${cursor.snap}`} />
         </Html>
       )}
+    </>
+  );
+}
+
+/** The pulses of the wire under the pointer, where the feed tool can put a source or load. */
+function PulseTicks({ wires, offset, layout }: { wires: Wire[]; offset: Point3; layout: LayoutFor | null }) {
+  const tool = useEditor((s) => s.tool);
+  const wire = useEditor((s) => (s.hover?.kind === 'wire' ? s.hover.wire : null));
+  const target = useEditor((s) => s.feedDrag?.to?.pulse ?? null);
+  const invalidate = useThree((s) => s.invalidate);
+  const ticks = useMemo(() => (layout && wire != null ? pulsesOnWire(layout.layout, wires, wire) : []), [layout, wires, wire]);
+  useEffect(() => invalidate());
+  if (tool !== 'feed' || ticks.length === 0 || ticks.length > 400) return null;
+  return (
+    <>
+      {ticks.map((q) => (
+        <Html key={q.pulse} position={[q.position.x + offset.x, q.position.y + offset.y, q.position.z + offset.z]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
+          <div className={`pulse-tick${q.pulse === target ? ' hot' : ''}`} />
+        </Html>
+      ))}
     </>
   );
 }

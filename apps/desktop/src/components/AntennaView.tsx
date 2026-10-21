@@ -5,10 +5,12 @@ import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import { transport } from '../api/transport';
 import type { Point3 } from '../api/types';
-import { bounds, currentPolylines, displayWires, pulseLocation, type DisplayWire } from '../domain/geometry';
+import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
+import { bounds, currentPolylines, displayWires, type DisplayWire } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
-import { niceStep, sub } from '../domain/wireEdit';
+import { add, niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
@@ -40,9 +42,33 @@ function rampColor(ramp: string[], t: number): Color {
 
 const cssVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
 
+/**
+ * The pulse layout of the project as last computed; null until the first one
+ * arrives or when the engine cannot divide the wires.
+ */
+function usePulseLayout(): LayoutFor | null {
+  const project = useApp((s) => s.project);
+  const options = useApp((s) => s.options);
+  const [latest, setLatest] = useState<LayoutFor | null>(null);
+  useEffect(() => {
+    let live = true;
+    const frequencyMhz = options.frequencyMhz ?? project.antenna.frequencyMhz;
+    transport.pulseLayout({ project, options }).then(
+      (layout) => live && setLatest({ layout, project, frequencyMhz }),
+      () => live && setLatest(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [project, options]);
+  return latest;
+}
+
 export function AntennaView() {
-  const antenna = useApp((s) => s.project.antenna);
-  const environment = useApp((s) => s.project.environment);
+  const project = useApp((s) => s.project);
+  const antenna = project.antenna;
+  const environment = project.environment;
+  const frequencyMhz = useApp((s) => s.options.frequencyMhz ?? s.project.antenna.frequencyMhz);
   const result = useApp((s) => s.result);
   const stale = useApp((s) => s.resultStale);
   const showCurrents = useApp((s) => s.showCurrents);
@@ -66,6 +92,9 @@ export function AntennaView() {
   );
   // the first stacked copy is the one edited; the others follow it
   const offset: Point3 = wires.length && shown.wires.length ? sub(wires[0].start, shown.wires[0].start) : { x: 0, y: 0, z: 0 };
+  const latestLayout = usePulseLayout();
+  const layout = latestLayout && pulsesFit(latestLayout, project, frequencyMhz) ? latestLayout : null;
+  const feeds = useMemo(() => feedPositions(antenna, layout, shown.wires), [antenna, layout, shown.wires]);
 
   // re-frame when another antenna is loaded
   useEffect(() => setPreset((s) => ({ p: s.p, n: s.n + 1 })), [fileName]);
@@ -113,9 +142,27 @@ export function AntennaView() {
           camera={{ up: [0, 0, 1], fov: 35, near: 0.01, far: 100000, position: [10, -12, 8] }}
           dpr={[1, 2]}
         >
-          <Scene wires={wires} box={box} currents={currents} preset={preset} scheme={scheme} groundZ={environment.ground === 'freeSpace' ? null : -environment.height} />
+          <Scene
+            wires={wires}
+            box={box}
+            currents={currents}
+            preset={preset}
+            scheme={scheme}
+            groundZ={environment.ground === 'freeSpace' ? null : -environment.height}
+            feeds={feeds}
+            offset={offset}
+          />
           {/* picking and snapping use the wires as they are, not a drag in progress */}
-          <EditScene wires={antenna.wires} display={wires} offset={offset} step={step ?? autoStep} editable={editable} radius={box.radius} />
+          <EditScene
+            wires={antenna.wires}
+            display={wires}
+            offset={offset}
+            step={step ?? autoStep}
+            editable={editable}
+            radius={box.radius}
+            feeds={feeds}
+            layout={layout}
+          />
         </Canvas>
         <EditToolbar autoStep={autoStep} editable={editable} />
         <EditOverlay />
@@ -137,6 +184,7 @@ const DRAW_HINTS: Record<string, string> = {
   rect: '対角の 2 点をクリック',
   polygon: '中心、続いて頂点をクリック ・ 数字で半径',
 };
+const FEED_HINT = '給電点（球）・負荷（箱）をドラッグしてワイヤー上のパルスへ ・ Esc で取り消し';
 
 /** Read-outs of the drag or drawing in progress, and the selection box. */
 function EditOverlay() {
@@ -153,6 +201,7 @@ function EditOverlay() {
     typed && `入力: ${typed} m（Enter で確定）`,
     draw && cursor && `${plane ? `${plane.toUpperCase()} 面 ` : ''}(${[cursor.point.x, cursor.point.y, cursor.point.z].map((v) => Number(v.toFixed(4))).join(', ')})`,
     draw && !drafting && !hud && DRAW_HINTS[tool],
+    tool === 'feed' && !hud && FEED_HINT,
   ].filter(Boolean);
   return (
     <>
@@ -188,10 +237,13 @@ interface SceneProps {
   preset: { p: Preset; n: number };
   scheme: 'light' | 'dark';
   groundZ: number | null;
+  /** Source and load markers in wire coordinates. */
+  feeds: FeedPositions;
+  /** Where the first stacked copy is drawn: world = wire + offset. */
+  offset: Point3;
 }
 
-function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
-  const antenna = useApp((s) => s.project.antenna);
+function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }: SceneProps) {
   const selected = useApp((s) => s.selectedWires);
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
@@ -224,11 +276,19 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preset.n]);
 
+  const feedHover = useEditor((s) => s.feedHover);
+  const feedDrag = useEditor((s) => s.feedDrag);
+  /** Markers in world coordinates; the one being dragged sits on the pulse it would go on. */
   const markers = useMemo(() => {
-    const src = antenna.sources.map((s) => pulseLocation(s.pulse, antenna.wires)).filter((p) => p != null);
-    const loads = antenna.loads.map((l) => pulseLocation(l.pulse, antenna.wires)).filter((p) => p != null);
-    return { src, loads };
-  }, [antenna]);
+    const place = (kind: FeedKind, at: (Point3 | null)[]) =>
+      at.flatMap((p, index) => {
+        const dragged = feedDrag?.item.kind === kind && feedDrag.item.index === index;
+        const q = dragged && feedDrag.to ? feedDrag.to.position : p;
+        const hot = dragged || (feedHover?.kind === kind && feedHover.index === index);
+        return q ? [{ p: add(q, offset), hot, index }] : [];
+      });
+    return { src: place('source', feeds.sources), loads: place('load', feeds.loads) };
+  }, [feeds, offset, feedHover, feedDrag]);
 
   // hover and selection change the lines without changing the camera
   useEffect(() => invalidate());
@@ -296,14 +356,14 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
         />
       ))}
 
-      {markers.src.map((p, i) => (
-        <mesh key={`s${i}`} position={[p.x, p.y, p.z]}>
+      {markers.src.map(({ p, hot, index }) => (
+        <mesh key={`s${index}`} position={[p.x, p.y, p.z]} scale={hot ? 1.5 : 1}>
           <sphereGeometry args={[markerSize, 20, 14]} />
           <meshStandardMaterial color="#eb6834" />
         </mesh>
       ))}
-      {markers.loads.map((p, i) => (
-        <mesh key={`l${i}`} position={[p.x, p.y, p.z]}>
+      {markers.loads.map(({ p, hot, index }) => (
+        <mesh key={`l${index}`} position={[p.x, p.y, p.z]} scale={hot ? 1.5 : 1}>
           <boxGeometry args={[markerSize * 1.4, markerSize * 1.4, markerSize * 1.4]} />
           <meshStandardMaterial color="#6250d6" />
         </mesh>

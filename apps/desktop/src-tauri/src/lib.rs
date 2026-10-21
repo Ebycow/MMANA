@@ -18,6 +18,7 @@ pub fn run() {
             commands::save_project,
             commands::save_text,
             commands::calculate,
+            commands::pulse_layout,
             commands::sweep,
             commands::far_field,
             commands::near_field,

@@ -9,7 +9,7 @@ use mmana_core::contract::{
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeError, OptimizeOutcome, Progress, SetupEdit};
-use mmana_core::{CalcError, CalcResult, Project, maa};
+use mmana_core::{CalcError, CalcResult, Project, PulseLayout, maa};
 use serde::Serialize;
 use std::path::Path;
 use std::sync::Arc;
@@ -125,6 +125,11 @@ pub async fn save_project(path: String, project: Project) -> Result<(), CommandE
 #[tauri::command]
 pub async fn calculate(request: CalculationRequest) -> Result<CalcResult, CommandError> {
     blocking(move || Ok(contract::calculate(&request)?)).await
+}
+
+#[tauri::command]
+pub async fn pulse_layout(request: CalculationRequest) -> Result<PulseLayout, CommandError> {
+    blocking(move || Ok(contract::pulse_layout(&request)?)).await
 }
 
 #[tauri::command]

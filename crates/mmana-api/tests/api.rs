@@ -67,6 +67,18 @@ async fn calculation_matches_golden_result() {
 }
 
 #[tokio::test]
+async fn pulse_layout_names_the_pulses_of_each_wire() {
+    let parsed = parse("3EL20.MAA").await;
+    let (status, _, r) = post_json("/v1/pulses", json!({ "project": parsed["project"] })).await;
+    assert_eq!(status, StatusCode::OK, "{r}");
+    assert_eq!(r["wires"].as_array().unwrap().len(), 3);
+    assert_eq!(r["wires"][0]["wire"], 1);
+    assert_eq!(r["wires"][0]["pulses"][0]["name"], "w1b");
+    let centre = r["wires"][0]["pulses"].as_array().unwrap().iter().find(|p| p["name"] == "w1c").unwrap();
+    assert_eq!(r["sources"][0], centre["position"]);
+}
+
+#[tokio::test]
 async fn export_round_trips_through_parse() {
     let parsed = parse("3EL20.MAA").await;
     let req = Request::post("/v1/maa/export?encoding=utf-8")

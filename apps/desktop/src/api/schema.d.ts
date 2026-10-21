@@ -186,6 +186,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/pulses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The pulses the antenna is divided into, by wire, with the names that
+         *     address them and the positions of the sources and loads. Nothing is solved.
+         */
+        post: operations["pulse_layout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sweeps": {
         parameters: {
             query?: never;
@@ -1008,6 +1028,26 @@ export interface components {
             /** @description 1-based index of the defining wire. */
             wire: number;
         };
+        /**
+         * @description Where the pulses of the antenna (without stacking) lie, for placing
+         *     sources and loads, and where its sources and loads are.
+         */
+        PulseLayout: {
+            loads: (components["schemas"]["Point3"] | null)[];
+            pulseCount: number;
+            /** @description Position of each source's pulse; null when the name does not resolve. */
+            sources: (components["schemas"]["Point3"] | null)[];
+            /** @description Wires with R = 0 have no pulses and are left out. */
+            wires: components["schemas"]["WirePulses"][];
+        };
+        /** @description A pulse a source or load can be placed on, with the name that addresses it. */
+        PulsePoint: {
+            /** @description `w2c`, or the shorter of `w2b3` / `w2e1`. */
+            name: string;
+            /** @description Metres, antenna coordinates without the height. */
+            position: components["schemas"]["Point3"];
+            pulse: number;
+        };
         RealGround: {
             media: components["schemas"]["Medium"][];
             screen?: components["schemas"]["GroundScreen"] | null;
@@ -1325,6 +1365,12 @@ export interface components {
         WireMaterial: "lossless" | "copper" | "copperPipe" | "aluminum" | "aluminumPipe" | "iron" | "ironPipe";
         /** @enum {string} */
         WirePart: "y1" | "z1" | "y2" | "z2" | "radius" | "x1" | "x2";
+        /** @description The pulses on one wire, from its start to its end. */
+        WirePulses: {
+            pulses: components["schemas"]["PulsePoint"][];
+            /** @description 1-based wire number. */
+            wire: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -1672,6 +1718,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetupEdit"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    pulse_layout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CalculationRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PulseLayout"];
                 };
             };
             400: {

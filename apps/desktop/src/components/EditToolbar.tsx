@@ -28,6 +28,7 @@ import {
   IconLayoutAlignCenter,
   IconLine,
   IconMagnet,
+  IconPlugConnected,
   IconPointer,
   IconRectangle,
   IconRotate,
@@ -67,7 +68,16 @@ const TOOLS: { tool: Tool; label: string; help: (h: Held) => string; icon: React
   { tool: 'wire', label: 'ワイヤーを描く', help: () => 'クリックで点を打ってつなげます。始点をクリックで閉じたループ。数字を打つと長さを指定。Enter・Esc・右クリックで終了', icon: <IconLine size={15} /> },
   { tool: 'rect', label: '四角ループ', help: () => '対角の 2 点をクリックして、作図面の上に四角形のループを描きます', icon: <IconRectangle size={15} /> },
   { tool: 'polygon', label: '多角形ループ', help: () => '中心と 1 つの頂点をクリックして、正多角形のループを描きます。数字を打つと半径を指定', icon: <IconHexagon size={15} /> },
+  {
+    tool: 'feed',
+    label: '給電点・負荷を移動',
+    help: () => '給電点（球）や負荷（箱）をドラッグして、ワイヤー上のパルスに置き直します。位置は w1b3 のような MMANA のパルス名で保存されます',
+    icon: <IconPlugConnected size={15} />,
+  },
 ];
+
+/** Tools that start a new group in the toolbar. */
+const GROUP_START: Tool[] = ['wire', 'feed'];
 
 const STEPS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 5];
 const stepLabel = (m: number) => (m < 0.01 ? `${m * 1000} mm` : m < 1 ? `${Number((m * 100).toFixed(1))} cm` : `${m} m`);
@@ -104,7 +114,7 @@ export function EditToolbar({ autoStep, editable }: { autoStep: number; editable
                 color={tool === t.tool ? undefined : 'gray'}
                 disabled={!editable && i > 0}
                 onClick={() => setTool(t.tool)}
-                style={i === 3 ? { marginLeft: 6 } : undefined}
+                style={GROUP_START.includes(t.tool) ? { marginLeft: 6 } : undefined}
               >
                 {t.icon}
               </ActionIcon>

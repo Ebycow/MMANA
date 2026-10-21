@@ -51,6 +51,7 @@ export const COMMANDS: Command[] = [
   { id: 'tool.wire', label: 'ワイヤーを描く', group: '3D ビューのツール', keys: ['W'] },
   { id: 'tool.rect', label: '四角ループ', group: '3D ビューのツール', keys: ['Q'] },
   { id: 'tool.polygon', label: '多角形ループ', group: '3D ビューのツール', keys: ['O'] },
+  { id: 'tool.feed', label: '給電点・負荷を移動', group: '3D ビューのツール', keys: ['F'] },
   { id: 'settings', label: 'キーボードとマウスの設定', group: 'その他', keys: ['mod+,'] },
 ];
 

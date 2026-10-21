@@ -55,6 +55,7 @@ pub struct AppState {
         routes::parse_maa,
         routes::export_maa,
         routes::calculate,
+        routes::pulse_layout,
         routes::sweep,
         routes::far_field,
         routes::near_field,
@@ -87,6 +88,7 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/maa/parse", post(routes::parse_maa))
         .route("/v1/maa/export", post(routes::export_maa))
         .route("/v1/calculations", post(routes::calculate))
+        .route("/v1/pulses", post(routes::pulse_layout))
         .route("/v1/sweeps", post(routes::sweep))
         .route("/v1/far-field", post(routes::far_field))
         .route("/v1/near-field", post(routes::near_field))

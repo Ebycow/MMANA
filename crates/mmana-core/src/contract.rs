@@ -12,7 +12,7 @@ use crate::elements::{ElementEdit, ElementOp};
 use crate::optimize::{OptimizeError, OptimizeOutcome, OptimizerSetup, Progress, SetupEdit, SetupOp};
 use crate::{
     Antenna, AxisRange, CalcError, CalcOptions, CalcResult, FarFieldSample, NearFieldSample, NearFieldSpec, Project,
-    SweepPoint, elements, maa, optimize,
+    PulseLayout, SweepPoint, elements, maa, optimize,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +164,11 @@ pub fn parse_maa(bytes: &[u8]) -> ParsedProject {
 
 pub fn calculate(req: &CalculationRequest) -> Result<CalcResult, CalcError> {
     crate::calculate(&req.project, &req.options)
+}
+
+/// Where the pulses lie, without solving; for placing sources and loads.
+pub fn pulse_layout(req: &CalculationRequest) -> Result<PulseLayout, CalcError> {
+    crate::pulse_layout(&req.project, &req.options)
 }
 
 pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {

@@ -31,6 +31,15 @@ impl Mininec {
     /// connectivity, loads and sources. Updates `ap` (segment wires and pulse
     /// numbers) the way the original mutates `ANTDEF`.
     pub fn new(ap: &mut AntDef, cfg: &EngineConfig) -> Result<Self, CalcError> {
+        let mut e = Self::layout(ap, cfg)?;
+        e.set_loads(ap, cfg)?;
+        e.set_sources(ap)?;
+        Ok(e)
+    }
+
+    /// The first half of `InitAntData`: segments, pulses and connectivity,
+    /// with the source and load names resolved in `ap` but not checked.
+    pub fn layout(ap: &mut AntDef, cfg: &EngineConfig) -> Result<Self, CalcError> {
         let p = 4.0 * 1f64.atan();
         let mut f = ap.cfq;
         if f == 0.0 {
@@ -106,8 +115,6 @@ impl Mininec {
         e.build_wires(ap, cfg)?;
         e.number_pulses(ap);
         ap.adj_plus_no();
-        e.set_loads(ap, cfg)?;
-        e.set_sources(ap)?;
         Ok(e)
     }
 

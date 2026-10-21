@@ -135,6 +135,7 @@ export function App() {
       'tool.wire': tool('wire'),
       'tool.rect': tool('rect'),
       'tool.polygon': tool('polygon'),
+      'tool.feed': tool('feed'),
     },
     // calculating must also work while typing in a cell
     ['calculate'],

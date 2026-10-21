@@ -13,7 +13,7 @@ use mmana_core::contract::{
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeOutcome, SetupEdit};
-use mmana_core::{CalcOptions, CalcResult, Project, maa};
+use mmana_core::{CalcOptions, CalcResult, Project, PulseLayout, maa};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -110,6 +110,23 @@ pub async fn calculate(
 ) -> Result<ApiJson<CalcResult>, ApiError> {
     let req = CalculationRequest { options: checked_options(req.options, &state.limits), ..req };
     Ok(ApiJson(blocking(move || Ok(contract::calculate(&req)?)).await?))
+}
+
+/// The pulses the antenna is divided into, by wire, with the names that
+/// address them and the positions of the sources and loads. Nothing is solved.
+#[utoipa::path(
+    post,
+    path = "/v1/pulses",
+    tag = "calculations",
+    request_body = CalculationRequest,
+    responses((status = 200, body = PulseLayout), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn pulse_layout(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<CalculationRequest>,
+) -> Result<ApiJson<PulseLayout>, ApiError> {
+    let req = CalculationRequest { options: checked_options(req.options, &state.limits), ..req };
+    Ok(ApiJson(blocking(move || Ok(contract::pulse_layout(&req)?)).await?))
 }
 
 /// Frequency sweep: impedance, SWR, gain and F/B at evenly spaced frequencies.

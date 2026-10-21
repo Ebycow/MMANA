@@ -342,6 +342,21 @@ tr.selected .row-actions {
   height: 13px;
   background: var(--wire-selected);
 }
+.pulse-tick {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wire-selected);
+  opacity: 0.7;
+}
+.pulse-tick.hot {
+  width: 11px;
+  height: 11px;
+  opacity: 1;
+  box-sizing: border-box;
+  border: 2px solid #eb6834;
+  background: var(--panel-bg);
+}
 .snap-marker {
   width: 12px;
   height: 12px;

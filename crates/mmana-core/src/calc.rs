@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 use crate::engine::antdef::AntDef;
 use crate::engine::{EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec};
 use crate::error::CalcError;
-use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation};
+use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation, Wire};
 use crate::pattern::{self, PatternState};
 
 /// Angular resolution of the stored pattern cuts.
@@ -402,6 +402,108 @@ fn patterns(p: &PatternState) -> Patterns {
 /// Convenience: solve and produce the standard result.
 pub fn calculate(project: &Project, opts: &CalcOptions) -> Result<CalcResult, CalcError> {
     Ok(solve(project, opts)?.result(project, opts))
+}
+
+/// A pulse a source or load can be placed on, with the name that addresses it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct PulsePoint {
+    pub pulse: usize,
+    /// `w2c`, or the shorter of `w2b3` / `w2e1`.
+    pub name: String,
+    /// Metres, antenna coordinates without the height.
+    pub position: Point3,
+}
+
+/// The pulses on one wire, from its start to its end.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct WirePulses {
+    /// 1-based wire number.
+    pub wire: usize,
+    pub pulses: Vec<PulsePoint>,
+}
+
+/// Where the pulses of the antenna (without stacking) lie, for placing
+/// sources and loads, and where its sources and loads are.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct PulseLayout {
+    pub pulse_count: usize,
+    /// Wires with R = 0 have no pulses and are left out.
+    pub wires: Vec<WirePulses>,
+    /// Position of each source's pulse; null when the name does not resolve.
+    pub sources: Vec<Option<Point3>>,
+    pub loads: Vec<Option<Point3>>,
+}
+
+/// Segments the antenna as the calculation would, without solving it.
+pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout, CalcError> {
+    let mut ant = project.antenna.clone();
+    let cfq = opts.frequency_mhz.unwrap_or(ant.frequency_mhz);
+    if !(cfq.is_finite() && cfq > 0.0) {
+        return Err(CalcError::InvalidFrequency(cfq));
+    }
+    if ant.wires.is_empty() {
+        return Err(CalcError::NoWires);
+    }
+    check_segmentation(&ant)?;
+    // names address the wires as defined; the stacked copies only repeat them
+    ant.stack.horizontal = 1;
+    ant.stack.vertical = 1;
+    let mut ap = AntDef::from_model(&ant, cfq);
+    let e = Mininec::layout(&mut ap, &engine_config(project, opts))?;
+    let position = |p: i32| -> Option<Point3> {
+        let p = usize::try_from(p).ok().filter(|p| (1..=e.n).contains(p))?;
+        let (x, y, z) = e.seg_pos((2 * e.wi[p] - 1 + p as i32) as usize);
+        Some(Point3::new(x, y, z))
+    };
+    let wires = ant
+        .wires
+        .iter()
+        .zip(&ap.wires)
+        .enumerate()
+        .filter(|(_, (_, wp))| wp.pmax > 0)
+        .map(|(i, (w, wp))| {
+            let centre = wp.pno + wp.pmax / 2;
+            let pulses = (wp.pno..=wp.pno + wp.pmax)
+                .filter_map(|p| {
+                    let at = position(p)?;
+                    // the last name can reach the first pulse of the next wire
+                    if !on_wire(&at, w) {
+                        return None;
+                    }
+                    let (b, e) = (p - wp.pno, wp.pno + wp.pmax - p);
+                    let name = match () {
+                        _ if p == centre => format!("w{}c", i + 1),
+                        _ if b <= e => format!("w{}b{}", i + 1, if b == 0 { String::new() } else { b.to_string() }),
+                        _ => format!("w{}e{}", i + 1, if e == 0 { String::new() } else { e.to_string() }),
+                    };
+                    Some(PulsePoint { pulse: p as usize, name, position: at })
+                })
+                .collect();
+            WirePulses { wire: i + 1, pulses }
+        })
+        .collect();
+    Ok(PulseLayout {
+        pulse_count: e.n,
+        wires,
+        sources: ap.sources.iter().map(|c| position(c.plus_no)).collect(),
+        loads: ap.loads.iter().map(|l| position(l.plus_no)).collect(),
+    })
+}
+
+/// Whether `p` lies on the wire, allowing for rounding in the segmentation.
+fn on_wire(p: &Point3, w: &Wire) -> bool {
+    let d = [w.end.x - w.start.x, w.end.y - w.start.y, w.end.z - w.start.z];
+    let v = [p.x - w.start.x, p.y - w.start.y, p.z - w.start.z];
+    let len2 = d.iter().map(|c| c * c).sum::<f64>();
+    let t = if len2 == 0.0 { 0.0 } else { (v[0] * d[0] + v[1] * d[1] + v[2] * d[2]) / len2 };
+    let off = (0..3).map(|k| (v[k] - d[k] * t.clamp(0.0, 1.0)).powi(2)).sum::<f64>();
+    off <= 1e-12 * len2.max(1e-6)
 }
 
 /// One point of a frequency sweep.
