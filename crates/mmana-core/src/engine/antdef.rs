@@ -24,6 +24,8 @@ pub(crate) struct WDef {
 pub(crate) struct CDef {
     pub plus: String,
     pub plus_no: i32,
+    /// Stacked copy the source belongs to (0: the antenna as defined).
+    pub copy: usize,
     pub ev: f64,
     pub deg: f64,
 }
@@ -34,6 +36,8 @@ pub(crate) struct LDef {
     pub ty: i32,
     pub plus: String,
     pub plus_no: i32,
+    /// Stacked copy the load belongs to (0: the antenna as defined).
+    pub copy: usize,
     pub sn: i32,
     pub a: [f64; SMAX],
     pub b: [f64; SMAX],
@@ -69,6 +73,8 @@ pub(crate) struct WzDef {
 pub(crate) struct AntDef {
     pub cfq: f64,
     pub wires: Vec<WDef>,
+    /// Wires as defined; stacked copy `k` starts at wire `k * base_wires`.
+    pub base_wires: usize,
     pub sources: Vec<CDef>,
     pub loads_enabled: bool,
     pub loads: Vec<LDef>,
@@ -106,12 +112,13 @@ impl AntDef {
         let sources = ant
             .sources
             .iter()
-            .map(|s| CDef { plus: to_half_width(&s.pulse), plus_no: 0, ev: s.voltage, deg: s.phase_deg })
+            .map(|s| CDef { plus: to_half_width(&s.pulse), plus_no: 0, copy: 0, ev: s.voltage, deg: s.phase_deg })
             .collect();
         let loads = ant.loads.iter().map(|l| ldef_from_model(&l.pulse, &l.kind)).collect();
         let mut def = AntDef {
             cfq,
             wires,
+            base_wires: ant.wires.len(),
             sources,
             loads_enabled: ant.loads_enabled,
             loads,
@@ -173,6 +180,7 @@ impl AntDef {
             for c in &sources {
                 let mut c = c.clone();
                 c.plus = add_wire_no(&c.plus, off);
+                c.copy = i as usize;
                 c.ev /= copies as f64;
                 self.sources.push(c);
             }
@@ -182,6 +190,7 @@ impl AntDef {
             for l in &loads {
                 let mut l = l.clone();
                 l.plus = add_wire_no(&l.plus, off);
+                l.copy = i as usize;
                 self.loads.push(l);
             }
         }
@@ -189,7 +198,8 @@ impl AntDef {
 }
 
 fn ldef_from_model(pulse: &str, kind: &LoadKind) -> LDef {
-    let mut l = LDef { ty: 0, plus: to_half_width(pulse), plus_no: 0, sn: 0, a: [NULLV; SMAX], b: [NULLV; SMAX] };
+    let mut l =
+        LDef { ty: 0, plus: to_half_width(pulse), plus_no: 0, copy: 0, sn: 0, a: [NULLV; SMAX], b: [NULLV; SMAX] };
     match kind {
         LoadKind::Lc { inductance_uh, capacitance_pf, q } => {
             l.a[0] = *inductance_uh;
@@ -252,28 +262,22 @@ fn adj_pdef(pdef: &mut Vec<PDef>) {
 }
 
 /// `TMainWnd::AddWireNo`: shifts the wire number inside a pulse name.
+/// The original adds the wire offset to a bare pulse number too, which
+/// moves it onto another pulse of the first copy; numbers are left as they
+/// are and resolved per copy once the pulses are known (`adj_plus_no`).
 fn add_wire_no(t: &str, off: i32) -> String {
     if off == 0 {
         return t.to_owned();
     }
-    let leading_int = |s: &str| -> i32 {
-        let s = s.trim_start();
-        let end = s
-            .char_indices()
-            .take_while(|&(i, c)| c.is_ascii_digit() || (i == 0 && (c == '-' || c == '+')))
-            .last()
-            .map_or(0, |(i, c)| i + c.len_utf8());
-        s[..end].parse().unwrap_or(0)
-    };
     let mut chars = t.chars();
     match chars.next() {
         Some(w @ ('w' | 'W')) => {
             let rest = chars.as_str();
             let digits = rest.chars().take_while(char::is_ascii_digit).count();
-            let d = leading_int(&rest[..digits]);
+            let d: i32 = rest[..digits].parse().unwrap_or(0);
             format!("{w}{}{}", d + off, &rest[digits..])
         }
-        _ => (leading_int(t) + off).to_string(),
+        _ => t.to_owned(),
     }
 }
 
@@ -285,7 +289,7 @@ mod tests {
     fn add_wire_no_shifts_wire_numbers() {
         assert_eq!(add_wire_no("w1c", 4), "w5c");
         assert_eq!(add_wire_no("W12b3", 10), "W22b3");
-        assert_eq!(add_wire_no("7", 3), "10");
+        assert_eq!(add_wire_no("7", 3), "7");
         assert_eq!(add_wire_no("w1c", 0), "w1c");
     }
 }

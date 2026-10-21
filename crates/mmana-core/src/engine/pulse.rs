@@ -16,11 +16,28 @@ impl AntDef {
             }
         }
         for i in 0..self.sources.len() {
-            self.sources[i].plus_no = self.pulse_no(&self.sources[i].plus);
+            self.sources[i].plus_no = self.copy_pulse_no(&self.sources[i].plus, self.sources[i].copy);
         }
         for i in 0..self.loads.len() {
-            self.loads[i].plus_no = self.pulse_no(&self.loads[i].plus);
+            self.loads[i].plus_no = self.copy_pulse_no(&self.loads[i].plus, self.loads[i].copy);
         }
+    }
+
+    /// [`AntDef::pulse_no`] in stacked copy `copy`. A wire name already
+    /// carries the copy's wire number; a bare number names a pulse of the
+    /// first copy and becomes the pulse as far along the same wire of this
+    /// copy (0 if the first copy has no such pulse).
+    fn copy_pulse_no(&self, name: &str, copy: usize) -> i32 {
+        let p = self.pulse_no(name);
+        if copy == 0 || !to_half_width(name).starts_with(|c: char| c.is_ascii_digit()) {
+            return p;
+        }
+        let Some((w, wp)) =
+            self.wires[..self.base_wires].iter().enumerate().find(|(_, wp)| (wp.pno..wp.pno + wp.pmax).contains(&p))
+        else {
+            return 0;
+        };
+        self.wires.get(w + copy * self.base_wires).map_or(0, |cw| cw.pno + (p - wp.pno))
     }
 
     /// `Str2PlusNo`: `12` → pulse 12, `w3c` → centre of wire 3, `w3b2` → 2nd
@@ -102,6 +119,7 @@ mod tests {
         AntDef {
             cfq: 14.0,
             wires: vec![WDef { pno: 1, pmax: 9, ..WDef::default() }, WDef { pno: 10, pmax: 10, ..WDef::default() }],
+            base_wires: 2,
             sources: Vec::new(),
             loads_enabled: false,
             loads: Vec::new(),
@@ -125,6 +143,22 @@ mod tests {
         assert_eq!(ap.pulse_no("w2b2"), 12);
         assert_eq!(ap.pulse_no("w2e1"), 19);
         assert_eq!(ap.pulse_no("w3c"), 0);
+    }
+
+    #[test]
+    fn numbers_resolve_along_the_same_wire_of_a_stacked_copy() {
+        let mut ap = two_wires();
+        ap.wires.push(WDef { pno: 20, pmax: 9, ..WDef::default() });
+        ap.wires.push(WDef { pno: 29, pmax: 11, ..WDef::default() });
+        assert_eq!(ap.copy_pulse_no("5", 0), 5);
+        assert_eq!(ap.copy_pulse_no("5", 1), 24);
+        assert_eq!(ap.copy_pulse_no("１２", 1), 31);
+        assert_eq!(ap.copy_pulse_no("19", 1), 38);
+        // not a pulse of the first copy
+        assert_eq!(ap.copy_pulse_no("25", 1), 0);
+        assert_eq!(ap.copy_pulse_no("0", 1), 0);
+        // the copy's wire number is already in the name
+        assert_eq!(ap.copy_pulse_no("w3c", 1), 24);
     }
 
     #[test]
