@@ -9,6 +9,8 @@ pub enum CalcError {
     NoWires,
     #[error("the antenna has no sources")]
     NoSources,
+    #[error("every source has a voltage of 0")]
+    NoExcitation,
     #[error("wire {wire} has zero length")]
     ZeroLengthWire { wire: usize },
     #[error("wire {wire}: no combined-wire definition with R = {radius}")]
@@ -27,10 +29,26 @@ pub enum CalcError {
     InvalidWireSegmentation { wire: usize, max: i32 },
     #[error("{what} pulse '{name}' does not exist (valid pulses: 1-{max})")]
     PulseOutOfRange { what: &'static str, name: String, max: usize },
+    #[error("sources {first} and {second} are on the same pulse ({pulse})")]
+    DuplicateSource { first: usize, second: usize, pulse: usize },
     #[error("wires {first} and {second} lie exactly on top of each other")]
     OverlappingWires { first: usize, second: usize },
     #[error("sweep point {index} does not exist (the sweep has {points} points)")]
     SweepPointOutOfRange { index: usize, points: usize },
     #[error("the calculation has no finite solution (the impedance matrix is singular)")]
     NoFiniteSolution,
+    #[error("{field} must be {rule} (got {value})")]
+    OutOfRange { field: String, rule: &'static str, value: f64 },
+    #[error("load {load}: {reason}")]
+    InvalidLoad { load: usize, reason: &'static str },
+    #[error("a real ground needs at least one ground medium")]
+    NoGroundMedia,
+    #[error("the input power is not positive ({power} W), so the near field cannot be scaled to a power")]
+    NonPositivePower { power: f64 },
+    #[error("the {what} are too large to represent; reduce the voltages, the power or the coordinates")]
+    NotRepresentable { what: &'static str },
+    #[error("too many field points (maximum {max})")]
+    TooManyFieldPoints { max: usize },
+    #[error("a sweep has 1 to {max} points")]
+    InvalidSweepPoints { max: usize },
 }

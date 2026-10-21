@@ -157,6 +157,12 @@ pub fn axis_len(a: &AxisRange) -> usize {
     if a.step == 0.0 { 1 } else { a.count.max(1) as usize }
 }
 
+/// Number of samples a scan over these axes produces. Saturates, so huge
+/// counts cannot wrap round to a small product and pass a limit.
+pub fn field_points(axes: &[&AxisRange]) -> usize {
+    axes.iter().fold(1, |n: usize, a| n.saturating_mul(axis_len(a)))
+}
+
 pub fn parse_maa(bytes: &[u8]) -> ParsedProject {
     let parsed = maa::parse_bytes(bytes);
     ParsedProject { project: parsed.project, warnings: parsed.warnings }
@@ -177,7 +183,9 @@ pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
             points: crate::sweep(&req.project, &req.options, req.start_mhz, req.stop_mhz, req.points)?,
         });
     };
-    let points = req.points.max(1);
+    let points = req.points;
+    crate::validate::sweep_points(points)?;
+    crate::validate::sweep_points(indices.len().max(1))?;
     let frequencies = indices
         .iter()
         .map(|&index| {
@@ -194,11 +202,11 @@ pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
 pub fn far_field(req: &FarFieldRequest) -> Result<FarFieldResponse, CalcError> {
     let solved = crate::solve(&req.project, &req.options)?;
     let (z, a) = (req.zenith, req.azimuth);
-    Ok(FarFieldResponse { samples: solved.far_field((z.start, z.step, z.count), (a.start, a.step, a.count)) })
+    Ok(FarFieldResponse { samples: solved.far_field((z.start, z.step, z.count), (a.start, a.step, a.count))? })
 }
 
 pub fn near_field(req: &NearFieldRequest) -> Result<NearFieldResponse, CalcError> {
-    Ok(NearFieldResponse { samples: crate::solve(&req.project, &req.options)?.near_field(&req.spec) })
+    Ok(NearFieldResponse { samples: crate::solve(&req.project, &req.options)?.near_field(&req.spec)? })
 }
 
 pub fn edit_elements(req: &ElementEditRequest) -> ElementEdit {

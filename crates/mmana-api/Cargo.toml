@@ -16,5 +16,6 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 utoipa = { version = "6.0.0", features = ["axum_extras"] }
 
 [dev-dependencies]
+http-body = "1"
 http-body-util = "0.1.5"
 tower = { version = "0.5.3", features = ["util"] }

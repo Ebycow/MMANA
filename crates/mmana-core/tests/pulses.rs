@@ -119,3 +119,41 @@ fn follows_the_calculation_frequency() {
     // automatic segmentation is finer at a shorter wavelength
     assert!(higher.pulse_count > design.pulse_count);
 }
+
+#[test]
+fn a_numbered_pulse_is_the_same_place_on_every_stacked_copy() {
+    // a 10-segment dipole stacked 2 side by side: its centre is pulse 5, and
+    // the original fed the second copy at 6 (the wire count added), still on
+    // the first copy, so the gain fell from about 5.4 to 2.7 dBi
+    let mut p = sample("DP20.MAA");
+    p.antenna.wires[0].segmentation = Segmentation::from_code(10);
+    p.antenna.stack.horizontal = 2;
+    p.antenna.stack.horizontal_spacing = 10.0;
+    let opts = CalcOptions::default();
+    let named = calculate(&p, &opts).unwrap();
+    p.antenna.sources[0].pulse = "5".into();
+    let numbered = calculate(&p, &opts).unwrap();
+    let pulses = |r: &mmana_core::CalcResult| r.sources.iter().map(|s| s.pulse).collect::<Vec<_>>();
+    assert_eq!(pulses(&numbered), vec![5, 14]);
+    assert_eq!(pulses(&numbered), pulses(&named));
+    assert_eq!(numbered.gain_dbi, named.gain_dbi);
+
+    // every pulse of the first copy, joints and loops included (the copies
+    // are far enough apart not to touch)
+    for name in ["3EL20.MAA", "2DELTA20.MAA"] {
+        let mut p = sample(name);
+        p.antenna.sources.truncate(1);
+        p.antenna.loads.clear();
+        p.antenna.stack.horizontal = 2;
+        p.antenna.stack.horizontal_spacing = 30.0;
+        let own = pulse_layout(&p, &opts).unwrap().pulse_count / 2;
+        for k in 1..=own {
+            p.antenna.sources[0].pulse = k.to_string();
+            let r = calculate(&p, &opts).unwrap();
+            let at = |s: usize| r.currents[r.sources[s].pulse - 1].position;
+            assert_eq!(r.sources[0].pulse, k, "{name} {k}");
+            assert!((at(1).y - at(0).y - 30.0).abs() < 1e-9, "{name} {k}");
+            assert!((at(1).x - at(0).x).abs() < 1e-9 && (at(1).z - at(0).z).abs() < 1e-9, "{name} {k}");
+        }
+    }
+}

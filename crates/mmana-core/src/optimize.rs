@@ -1239,7 +1239,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         let project = self.model.project();
         let opts = CalcOptions { frequency_mhz: Some(self.model.frequency), ..self.options.clone() };
         let solved = crate::calc::solve(&project, &opts)?;
-        let r = solved.result(&project, &opts);
+        let r = solved.result(&project, &opts)?;
         let goal = &self.setup.goals.current_pulse;
         let current = if self.trade[6] != 0.0 && !goal.is_empty() {
             let n = solved.pulse_no(goal);

@@ -26,6 +26,7 @@ pub mod model;
 pub mod optimize;
 mod par;
 mod pattern;
+mod validate;
 
 pub use calc::{
     CalcOptions, CalcResult, Complex, PatternCut, PatternResolution, Patterns, PulseCurrent, PulseLayout, PulsePoint,
@@ -35,3 +36,4 @@ pub use calc::{
 pub use engine::{AxisRange, FarFieldSample, NearFieldKind, NearFieldSample, NearFieldSpec};
 pub use error::CalcError;
 pub use model::*;
+pub use validate::{MAX_FIELD_POINTS, MAX_SWEEP_POINTS};

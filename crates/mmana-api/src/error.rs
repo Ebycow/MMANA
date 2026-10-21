@@ -23,6 +23,9 @@ pub struct Problem {
 pub enum ApiError {
     /// The request body is not valid JSON for the endpoint.
     BadRequest(String),
+    /// The request body is over the size limit (sent without a length, so
+    /// the limit is only met while reading it).
+    TooLarge(String),
     /// The input is well-formed but cannot be calculated.
     Calculation(CalcError),
     /// A request limit (points, pulses...) was exceeded.
@@ -36,6 +39,9 @@ impl ApiError {
     fn parts(&self) -> (StatusCode, &'static str, &'static str, String) {
         match self {
             ApiError::BadRequest(d) => (StatusCode::BAD_REQUEST, "invalid-request", "Invalid request", d.clone()),
+            ApiError::TooLarge(d) => {
+                (StatusCode::PAYLOAD_TOO_LARGE, "payload-too-large", "Request body too large", d.clone())
+            }
             ApiError::Calculation(e) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "calculation-failed",
@@ -82,6 +88,10 @@ impl From<OptimizeError> for ApiError {
 
 impl From<JsonRejection> for ApiError {
     fn from(r: JsonRejection) -> Self {
-        ApiError::BadRequest(r.body_text())
+        if r.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            ApiError::TooLarge(r.body_text())
+        } else {
+            ApiError::BadRequest(r.body_text())
+        }
     }
 }

@@ -1,9 +1,37 @@
-use axum::body::Body;
+use axum::body::{Body, Bytes, HttpBody};
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use mmana_api::{AppState, app};
 use serde_json::{Value, json};
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tower::ServiceExt;
+
+/// Refuses any single allocation over 256 MB, so a request limit that stops
+/// working (field_point_limits_do_not_wrap) ends this test binary at once
+/// instead of filling memory and swap.
+struct Capped;
+
+const CAP: usize = 256 << 20;
+
+unsafe impl GlobalAlloc for Capped {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout.size() > CAP { std::ptr::null_mut() } else { unsafe { System.alloc(layout) } }
+    }
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        if layout.size() > CAP { std::ptr::null_mut() } else { unsafe { System.alloc_zeroed(layout) } }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) }
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        if new_size > CAP { std::ptr::null_mut() } else { unsafe { System.realloc(ptr, layout, new_size) } }
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: Capped = Capped;
 
 fn sample(name: &str) -> Vec<u8> {
     std::fs::read(format!("{}/../../testdata/maa/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
@@ -143,6 +171,41 @@ async fn far_and_near_field() {
     assert_eq!(v["samples"].as_array().unwrap().len(), 3);
 }
 
+/// A body sent in chunks, without a length.
+struct Chunked(Option<Bytes>);
+
+impl HttpBody for Chunked {
+    type Data = Bytes;
+    type Error = std::io::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Bytes>, Self::Error>>> {
+        Poll::Ready(self.0.take().map(|b| Ok(http_body::Frame::data(b))))
+    }
+}
+
+#[tokio::test]
+async fn an_oversized_body_is_413_with_or_without_a_length() {
+    let body = vec![b' '; AppState::default().limits.max_body_bytes + 1];
+    let with_length = Request::post("/v1/calculations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CONTENT_LENGTH, body.len())
+        .body(Body::from(body.clone()))
+        .unwrap();
+    assert_eq!(send(with_length).await.0, StatusCode::PAYLOAD_TOO_LARGE);
+    // the limit is met while reading: this used to be 400 invalid-request
+    let chunked = Request::post("/v1/calculations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::new(Chunked(Some(Bytes::from(body)))))
+        .unwrap();
+    let (status, ctype, body) = send(chunked).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(ctype, "application/problem+json");
+    assert_eq!(serde_json::from_slice::<Value>(&body).unwrap()["type"], "payload-too-large");
+}
+
 #[tokio::test]
 async fn invalid_json_is_a_problem_response() {
     let (status, ctype, v) = post_json("/v1/calculations", json!({ "project": 1 })).await;
@@ -159,6 +222,61 @@ async fn calculation_errors_are_422() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(v["type"], "calculation-failed");
     assert_eq!(v["detail"], "the antenna has no sources");
+}
+
+#[tokio::test]
+async fn field_point_limits_do_not_wrap() {
+    let parsed = parse("DP20.MAA").await;
+    let axis = |count: i32| json!({ "start": 0.0, "step": 1.0, "count": count });
+    // 2^21 · 2^21 · 2^22 is 2^64, which wrapped to 0 and passed the limit
+    let spec =
+        json!({ "kind": "electric", "powerW": 100.0, "x": axis(1 << 21), "y": axis(1 << 21), "z": axis(1 << 22) });
+    let (status, _, v) = post_json("/v1/near-field", json!({ "project": parsed["project"], "spec": spec })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{v}");
+    assert_eq!(v["type"], "limit-exceeded");
+    let (status, _, v) = post_json(
+        "/v1/far-field",
+        json!({ "project": parsed["project"], "zenith": axis(i32::MAX), "azimuth": axis(i32::MAX) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{v}");
+    assert_eq!(v["type"], "limit-exceeded");
+}
+
+/// Every endpoint that calculates starts with the same checks, so an input
+/// is rejected with the same problem wherever it is sent.
+#[tokio::test]
+async fn an_invalid_input_is_rejected_alike_by_every_endpoint() {
+    let mut parsed = parse("DP20.MAA").await;
+    parsed["project"]["antenna"]["stack"]["horizontal"] = json!(0);
+    parsed["project"]["antenna"]["stack"]["vertical"] = json!(2);
+    let project = &parsed["project"];
+    let axis = json!({ "start": 0.0, "step": 0.0, "count": 1 });
+    let requests = [
+        ("/v1/calculations", json!({ "project": project })),
+        ("/v1/pulses", json!({ "project": project })),
+        ("/v1/sweeps", json!({ "project": project, "startMhz": 14.0, "stopMhz": 14.1, "points": 2 })),
+        ("/v1/sweeps", json!({ "project": project, "startMhz": 14.0, "stopMhz": 14.1, "points": 2, "indices": [1] })),
+        ("/v1/far-field", json!({ "project": project, "zenith": axis, "azimuth": axis })),
+        (
+            "/v1/near-field",
+            json!({ "project": project, "spec": { "kind": "electric", "powerW": 100.0, "x": axis, "y": axis, "z": axis } }),
+        ),
+    ];
+    for (path, body) in requests {
+        let (status, _, v) = post_json(path, body).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{path}: {v}");
+        assert_eq!(v["type"], "calculation-failed", "{path}");
+        assert_eq!(v["detail"], "stack horizontal count must be at least 1 (got 0)", "{path}");
+    }
+}
+
+#[test]
+fn server_limits_are_within_the_engine_limits() {
+    let limits = mmana_api::Limits::default();
+    assert!(limits.max_pulses <= mmana_core::engine::PMAX);
+    assert!(limits.max_sweep_points <= mmana_core::MAX_SWEEP_POINTS);
+    assert!(limits.max_field_points <= mmana_core::MAX_FIELD_POINTS);
 }
 
 #[tokio::test]

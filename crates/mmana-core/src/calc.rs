@@ -7,10 +7,13 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::engine::antdef::AntDef;
-use crate::engine::{EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec};
+use crate::engine::{
+    AxisRange, EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec, SourceSolution,
+};
 use crate::error::CalcError;
-use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation, Stack, StackDirection, Wire};
+use crate::model::{GroundKind, Point3, Project, Stack, StackDirection, Wire};
 use crate::pattern::{self, PatternState};
+use crate::validate::{self, Scope};
 
 /// Angular resolution of the stored pattern cuts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -148,7 +151,10 @@ pub struct CalcResult {
     pub patterns: Patterns,
     pub currents: Vec<PulseCurrent>,
     /// Current magnitude per pulse as MMANA plots it: signed by the dominant
-    /// direction; index = pulse − 1.
+    /// direction; index = pulse − 1. Like the original's list it ends at the
+    /// pulse set last, so it can be shorter than `pulseCount` (a loop's
+    /// closing pulse is left out), and a pulse it gives no value is
+    /// 1.2345e-37. `currents` has every pulse.
     pub current_display: Vec<f32>,
     pub segmented_wires: Vec<SegmentedWire>,
     pub warnings: Vec<String>,
@@ -189,91 +195,97 @@ fn engine_config(project: &Project, opts: &CalcOptions) -> EngineConfig {
     }
 }
 
-/// Rejects segmentation settings the tapering loops never finish with
-/// (`SC <= 1`, `DM2 <= 0`). MMANA's dialogs and the .maa reader keep them in
-/// range; project JSON and API requests do not.
-fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
-    let s = &ant.auto_segmentation;
-    if s.dm1 < 1 || s.dm2 < 1 {
-        return Err(CalcError::InvalidAutoSegmentation("DM1 and DM2 must be at least 1"));
-    }
-    if !(s.sc > 1.0 && s.sc <= 3.0) {
-        return Err(CalcError::InvalidAutoSegmentation("SC must be greater than 1 and at most 3"));
-    }
-    if s.ec < 1 {
-        return Err(CalcError::InvalidAutoSegmentation("EC must be at least 1"));
-    }
-    for (i, w) in ant.wires.iter().enumerate() {
-        // wires with R = 0 are not expanded
-        if w.radius == 0.0 {
-            continue;
-        }
-        // the SEG code packs each DM into 15 bits; a bare DM1 above 10000
-        // would be read back as a packed pair
-        let (values, max) = match w.segmentation {
-            // a count below 1 would be read as SEG 0 or a tapering code
-            // (-2147483248 is DM1 = 400 with DM2 = 0, which never finishes)
-            Segmentation::Fixed { count } if count < 1 => {
-                return Err(CalcError::InvalidSegmentCount { wire: i + 1, count });
-            }
-            Segmentation::TaperCustom { dm1, dm2: Some(dm2) } => ([dm1, dm2], 0x7fff),
-            Segmentation::TaperCustom { dm1, dm2: None } => ([dm1, dm1], 10000),
-            _ => continue,
-        };
-        if values.iter().any(|v| !(1..=max).contains(&v.unsigned_abs())) {
-            return Err(CalcError::InvalidWireSegmentation { wire: i + 1, max: max as i32 });
-        }
-    }
-    Ok(())
-}
-
-/// Rejects two wires with the same ends (in either direction), such as a
-/// copy left where it was made. Their impedance matrix is singular and the
-/// original carries on with NaN currents. Wires with R = 0 are not
-/// calculated, so they may lie anywhere.
-fn check_overlap(ant: &Antenna) -> Result<(), CalcError> {
-    let same = |a: &Point3, b: &Point3| a.x == b.x && a.y == b.y && a.z == b.z;
-    for (i, a) in ant.wires.iter().enumerate().filter(|(_, w)| w.radius != 0.0) {
-        for (j, b) in ant.wires.iter().enumerate().skip(i + 1).filter(|(_, w)| w.radius != 0.0) {
-            if (same(&a.start, &b.start) && same(&a.end, &b.end)) || (same(&a.start, &b.end) && same(&a.end, &b.start))
-            {
-                return Err(CalcError::OverlappingWires { first: i + 1, second: j + 1 });
-            }
-        }
-    }
-    Ok(())
+/// Checks the input and builds the definition the engine works on.
+fn prepare(project: &Project, opts: &CalcOptions, scope: Scope) -> Result<(AntDef, EngineConfig), CalcError> {
+    let cfq = validate::project(project, opts, scope)?;
+    Ok((AntDef::from_model(&project.antenna, cfq), engine_config(project, opts)))
 }
 
 /// Builds the geometry and solves for the currents at one frequency.
 pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError> {
-    let ant = &project.antenna;
-    let cfq = opts.frequency_mhz.unwrap_or(ant.frequency_mhz);
-    if !(cfq.is_finite() && cfq > 0.0) {
-        return Err(CalcError::InvalidFrequency(cfq));
-    }
-    if ant.wires.is_empty() {
-        return Err(CalcError::NoWires);
-    }
-    check_segmentation(ant)?;
-    check_overlap(ant)?;
-    let mut ap = AntDef::from_model(ant, cfq);
-    let cfg = engine_config(project, opts);
+    let (mut ap, cfg) = prepare(project, opts, Scope::Solve)?;
     let mut engine = Mininec::new(&mut ap, &cfg)?;
     engine.solve();
-    // other degenerate geometry (stacked copies 0 m apart...) ends the same way
-    if engine.solutions.iter().any(|s| !(s.current.0.is_finite() && s.current.1.is_finite())) {
+    // other degenerate geometry (stacked copies 0 m apart...) ends the same way;
+    // the feed figures are checked too, as a source with no current has none
+    let finite = |s: &SourceSolution| {
+        [s.current.0, s.current.1, s.impedance.0, s.impedance.1, s.swr].iter().all(|v| v.is_finite())
+    };
+    if !engine.solutions.iter().all(finite) {
         return Err(CalcError::NoFiniteSolution);
     }
     let mut warnings = Vec::new();
     if project.environment.ground != GroundKind::FreeSpace && ap.min_z + project.environment.height < 0.0 {
         warnings.push("some wires are below ground".to_owned());
     }
+    // a passive antenna always takes power; less than none means the method
+    // has broken down (each source alone may still take some), and every
+    // gain is then -999
+    if engine.pwr <= 0.0 {
+        warnings.push(format!(
+            "the input power is not positive ({:e} W): the model is outside what MININEC can calculate, \
+             such as wires meeting at a sharp angle or with very different radii",
+            engine.pwr
+        ));
+    }
+    if let Some((wire, segments)) = most_divided_conductor(&ap) {
+        warnings.push(format!(
+            "wire {wire} and the wires joined to it are divided into {segments} segments: beyond about \
+             {MAX_STEADY_SEGMENTS} on one conductor the results drift as segments are added (the reactance \
+             by several ohms), so compare with fewer segments"
+        ));
+    }
     Ok(Solved { ap, engine, warnings })
+}
+
+/// Segments one conductor can be divided into before MININEC's results start
+/// to drift. Beyond it the error grows with each segment added, whatever
+/// their length in wavelengths or the wire radius (the original gives the
+/// same values): a half-wave dipole in 320 segments is about 6 Ω off in X,
+/// in 640 about 25 Ω. Separate conductors do not add up.
+const MAX_STEADY_SEGMENTS: i64 = 250;
+
+/// The conductor (segment wires joined end to end, as `connect` joins them)
+/// with the most segments, when it has more than [`MAX_STEADY_SEGMENTS`]:
+/// the 1-based number of a wire of it as defined (in a stacked copy, the
+/// wire it copies) and its segment count.
+fn most_divided_conductor(ap: &AntDef) -> Option<(usize, i64)> {
+    let wz = &ap.wz;
+    let mut root: Vec<usize> = (0..wz.len()).collect();
+    fn find(root: &mut [usize], mut i: usize) -> usize {
+        while root[i] != i {
+            root[i] = root[root[i]];
+            i = root[i];
+        }
+        i
+    }
+    // ends compare with ==, so -0.0 is 0.0 (adding 0.0 makes it so)
+    let key = |x: f64, y: f64, z: f64| [(x + 0.0).to_bits(), (y + 0.0).to_bits(), (z + 0.0).to_bits()];
+    let mut first_at = std::collections::HashMap::new();
+    for (i, w) in wz.iter().enumerate() {
+        for end in [key(w.x1, w.y1, w.z1), key(w.x2, w.y2, w.z2)] {
+            let j = *first_at.entry(end).or_insert(i);
+            let (a, b) = (find(&mut root, i), find(&mut root, j));
+            root[a] = b;
+        }
+    }
+    let mut segments = vec![0i64; wz.len()];
+    for (i, w) in wz.iter().enumerate() {
+        let r = find(&mut root, i);
+        segments[r] += i64::from(w.seg.max(0));
+    }
+    let (r, &most) = segments.iter().enumerate().max_by_key(|(_, s)| **s)?;
+    (most > MAX_STEADY_SEGMENTS).then(|| {
+        let first = (0..wz.len()).find(|&i| find(&mut root, i) == r).unwrap_or(r);
+        (wz[first].wno % ap.base_wires.max(1) + 1, most)
+    })
 }
 
 impl Solved {
     /// The standard MMANA result: impedance, gain, F/B, patterns, currents.
-    pub fn result(&self, project: &Project, opts: &CalcOptions) -> CalcResult {
+    /// Fails only when a value of it cannot be represented
+    /// ([`CalcError::NotRepresentable`]).
+    pub fn result(&self, project: &Project, opts: &CalcOptions) -> Result<CalcResult, CalcError> {
         let e = &self.engine;
         let ptn_f = match opts.pattern_resolution {
             PatternResolution::Fine => 1,
@@ -287,7 +299,7 @@ impl Solved {
             pattern::rescan_horizontal(e, &mut p, el, fbr);
         }
         let first = e.solutions[0];
-        CalcResult {
+        let r = CalcResult {
             frequency_mhz: e.f,
             wavelength_m: e.wavelength,
             pulse_count: e.n,
@@ -327,7 +339,9 @@ impl Solved {
                 })
                 .collect(),
             warnings: self.warnings.clone(),
-        }
+        };
+        validate::result(&r)?;
+        Ok(r)
     }
 
     fn currents(&self) -> Vec<PulseCurrent> {
@@ -349,7 +363,13 @@ impl Solved {
 
     /// Arbitrary far-field scan (MMANA's "far field file"): `nz` zenith
     /// angles from `zenith_start` for each of `na` azimuths.
-    pub fn far_field(&self, zenith: (f64, f64, i32), azimuth: (f64, f64, i32)) -> Vec<FarFieldSample> {
+    pub fn far_field(
+        &self,
+        zenith: (f64, f64, i32),
+        azimuth: (f64, f64, i32),
+    ) -> Result<Vec<FarFieldSample>, CalcError> {
+        let axis = |(start, step, count)| AxisRange { start, step, count };
+        validate::far_field(&axis(zenith), &axis(azimuth))?;
         let (za, mut zc, mut nz) = zenith;
         let (aa, mut ac, mut na) = azimuth;
         if zc == 0.0 {
@@ -362,11 +382,19 @@ impl Solved {
         }
         let mut out = Vec::new();
         self.engine.far_field(za, zc, nz, aa, ac, na, |s| out.push(s));
-        out
+        validate::far_samples(&out)?;
+        Ok(out)
     }
 
-    pub fn near_field(&self, spec: &NearFieldSpec) -> Vec<NearFieldSample> {
-        self.engine.near_field(spec)
+    pub fn near_field(&self, spec: &NearFieldSpec) -> Result<Vec<NearFieldSample>, CalcError> {
+        validate::near_field(spec)?;
+        // the field is scaled by √(power / input power)
+        if self.engine.pwr <= 0.0 {
+            return Err(CalcError::NonPositivePower { power: self.engine.pwr });
+        }
+        let samples = self.engine.near_field(spec);
+        validate::near_samples(&samples)?;
+        Ok(samples)
     }
 
     /// `Str2PlusNo` on the calculated (stacked) model: the 1-based pulse a
@@ -401,7 +429,7 @@ fn patterns(p: &PatternState) -> Patterns {
 
 /// Convenience: solve and produce the standard result.
 pub fn calculate(project: &Project, opts: &CalcOptions) -> Result<CalcResult, CalcError> {
-    Ok(solve(project, opts)?.result(project, opts))
+    solve(project, opts)?.result(project, opts)
 }
 
 /// A pulse a source or load can be placed on, with the name that addresses it.
@@ -444,18 +472,10 @@ pub struct PulseLayout {
 /// Segments the antenna as the calculation would, without solving it.
 pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout, CalcError> {
     let ant = &project.antenna;
-    let cfq = opts.frequency_mhz.unwrap_or(ant.frequency_mhz);
-    if !(cfq.is_finite() && cfq > 0.0) {
-        return Err(CalcError::InvalidFrequency(cfq));
-    }
-    if ant.wires.is_empty() {
-        return Err(CalcError::NoWires);
-    }
-    check_segmentation(ant)?;
     // segmented stacked, as calculated: a copy that reaches the ground is
     // divided differently from the wire as defined
-    let mut ap = AntDef::from_model(ant, cfq);
-    let e = Mininec::layout(&mut ap, &engine_config(project, opts))?;
+    let (mut ap, cfg) = prepare(project, opts, Scope::Layout)?;
+    let e = Mininec::layout(&mut ap, &cfg)?;
     // names address the first copy, whose pulses come first
     let own = ap.wires[ant.wires.len()..].iter().find(|w| w.pmax > 0).map_or(e.n, |w| (w.pno - 1) as usize);
     let (dy, dz) = first_copy_offset(&ant.stack);
@@ -491,12 +511,14 @@ pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout
             WirePulses { wire: i + 1, pulses }
         })
         .collect();
-    Ok(PulseLayout {
+    let layout = PulseLayout {
         pulse_count: e.n,
         wires,
         sources: ap.sources.iter().take(ant.sources.len()).map(|c| position(c.plus_no)).collect(),
         loads: ap.loads.iter().take(ant.loads.len()).map(|l| position(l.plus_no)).collect(),
-    })
+    };
+    validate::layout(&layout)?;
+    Ok(layout)
 }
 
 /// How far `AntDef::stack` moves the first copy: along Y, along Z.
@@ -551,7 +573,7 @@ pub fn sweep(
     stop: f64,
     points: usize,
 ) -> Result<Vec<SweepPoint>, CalcError> {
-    let points = points.max(1);
+    validate::sweep_points(points)?;
     let frequencies: Vec<f64> = (0..points).map(|i| sweep_frequency(start, stop, points, i)).collect();
     sweep_at(project, opts, &frequencies)
 }

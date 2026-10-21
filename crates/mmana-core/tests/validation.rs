@@ -1,6 +1,6 @@
 //! Inputs MMANA's dialogs never produce but project JSON and API requests can.
 
-use mmana_core::{CalcError, CalcOptions, Point3, Project, Segmentation, calculate, maa};
+use mmana_core::{CalcError, CalcOptions, Load, LoadKind, Point3, Project, Segmentation, calculate, maa, pulse_layout};
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -24,8 +24,13 @@ type Edit = fn(&mut Project);
 
 #[test]
 fn rejects_auto_segmentation_that_never_finishes() {
-    let cases: [(&str, Edit); 7] = [
+    let cases: [(&str, Edit); 9] = [
         ("sc = 1", |p| p.antenna.auto_segmentation.sc = 1.0),
+        ("sc just above 1", |p| {
+            p.antenna.auto_segmentation.sc = 1.000000000000001;
+            p.antenna.wires[0].segmentation = Segmentation::from_code(-1);
+        }),
+        ("sc < 1.01", |p| p.antenna.auto_segmentation.sc = 1.009),
         ("sc < 1", |p| p.antenna.auto_segmentation.sc = 0.5),
         ("sc > 3", |p| p.antenna.auto_segmentation.sc = 3.5),
         ("sc NaN", |p| p.antenna.auto_segmentation.sc = f64::NAN),
@@ -74,6 +79,14 @@ fn accepts_settings_in_range() {
     let mut p = dp20();
     p.antenna.auto_segmentation.sc = 3.0;
     p.antenna.wires[0].segmentation = Segmentation::TaperCustom { dm1: 800, dm2: Some(20) };
+    calc(p.clone()).unwrap();
+    p.antenna.auto_segmentation.sc = 1.01;
+    calc(p.clone()).unwrap();
+    // the smallest DM1, DM2 and EC
+    p.antenna.auto_segmentation.dm1 = 1;
+    p.antenna.auto_segmentation.dm2 = 1;
+    p.antenna.auto_segmentation.ec = 1;
+    p.antenna.wires[0].segmentation = Segmentation::Taper;
     calc(p).unwrap();
 }
 
@@ -115,6 +128,19 @@ fn rejects_wires_on_top_of_each_other() {
 }
 
 #[test]
+fn rejects_sources_that_all_have_no_voltage() {
+    let mut p = dp20();
+    p.antenna.sources[0].voltage = 0.0;
+    assert_eq!(calc(p.clone()), Err(CalcError::NoExcitation));
+    // one fed source is enough: the unfed one still carries the induced current
+    let mut fed = p.antenna.sources[0].clone();
+    fed.pulse = "w1b".into();
+    fed.voltage = 1.0;
+    p.antenna.sources.push(fed);
+    calc(p).unwrap();
+}
+
+#[test]
 fn rejects_stacked_copies_on_top_of_each_other() {
     let mut p = dp20();
     p.antenna.stack.horizontal = 2;
@@ -139,4 +165,33 @@ fn accepts_a_disabled_copy_of_a_wire() {
     off.radius = 0.0;
     p.antenna.wires.push(off);
     assert_eq!(calc(p), Ok(()));
+}
+
+#[test]
+fn rejects_loads_that_do_not_exist() {
+    // w99c resolves to no pulse; the original calculates as if it were absent
+    for (name, max) in [("w99c", 17), ("0", 17), ("18", 17)] {
+        let mut p = dp20();
+        p.antenna.loads_enabled = true;
+        p.antenna.loads.push(Load { pulse: name.into(), kind: LoadKind::Impedance { r: 100.0, x: 0.0 } });
+        assert_eq!(calc(p), Err(CalcError::PulseOutOfRange { what: "load", name: name.into(), max }), "{name}");
+    }
+}
+
+#[test]
+fn an_automatic_count_from_65536_up_stays_over_the_limit() {
+    // a wire just over 1 λ in DM2 parts; the original's 0xfffe mask made
+    // 65536 parts 4 (3 pulses), and the calculation went ahead
+    let mut p = dp20();
+    let wavelength = 299.8 / p.antenna.frequency_mhz;
+    p.antenna.wires[0].start = Point3::new(0.0, 0.0, 0.0);
+    p.antenna.wires[0].end = Point3::new(0.0, wavelength * 1.000001, 0.0);
+    p.antenna.wires[0].segmentation = Segmentation::from_code(0);
+    for dm2 in [65534, 65536, 65537, 1 << 20] {
+        p.antenna.auto_segmentation.dm2 = dm2;
+        assert_eq!(calc(p.clone()), Err(CalcError::TooManyPulses { max: 4096 }), "{dm2}");
+    }
+    // still rounded down to an even count
+    p.antenna.auto_segmentation.dm2 = 3001;
+    assert_eq!(pulse_layout(&p, &CalcOptions::default()).unwrap().pulse_count, 2999);
 }
