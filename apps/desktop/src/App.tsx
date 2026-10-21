@@ -166,9 +166,13 @@ export function App() {
       import('@tauri-apps/api/window').then(async ({ getCurrentWindow }) => {
         unlisten = await getCurrentWindow().onCloseRequested(async (event) => {
           if (!useApp.getState().dirty) return;
-          const { ask } = await import('@tauri-apps/plugin-dialog');
-          const ok = await ask('保存されていない変更があります。終了しますか？', { title: 'MMANA', kind: 'warning' });
-          if (!ok) event.preventDefault();
+          const { message } = await import('@tauri-apps/plugin-dialog');
+          const buttons = { yes: '保存して終了', no: '保存せずに終了', cancel: 'キャンセル' };
+          const choice = await message('保存されていない変更があります。保存してから終了しますか？', { title: 'MMANA', kind: 'warning', buttons });
+          if (choice === buttons.no) return;
+          // a cancelled or failed save keeps the window open
+          if (choice === buttons.yes && (await useApp.getState().save(false).catch((e) => (reportError(e), false)))) return;
+          event.preventDefault();
         });
       });
       return () => unlisten?.();
