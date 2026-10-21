@@ -12,9 +12,9 @@
 //! it belongs to (input_ranges.rs, properties.rs...).
 
 use mmana_core::{
-    AutoSegmentation, AxisRange, CalcError, CalcOptions, CalcResult, CombinedSection, CombinedWire, GroundKind, Load,
-    LoadKind, NearFieldKind, NearFieldSpec, PatternResolution, Point3, Project, Segmentation, Source, Stack,
-    StackDirection, Wire, WireMaterial, calculate, maa, pulse_layout, solve,
+    AutoSegmentation, AxisRange, CalcOptions, CalcResult, CombinedSection, CombinedWire, GroundKind, Load, LoadKind,
+    NearFieldKind, NearFieldSpec, PatternResolution, Point3, Project, Segmentation, Source, Stack, StackDirection,
+    Wire, WireMaterial, calculate, maa, pulse_layout, solve,
 };
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
@@ -113,12 +113,17 @@ fn pulse_name() -> impl Strategy<Value = String> {
 }
 
 fn source() -> impl Strategy<Value = Source> {
-    (pulse_name(), -180.0..180.0f64, prop::sample::select(vec![0.0, 1.0, 0.5, -1.0, 1e-3]))
-        .prop_map(|(pulse, phase_deg, voltage)| Source { pulse, phase_deg, voltage })
+    // with finite extremes, whose currents may not be representable
+    let voltage = prop::sample::select(vec![0.0, 1.0, 0.5, -1.0, 1e-3, 1e-300, 1e30, 1e100, 1e300]);
+    (pulse_name(), -180.0..180.0f64, voltage).prop_map(|(pulse, phase_deg, voltage)| Source {
+        pulse,
+        phase_deg,
+        voltage,
+    })
 }
 
 fn load() -> impl Strategy<Value = Load> {
-    let value = prop::sample::select(vec![0.0, 0.1, 1.0, 100.0, -10.0]);
+    let value = prop::sample::select(vec![0.0, 0.1, 1.0, 100.0, -10.0, 1e-300, 1e300]);
     let kind = prop_oneof![
         (value.clone(), value.clone(), value.clone()).prop_map(|(l, c, q)| LoadKind::Lc {
             inductance_uh: l,
@@ -151,22 +156,26 @@ fn stack() -> impl Strategy<Value = Stack> {
 
 prop_compose! {
     fn model()(
-        frequency in prop::sample::select(vec![1.8, 7.05, 14.05, 28.5, 50.1, 145.0]),
+        frequency in prop::sample::select(vec![0.01, 1.8, 7.05, 14.05, 28.5, 50.1, 145.0, 3000.0]),
         wires in prop::collection::vec(wire(), 1..6),
         sources in prop::collection::vec(source(), 0..4),
         loads in prop::collection::vec(load(), 0..3),
         loads_enabled in any::<bool>(),
         stack in prop_oneof![3 => Just(None), 1 => stack().prop_map(Some)],
         combined in any::<bool>(),
-        ground in 0..3,
-        height in prop::sample::select(vec![0.5, 5.0, 20.0, -1.0]),
-        material in 0..7,
+        environment in (0..3, prop::sample::select(vec![0.5, 5.0, 20.0, -1.0, 1e300]), 0..7),
+        // everything far smaller or larger, up to coordinates of 1e150
+        scale in prop::sample::select(vec![1.0, 1.0, 1.0, 1e-3, 1e4, 1e150]),
         auto in (prop::sample::select(vec![100, 400, 800]), prop::sample::select(vec![10, 40, 80]), 1.01..3.0f64, 1..4i32),
     ) -> Project {
+        let (ground, height, material) = environment;
         let mut p = Project::default();
         let ant = &mut p.antenna;
         ant.frequency_mhz = frequency;
         ant.wires = wires;
+        for e in ant.wires.iter_mut().flat_map(|w| [&mut w.start, &mut w.end]) {
+            (e.x, e.y, e.z) = (e.x * scale, e.y * scale, e.z * scale);
+        }
         ant.sources = sources;
         ant.loads = loads;
         ant.loads_enabled = loads_enabled;
@@ -186,6 +195,104 @@ prop_compose! {
         p.environment.wire_material = WireMaterial::from_code(material);
         p
     }
+}
+
+/// One straight element of a model built to calculate: centred at `x`,
+/// along Y tilted by `tilt` towards Z.
+#[derive(Debug, Clone)]
+struct Element {
+    half_length: f64,
+    tilt_deg: f64,
+    /// Radius in wavelengths.
+    radius: f64,
+    segmentation: Segmentation,
+}
+
+fn element() -> impl Strategy<Value = Element> {
+    let segmentation = prop_oneof![
+        3 => (5..42i32).prop_map(|count| Segmentation::Fixed { count }),
+        1 => Just(Segmentation::Auto),
+        1 => Just(Segmentation::Taper),
+    ];
+    (0.1..0.6f64, -30.0..30.0f64, 1e-5..5e-4f64, segmentation).prop_map(
+        |(half_length, tilt_deg, radius, segmentation)| Element { half_length, tilt_deg, radius, segmentation },
+    )
+}
+
+prop_compose! {
+    /// A model every calculation must accept: 1 to 4 straight elements at
+    /// least 0.1 λ apart, each a few dozen segments at most, sources at the
+    /// centres of different elements, loads with R ≥ 0, copies 0.6 λ apart
+    /// or more, and everything above the ground.
+    fn valid_model()(
+        frequency in prop::sample::select(vec![3.5, 7.05, 14.05, 28.5, 50.1, 145.0]),
+        elements in prop::collection::vec(element(), 1..5),
+        spacing in 0.1..0.4f64,
+        fed in prop::collection::vec((0..4usize, 0.1..10.0f64, -180.0..180.0f64), 1..3),
+        load in prop::option::of((0..4usize, 0.0..1000.0f64, -1000.0..1000.0f64)),
+        stack in prop::option::of((1..3i32, 1..3i32, 0.6..1.5f64)),
+        environment in (0..3, 0.05..1.0f64, prop::sample::select(vec![0, 1, 3])),
+    ) -> Project {
+        let wavelength = 299.8 / frequency;
+        let mut p = Project::default();
+        let ant = &mut p.antenna;
+        ant.frequency_mhz = frequency;
+        let mut top = 0.0f64;
+        for (i, e) in elements.iter().enumerate() {
+            let (dy, dz) = (e.tilt_deg.to_radians().cos(), e.tilt_deg.to_radians().sin());
+            let (h, x) = (e.half_length * wavelength, i as f64 * spacing * wavelength);
+            top = top.max((h * dz).abs());
+            ant.wires.push(Wire {
+                start: Point3::new(x, -h * dy, -h * dz),
+                end: Point3::new(x, h * dy, h * dz),
+                radius: e.radius * wavelength,
+                segmentation: e.segmentation,
+                note: String::new(),
+            });
+        }
+        let n = elements.len();
+        let mut used = Vec::new();
+        for (k, voltage, phase_deg) in fed {
+            if !used.contains(&(k % n)) {
+                used.push(k % n);
+                ant.sources.push(Source { pulse: format!("w{}c", k % n + 1), phase_deg, voltage });
+            }
+        }
+        if let Some((k, r, x)) = load {
+            ant.loads_enabled = true;
+            ant.loads = vec![Load { pulse: format!("w{}b1", k % n + 1), kind: LoadKind::Impedance { r, x } }];
+        }
+        let mut height_needed = top;
+        if let Some((horizontal, vertical, apart)) = stack {
+            ant.stack = Stack {
+                horizontal,
+                vertical,
+                horizontal_spacing: apart * wavelength,
+                vertical_spacing: apart * wavelength,
+                direction: StackDirection::Up,
+            };
+        }
+        let (ground, clearance, material) = environment;
+        height_needed += clearance * wavelength;
+        p.environment.ground = GroundKind::from_code(ground);
+        p.environment.height = height_needed;
+        p.environment.wire_material = WireMaterial::from_code(material);
+        p
+    }
+}
+
+/// A scan axis of up to 3 samples, with finite extremes.
+fn axis() -> impl Strategy<Value = AxisRange> {
+    (
+        prop::sample::select(vec![0.0, 45.0, -90.0, 1.0, 1e300, -1e300, 1e308]),
+        prop::sample::select(vec![0.0, 1.0, 15.0, -0.1, 1e300, 1e308, -1e308]),
+        -1..4i32,
+    )
+        .prop_map(|(start, step, count)| AxisRange { start, step, count })
+}
+
+fn power() -> impl Strategy<Value = f64> {
+    prop::sample::select(vec![100.0, 1e-3, 1e-300, 1e300, 1e308, 0.0, -1.0])
 }
 
 fn options() -> impl Strategy<Value = CalcOptions> {
@@ -369,21 +476,33 @@ proptest! {
     }
 
     #[test]
-    fn field_scans_of_any_model_are_finite(p in model()) {
+    fn field_scans_of_any_model_are_finite(
+        p in model(),
+        far in (axis(), axis()),
+        near in (axis(), axis(), axis(), power()),
+    ) {
         let q = p.clone();
         let scans = within(&p, move || {
-            let solved = solve(&q, &CalcOptions { max_pulses: 600, ..CalcOptions::default() })?;
-            let far = solved.far_field((0.0, 45.0, 5), (0.0, 90.0, 4))?;
-            let axis = |start| AxisRange { start, step: 1.5, count: 2 };
-            let spec = NearFieldSpec { kind: NearFieldKind::Electric, power_w: 100.0, x: axis(-1.0), y: axis(0.3), z: axis(2.0) };
-            let near = solved.near_field(&spec)?;
-            let magnetic = solved.near_field(&NearFieldSpec { kind: NearFieldKind::Magnetic, ..spec })?;
-            Ok::<_, CalcError>((far, near, magnetic))
+            let solved = solve(&q, &CalcOptions { max_pulses: 600, ..CalcOptions::default() }).ok()?;
+            let (x, y, z, power_w) = near;
+            let spec = NearFieldSpec { kind: NearFieldKind::Electric, power_w, x, y, z };
+            Some((
+                solved.far_field((far.0.start, far.0.step, far.0.count), (far.1.start, far.1.step, far.1.count)),
+                solved.near_field(&spec),
+                solved.near_field(&NearFieldSpec { kind: NearFieldKind::Magnetic, ..spec }),
+            ))
         });
-        if let Ok((far, near, magnetic)) = scans {
-            no_nulls(&far, "the far field")?;
-            no_nulls(&near, "the electric near field")?;
-            no_nulls(&magnetic, "the magnetic near field")?;
+        // each scan that succeeds is checked, whatever the others did
+        if let Some((far, electric, magnetic)) = scans {
+            if let Ok(far) = far {
+                no_nulls(&far, "the far field")?;
+            }
+            if let Ok(electric) = electric {
+                no_nulls(&electric, "the electric near field")?;
+            }
+            if let Ok(magnetic) = magnetic {
+                no_nulls(&magnetic, "the magnetic near field")?;
+            }
         }
     }
 
@@ -420,5 +539,36 @@ proptest! {
         // what was read writes back stably
         let once = maa::parse(&maa::write(&p)).project;
         prop_assert_eq!(&maa::parse(&maa::write(&once)).project, &once);
+    }
+
+    #[test]
+    fn a_model_built_to_calculate_calculates(p in valid_model()) {
+        // about 1000 pulses at most, more at the top of the sweep
+        let o = CalcOptions::default();
+        let (q, oo) = (p.clone(), o.clone());
+        let (result, layout, scans, sweep) = within(&p, move || {
+            let solved = solve(&q, &oo);
+            let scans = solved.as_ref().ok().map(|s| {
+                let axis = |start, step, count| AxisRange { start, step, count };
+                let spec = NearFieldSpec { kind: NearFieldKind::Electric, power_w: 100.0, x: axis(-1.0, 2.0, 2), y: axis(0.5, 0.0, 1), z: axis(3.0, 1.0, 2) };
+                (s.far_field((0.0, 30.0, 7), (0.0, 60.0, 6)), s.near_field(&spec), s.near_field(&NearFieldSpec { kind: NearFieldKind::Magnetic, ..spec }))
+            });
+            let f = q.antenna.frequency_mhz;
+            (calculate(&q, &oo), pulse_layout(&q, &oo), scans, mmana_core::sweep(&q, &oo, 0.97 * f, 1.03 * f, 3))
+        });
+        let r = result.map_err(|e| TestCaseError::fail(format!("rejected: {e}")))?;
+        holds_together(&p, &o, &r)?;
+        prop_assert!(r.total_power_w > 0.0, "input power {}", r.total_power_w);
+        prop_assert!(r.warnings.is_empty(), "{:?}", r.warnings);
+        prop_assert!(r.gain_dbi > -999.0);
+        let l = layout.map_err(|e| TestCaseError::fail(format!("layout rejected: {e}")))?;
+        prop_assert!(l.sources.iter().all(Option::is_some));
+        let (far, electric, magnetic) = scans.unwrap();
+        no_nulls(far.map_err(|e| TestCaseError::fail(e.to_string()))?, "the far field")?;
+        no_nulls(electric.map_err(|e| TestCaseError::fail(e.to_string()))?, "the electric near field")?;
+        no_nulls(magnetic.map_err(|e| TestCaseError::fail(e.to_string()))?, "the magnetic near field")?;
+        let points = sweep.map_err(|e| TestCaseError::fail(format!("sweep rejected: {e}")))?;
+        prop_assert_eq!(points.len(), 3);
+        no_nulls(&points, "the sweep")?;
     }
 }
