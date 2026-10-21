@@ -1,7 +1,7 @@
 import { Alert, Badge, Button, Center, Group, Kbd, Paper, SimpleGrid, Stack, Table, Tabs, Text, ThemeIcon, Tooltip } from '@mantine/core';
 import { IconAlertTriangle, IconChartDots3, IconCircuitGround, IconPlayerPlay, IconRadar2, IconWaveSine } from '@tabler/icons-react';
 import type { CalcResult } from '../api/types';
-import { PolarLegend, PolarPlot } from '../charts/PolarPlot';
+import { PolarLegend, PolarPlot, PolarScaleSwitch } from '../charts/PolarPlot';
 import { useApp } from '../state/store';
 import { Panel } from './Panel';
 import { SweepPanel } from './SweepPanel';
@@ -52,9 +52,12 @@ function Patterns({ r }: { r: CalcResult }) {
     <Stack gap={4} p="sm" pt={4} style={{ height: '100%', boxSizing: 'border-box' }}>
       <Group justify="space-between">
         <PolarLegend />
-        <Text size="xs" c="dimmed">
-          最大利得 {r.gainDbi.toFixed(2)} dBi を 0 dB として表示
-        </Text>
+        <Group gap="xs">
+          <Text size="xs" c="dimmed">
+            最大利得 {r.gainDbi.toFixed(2)} dBi を 0 dB として表示
+          </Text>
+          <PolarScaleSwitch />
+        </Group>
       </Group>
       <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
         <PolarPlot

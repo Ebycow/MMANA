@@ -47,6 +47,11 @@ describe('polar geometry (MMANA orientation)', () => {
     expect(radiusFor(10, 10)).toBe(1);
     expect(radiusFor(-30, 10)).toBeCloseTo(0.1);
   });
+  it('spaces dB evenly on the linear-dB scale', () => {
+    expect(radiusFor(10, 10, 'linearDb')).toBe(1);
+    expect(radiusFor(-10, 10, 'linearDb')).toBeCloseTo(0.5);
+    expect(radiusFor(-999, 10, 'linearDb')).toBe(0);
+  });
   it('puts horizontal azimuth 0 at the top, clockwise', () => {
     expect(sampleAngle('horizontal', 0, 1)).toBeCloseTo(Math.PI / 2);
     expect(sampleAngle('horizontal', 90, 1)).toBeCloseTo(0); // 90° → right

@@ -7,7 +7,7 @@ import { notifications } from '@mantine/notifications';
 import { useEffect, useMemo, useState } from 'react';
 import type { Trial } from '../api/types';
 import { EngineError, transport } from '../api/transport';
-import { PolarPlot } from '../charts/PolarPlot';
+import { PolarPlot, PolarScaleSwitch } from '../charts/PolarPlot';
 import { strDbl } from '../domain/elements';
 import { TRIAL_SORTS, currentTrial, sortTrials, tradeOffText, trialCut, type TrialSort } from '../domain/optimize';
 import { useApp } from '../state/store';
@@ -142,9 +142,12 @@ function OptimizerResultsBody() {
                 <PolarPlot kind="horizontal" cut={trialCut(selected.horizontalPattern)} maxDb={peak} title="水平面" subtitle="2° 分解能" totalOnly />
                 <PolarPlot kind="vertical" cut={trialCut(selected.verticalPattern)} maxDb={peak} title="垂直面" subtitle="X-Z 面" totalOnly />
               </div>
-              <Text size="xs" c="dimmed">
-                最大 {peak.toFixed(2)} dBi を 0 dB として表示
-              </Text>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">
+                  最大 {peak.toFixed(2)} dBi を 0 dB として表示
+                </Text>
+                <PolarScaleSwitch />
+              </Group>
               <div style={{ maxHeight: 160, overflow: 'auto' }}>
                 <table className="grid-table" aria-label="この結果の変数">
                   <tbody>

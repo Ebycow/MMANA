@@ -2,12 +2,21 @@
 //
 // Radius follows MMANA (CDrawPtnH/V::GetDBR): r = R · 10^(dB/40), i.e. the
 // square root of the field ratio, with dB relative to the overall maximum.
+// The linear-dB scale instead spaces dB evenly from the maximum at the rim to
+// LINEAR_DB_RANGE below it at the centre.
 //   horizontal: azimuth 0° at the top, increasing clockwise (+X forward)
 //   vertical:   front horizon right, zenith top, back horizon left
 
 export type CutKind = 'horizontal' | 'vertical';
 
-export const radiusFor = (db: number, maxDb: number) => Math.pow(10, Math.min(0, db - maxDb) / 40);
+export type PolarScale = 'mmana' | 'linearDb';
+
+export const LINEAR_DB_RANGE = 40;
+
+export function radiusFor(db: number, maxDb: number, scale: PolarScale = 'mmana'): number {
+  const rel = Math.min(0, db - maxDb);
+  return scale === 'linearDb' ? Math.max(0, 1 + rel / LINEAR_DB_RANGE) : Math.pow(10, rel / 40);
+}
 
 /** Plot angle (radians, screen: 0 = right, counter-clockwise) of sample i. */
 export function sampleAngle(kind: CutKind, i: number, step: number): number {
@@ -36,4 +45,7 @@ export function sampleLabel(kind: CutKind, i: number, step: number): string {
   return deg <= 90 ? `仰角 ${deg}°（後方）` : `仰角 ${180 - deg}°（前方）`;
 }
 
-export const RINGS_DB = [0, -3, -6, -10, -20, -30];
+export const RINGS_DB: Record<PolarScale, number[]> = {
+  mmana: [0, -3, -6, -10, -20, -30],
+  linearDb: [0, -10, -20, -30],
+};

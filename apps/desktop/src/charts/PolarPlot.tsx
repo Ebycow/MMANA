@@ -1,7 +1,9 @@
+import { SegmentedControl, Tooltip } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
 import { useState } from 'react';
 import type { PatternCut } from '../api/types';
-import { RINGS_DB, radiusFor, sampleAngle, sampleAt, sampleLabel, type CutKind } from './polar';
+import { useDisplay } from '../state/display';
+import { LINEAR_DB_RANGE, RINGS_DB, radiusFor, sampleAngle, sampleAt, sampleLabel, type CutKind, type PolarScale } from './polar';
 
 export const SERIES = [
   { key: 'total', label: '合成', color: 'var(--series-1)', dash: undefined, width: 2 },
@@ -23,6 +25,7 @@ interface PolarPlotProps {
 export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: PolarPlotProps) {
   const { ref, width, height } = useElementSize();
   const [hover, setHover] = useState<number | null>(null);
+  const scale = useDisplay((s) => s.polarScale);
   const pad = 24;
   const half = kind === 'vertical';
   // vertical cut is a half circle: width = 2R, height = R
@@ -33,7 +36,7 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
 
   const pt = (i: number, db: number) => {
     const a = sampleAngle(kind, i, cut.stepDeg);
-    const r = R * radiusFor(db, maxDb);
+    const r = R * radiusFor(db, maxDb, scale);
     return [cx + r * Math.cos(a), cy - r * Math.sin(a)] as const;
   };
   const path = (values: number[]) => {
@@ -67,8 +70,8 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
             onPointerLeave={() => setHover(null)}
           >
             {/* recessive grid: dB rings and angle spokes */}
-            {RINGS_DB.map((db) => {
-              const r = R * radiusFor(maxDb + db, maxDb);
+            {RINGS_DB[scale].map((db) => {
+              const r = R * radiusFor(maxDb + db, maxDb, scale);
               return (
                 <g key={db}>
                   {half ? (
@@ -155,5 +158,24 @@ export function PolarLegend() {
         </span>
       ))}
     </div>
+  );
+}
+
+export function PolarScaleSwitch() {
+  const scale = useDisplay((s) => s.polarScale);
+  const setScale = useDisplay((s) => s.setPolarScale);
+  return (
+    <Tooltip label={`MMANA: 半径 ∝ 10^(dB/40)　dB リニア: 中心 −${LINEAR_DB_RANGE} dB まで等間隔`}>
+      <SegmentedControl
+        size="xs"
+        value={scale}
+        onChange={(v) => setScale(v as PolarScale)}
+        data={[
+          { value: 'mmana', label: 'MMANA' },
+          { value: 'linearDb', label: 'dB リニア' },
+        ]}
+        aria-label="指向性図の目盛"
+      />
+    </Tooltip>
   );
 }

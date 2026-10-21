@@ -1,20 +1,29 @@
 // How lengths are shown, shared by the wire table and the element editor like
-// MMANA's 波長表記 check box and 通常単位をmmで表示 menu item. Remembered per
-// viewer, like MMANA's ini file; not part of the document.
+// MMANA's 波長表記 check box and 通常単位をmmで表示 menu item, and how the
+// pattern plots scale dB. Remembered per viewer, like MMANA's ini file; not
+// part of the document.
 import { create } from 'zustand';
+import type { PolarScale } from '../charts/polar';
 
 export interface DisplayState {
   /** Coordinates and sizes in mm instead of m (the radius is always in mm). */
   millimetres: boolean;
   /** Lengths and the radius in wavelengths at the design frequency; takes precedence over `millimetres`. */
   wavelengths: boolean;
+  /** Radial scale of the pattern plots. */
+  polarScale: PolarScale;
   setMillimetres: (on: boolean) => void;
   setWavelengths: (on: boolean) => void;
+  setPolarScale: (scale: PolarScale) => void;
 }
 
 const KEY = 'mmana.display';
 // MMANA starts with lengths in mm (exeenv.MmSel = 1)
-const DEFAULTS = { millimetres: true, wavelengths: false };
+const DEFAULTS: { millimetres: boolean; wavelengths: boolean; polarScale: PolarScale } = {
+  millimetres: true,
+  wavelengths: false,
+  polarScale: 'mmana',
+};
 
 function load(): typeof DEFAULTS {
   try {
@@ -28,9 +37,9 @@ function load(): typeof DEFAULTS {
 export const useDisplay = create<DisplayState>()((set, get) => {
   const save = (patch: Partial<typeof DEFAULTS>) => {
     set(patch);
-    const { millimetres, wavelengths } = get();
+    const { millimetres, wavelengths, polarScale } = get();
     try {
-      localStorage.setItem(KEY, JSON.stringify({ millimetres, wavelengths }));
+      localStorage.setItem(KEY, JSON.stringify({ millimetres, wavelengths, polarScale }));
     } catch {
       // not remembered; the defaults apply next time
     }
@@ -39,5 +48,6 @@ export const useDisplay = create<DisplayState>()((set, get) => {
     ...load(),
     setMillimetres: (millimetres) => save({ millimetres }),
     setWavelengths: (wavelengths) => save({ wavelengths }),
+    setPolarScale: (polarScale) => save({ polarScale }),
   };
 });
