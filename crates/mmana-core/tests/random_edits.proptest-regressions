@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 9e521f53c57cef43ddba6796f5289c0eaab41fff10a62c78fb1d7b120196c29d # shrinks to antenna = Antenna { name: "DP 160m", frequency_mhz: 1.91, wires: [Wire { start: Point3 { x: 0.0, y: 0.0, z: 0.0 }, end: Point3 { x: 2.0, y: 0.0, z: 0.0 }, radius: 0.0, segmentation: Auto, note: "" }, Wire { start: Point3 { x: 0.0, y: 0.0, z: 5.0 }, end: Point3 { x: -2.0, y: 0.0, z: 2.5 }, radius: 0.0, segmentation: Auto, note: "" }], sources: [Source { pulse: "w1c", phase_deg: 0.0, voltage: 1.0 }], auto_voltage: true, loads: [], loads_enabled: true, auto_segmentation: AutoSegmentation { dm1: 400, dm2: 40, sc: 2.0, ec: 1 }, stack: Stack { horizontal: 1, vertical: 1, horizontal_spacing: 156.96335078534034, vertical_spacing: 156.96335078534034, direction: Centered }, combined_wires: [], comment: "" }, steps = [Set { row: 28, cell: Height, value: Times(1.7438835781170103), scale_all: false }], row = 6, cell = Height, factor = 1.730578290067908, scale_all = false

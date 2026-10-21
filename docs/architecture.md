@@ -112,6 +112,9 @@ reference/oracle/gen_golden.sh
   UI はエレメントの状態を持たず、操作を戻すのは列の末尾を除くだけです。再生は 1 ms もかかりません。
 - **ワイヤはオリジナルとビット単位で一致します。** エレメント編集の計算は四則演算と平方根だけで、
   IEEE 754 ではどの環境でも同じ値になるため、テストは全プラットフォームで完全一致を要求します。
+  比較はオリジナルの規則だけで適用する `apply_as_original` で行い、`apply` はさらに、表とワイヤが食い違う・長さ 0 のワイヤができる
+  などの壊れたアンテナを書き戻す編集を拒否します（[移植メモ](porting-notes.md#エレメント編集)）。
+  拒否した編集が何も変えないこと、表がワイヤを表すことなどは `tests/random_edits.rs` がランダムな編集の列で確かめます。
 - **検証は計算エンジンと同じ方式です。** `extract.sh` が `CWGroup` / `CWGroupList` を行範囲でそのまま抜き出し、
   `reference/oracle/elements_main.cpp`（ダイアログの編集規則を VCL なしで書き写したもの）が
   `testdata/elements/scripts/*.txt` の編集手順を全サンプルに適用して `testdata/elements/golden` を作ります
