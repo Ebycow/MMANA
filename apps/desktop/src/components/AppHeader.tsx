@@ -3,6 +3,7 @@ import {
   IconAntenna,
   IconArrowBackUp,
   IconArrowForwardUp,
+  IconCheck,
   IconChevronDown,
   IconDeviceFloppy,
   IconFile,
@@ -14,6 +15,7 @@ import {
   IconSun,
   IconTarget,
 } from '@tabler/icons-react';
+import { useLayout, type PaneId } from '../state/layout';
 import { useApp } from '../state/store';
 
 export interface FileActions {
@@ -25,6 +27,12 @@ export interface FileActions {
 }
 
 const MOD = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl';
+
+const PANES: [PaneId, string][] = [
+  ['editor', 'アンテナ（ワイヤー表など）'],
+  ['view', 'アンテナ形状（3D）'],
+  ['results', '計算結果'],
+];
 
 export function AppHeader({ actions }: { actions: FileActions }) {
   const fileName = useApp((s) => s.fileName);
@@ -40,6 +48,9 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const optimizing = useApp((s) => s.optimizer.running);
   const hasTrials = useApp((s) => (s.optimizer.outcome?.trials.length ?? 0) > 0);
   const setOptimizer = useApp((s) => s.setOptimizer);
+  const shown = useLayout((s) => s.shown);
+  const setShown = useLayout((s) => s.setShown);
+  const shownCount = PANES.filter(([id]) => shown[id]).length;
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const dark = colorScheme === 'dark';
 
@@ -75,6 +86,26 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           <Menu.Item rightSection={<Kbd size="xs">{MOD} ⇧ S</Kbd>} onClick={actions.saveAs}>
             名前を付けて保存…
           </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      <Menu position="bottom-start" shadow="md" width={240} closeOnItemClick={false}>
+        <Menu.Target>
+          <Button variant="subtle" color="gray" rightSection={<IconChevronDown size={14} />}>
+            表示
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          {PANES.map(([id, label]) => (
+            <Menu.Item
+              key={id}
+              leftSection={<IconCheck size={14} style={{ visibility: shown[id] ? 'visible' : 'hidden' }} />}
+              // one panel always stays
+              disabled={shown[id] && shownCount === 1}
+              onClick={() => setShown(id, !shown[id])}
+            >
+              {label}
+            </Menu.Item>
+          ))}
         </Menu.Dropdown>
       </Menu>
       <Group gap={2} wrap="nowrap">
