@@ -1,11 +1,25 @@
-import { ActionIcon, Button, Group, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Button, Checkbox, Group, SegmentedControl, Text, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCopy, IconLayoutRows, IconPlus, IconTrash } from '@tabler/icons-react';
 import { useEffect, useRef } from 'react';
 import type { Point3 } from '../api/types';
+import {
+  lengthDigits,
+  lengthFromDisplay,
+  lengthToDisplay,
+  lengthUnit,
+  lengthWavelength,
+  radiusDigits,
+  radiusFromDisplay,
+  radiusToDisplay,
+  radiusUnit,
+  radiusWavelength,
+  type Units,
+} from '../domain/elements';
 import { newWire, wavelength, wireLength } from '../domain/project';
 import { describeSegmentation, formatSegmentation, parseSegmentation } from '../domain/segmentation';
 import { insertWires, removeWires } from '../domain/wireEdit';
+import { useDisplay } from '../state/display';
 import { useApp } from '../state/store';
 import { NumCell, TextCell, format } from './Cells';
 
@@ -29,6 +43,10 @@ export function WireTable() {
   const edit = useApp((s) => s.edit);
   const setElementEditorOpen = useApp((s) => s.setElementEditorOpen);
   const lambda = wavelength(freq);
+  const display = useDisplay();
+  // 波長表記 needs a design frequency
+  const units: Units = { wavelengths: display.wavelengths && lambda > 0, millimetres: display.millimetres, lambda };
+  const lu = lengthUnit(units);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
 
   // keep the row selected in the 3D view visible
@@ -72,15 +90,17 @@ export function WireTable() {
           <tr>
             <th style={{ textAlign: 'center' }}>No.</th>
             {COORDS.map((c) => (
-              <th key={c.label}>{c.label} (m)</th>
+              <th key={c.label}>
+                {c.label} ({lu})
+              </th>
             ))}
-            <th>R (mm)</th>
+            <th>R ({radiusUnit(units)})</th>
             <th>
               <Tooltip label="分割数。正: 等分、0: 自動等分、-1: 両端テーパ、-2/-3: 始点/終点テーパ、「400,40」: λ/400〜λ/40 のテーパ" multiline w={260}>
                 <span>SEG</span>
               </Tooltip>
             </th>
-            <th>長さ (m)</th>
+            <th>長さ ({lu})</th>
             <th className="left">メモ</th>
             <th />
           </tr>
@@ -99,20 +119,20 @@ export function WireTable() {
                 <td key={c.label} style={{ minWidth: 50 }}>
                   <NumCell
                     ariaLabel={`ワイヤー ${i + 1} ${c.label}`}
-                    value={w[c.end][c.axis]}
-                    wavelength={lambda}
-                    onCommit={(v) => edit((p) => void (p.antenna.wires[i][c.end][c.axis] = v))}
+                    value={lengthToDisplay(w[c.end][c.axis], units)}
+                    digits={lengthDigits(units)}
+                    wavelength={lengthWavelength(units)}
+                    onCommit={(v) => edit((p) => void (p.antenna.wires[i][c.end][c.axis] = lengthFromDisplay(v, units)))}
                   />
                 </td>
               ))}
               <td style={{ minWidth: 50 }}>
                 <NumCell
                   ariaLabel={`ワイヤー ${i + 1} 半径`}
-                  value={w.radius}
-                  scale={1000}
-                  digits={3}
-                  wavelength={lambda}
-                  onCommit={(v) => edit((p) => void (p.antenna.wires[i].radius = v))}
+                  value={radiusToDisplay(w.radius, units)}
+                  digits={radiusDigits(units)}
+                  wavelength={radiusWavelength(units)}
+                  onCommit={(v) => edit((p) => void (p.antenna.wires[i].radius = radiusFromDisplay(v, units)))}
                 />
               </td>
               <td style={{ minWidth: 46 }}>
@@ -128,7 +148,7 @@ export function WireTable() {
                   </div>
                 </Tooltip>
               </td>
-              <td className="readonly num">{format(wireLength(w), 3)}</td>
+              <td className="readonly num">{format(lengthToDisplay(wireLength(w), units), lengthDigits(units))}</td>
               <td style={{ minWidth: 60 }}>
                 <TextCell
                   ariaLabel={`ワイヤー ${i + 1} メモ`}
@@ -177,9 +197,32 @@ export function WireTable() {
             </Button>
           </Tooltip>
         </Group>
-        <Text size="xs" c="dimmed">
-          数値欄では R（波長 = {format(lambda, 3)} m）や四則演算が使えます
-        </Text>
+        <Group gap="sm">
+          <Text size="xs" c="dimmed">
+            数値欄では R（波長 = {units.wavelengths ? '1 λ' : `${format(lengthWavelength(units), units.millimetres ? 1 : 3)} ${lu}`}）や四則演算が使えます
+          </Text>
+          <Tooltip label="座標と長さの単位。半径はいつも mm です">
+            <SegmentedControl
+              size="xs"
+              aria-label="長さの単位"
+              value={display.millimetres ? 'mm' : 'm'}
+              disabled={units.wavelengths}
+              onChange={(v) => display.setMillimetres(v === 'mm')}
+              data={['m', 'mm']}
+            />
+          </Tooltip>
+          <Tooltip label="座標・長さ・半径を設計周波数の波長で表します（エレメント編集と共通）" multiline w={240}>
+            <div>
+              <Checkbox
+                size="xs"
+                label="波長表記"
+                checked={units.wavelengths}
+                disabled={!(lambda > 0)}
+                onChange={(e) => display.setWavelengths(e.currentTarget.checked)}
+              />
+            </div>
+          </Tooltip>
+        </Group>
       </Group>
     </>
   );

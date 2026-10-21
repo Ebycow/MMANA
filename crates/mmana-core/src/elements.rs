@@ -163,12 +163,16 @@ pub enum ElementOp {
     /// Deletes an element; the base element cannot be deleted.
     Delete { row: usize },
     /// Rounds sizes, positions and radii to `decimals` places (値を丸める),
-    /// in metres or, with `inWavelengths`, in wavelengths.
+    /// in metres or, with `inMillimetres`, in millimetres (通常単位をmmで表示),
+    /// or, with `inWavelengths`, in wavelengths (which takes precedence). The
+    /// radius is rounded in millimetres unless `inWavelengths` is set.
     #[serde(rename_all = "camelCase")]
     RoundValues {
         decimals: u32,
         #[serde(default)]
         in_wavelengths: bool,
+        #[serde(default)]
+        in_millimetres: bool,
         #[serde(default)]
         scale_all: bool,
     },
@@ -1183,10 +1187,27 @@ impl ElementList {
     }
 
     /// `AllRoundUp` (値を丸める) to multiples of 1/`sc`.
-    fn round_values(&mut self, sc: f64, in_wavelengths: bool, all: bool) {
+    fn round_values(&mut self, sc: f64, in_wavelengths: bool, in_millimetres: bool, all: bool) {
         let rmd = self.wavelength;
-        let get = |d: f64| if in_wavelengths { d / rmd } else { d };
-        let set = |d: f64| if in_wavelengths { d * rmd } else { d };
+        // `GetRmdVal` / `SetRmdVal`
+        let get = |d: f64| {
+            if in_wavelengths {
+                d / rmd
+            } else if in_millimetres {
+                d * 1000.0
+            } else {
+                d
+            }
+        };
+        let set = |d: f64| {
+            if in_wavelengths {
+                d * rmd
+            } else if in_millimetres {
+                d / 1000.0
+            } else {
+                d
+            }
+        };
         for i in 0..self.groups.len() {
             let slots = &mut self.slots;
             let g = &mut self.groups[i];
@@ -1245,11 +1266,11 @@ impl ElementList {
             }
         };
         match *op {
-            RoundValues { decimals, in_wavelengths, scale_all } => {
+            RoundValues { decimals, in_wavelengths, in_millimetres, scale_all } => {
                 if decimals > 9 || (in_wavelengths && self.wavelength == 0.0) {
                     return false;
                 }
-                self.round_values(10f64.powi(decimals as i32), in_wavelengths, scale_all);
+                self.round_values(10f64.powi(decimals as i32), in_wavelengths, in_millimetres, scale_all);
                 return true;
             }
             SetInterval { row, .. }
@@ -1848,5 +1869,7 @@ mod tests {
         assert_eq!(round_up(1.23456, 1000.0), 1.235);
         assert_eq!(round_up(-1.2345, 100.0), -1.23);
         assert_eq!(round_up(0.25, 10.0), 0.3);
+        // the original's int() overflows here (a 350 m wire rounded to 0.0001 mm)
+        assert_eq!(round_up(350034.98082, 10000.0), 350034.9808);
     }
 }

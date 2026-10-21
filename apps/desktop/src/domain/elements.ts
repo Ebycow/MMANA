@@ -40,21 +40,33 @@ export const KIND_MENU: ElementKind[][] = [
   ['horizontalSquare', 'horizontalDiamond', 'horizontalInvertedTriangle', 'horizontalTriangle'],
 ];
 
-/** How lengths are shown: metres, or wavelengths at the design frequency (波長表記). */
+/**
+ * How lengths are shown: metres or millimetres (通常単位をmmで表示), or
+ * wavelengths at the design frequency (波長表記), which takes precedence.
+ */
 export interface Units {
   wavelengths: boolean;
+  millimetres: boolean;
   lambda: number;
 }
 
 /** `GetRmdVal` / `SetRmdVal` */
-export const lengthToDisplay = (m: number, u: Units) => (u.wavelengths ? m / u.lambda : m);
-export const lengthFromDisplay = (d: number, u: Units) => (u.wavelengths ? d * u.lambda : d);
-/** The radius in mm, or in wavelengths (`GetRmdValD` / `SetRmdValD`). */
+export const lengthToDisplay = (m: number, u: Units) => (u.wavelengths ? m / u.lambda : u.millimetres ? m * 1000 : m);
+export const lengthFromDisplay = (d: number, u: Units) => (u.wavelengths ? d * u.lambda : u.millimetres ? d / 1000 : d);
+/** The radius in mm, or in wavelengths (`GetRmdValD` / `SetRmdValD`); millimetres do not change it. */
 export const radiusToDisplay = (m: number, u: Units) => (u.wavelengths ? (m * 1000 * 0.001) / u.lambda : m * 1000);
 export const radiusFromDisplay = (d: number, u: Units) => (u.wavelengths ? (d * 1000 * u.lambda) / 1000 : d / 1000);
 
-export const lengthUnit = (u: Units) => (u.wavelengths ? 'λ' : 'm');
+/** `GetLenUnitText` */
+export const lengthUnit = (u: Units) => (u.wavelengths ? 'λ' : u.millimetres ? 'mm' : 'm');
 export const radiusUnit = (u: Units) => (u.wavelengths ? 'λ' : 'mm');
+/** The wavelength in the unit lengths are shown in, for `R` in expressions. */
+export const lengthWavelength = (u: Units) => (u.wavelengths ? 1 : u.millimetres ? u.lambda * 1000 : u.lambda);
+/** The wavelength in the unit the radius is shown in. */
+export const radiusWavelength = (u: Units) => (u.wavelengths ? 1 : u.lambda * 1000);
+/** Decimal places the tables show (about 0.1 mm in metres). */
+export const lengthDigits = (u: Units) => (u.wavelengths ? 5 : u.millimetres ? 3 : 4);
+export const radiusDigits = (u: Units) => (u.wavelengths ? 7 : 3);
 
 /** `StrDbl`: six decimals with trailing zeros removed (one digit is kept after the point). */
 export function strDbl(d: number): string {

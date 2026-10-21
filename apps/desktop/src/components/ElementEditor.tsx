@@ -47,8 +47,12 @@ import {
   cellOp,
   cellValue,
   elementsCsv,
+  lengthDigits,
   lengthUnit,
+  lengthWavelength,
+  radiusDigits,
   radiusUnit,
+  radiusWavelength,
   replaceOps,
   strDbl,
   type ElementColumn,
@@ -58,6 +62,7 @@ import {
 import { evaluate } from '../domain/expr';
 import { wavelength } from '../domain/project';
 import { formatSegmentation, parseSegmentation } from '../domain/segmentation';
+import { useDisplay } from '../state/display';
 import { useApp } from '../state/store';
 import { NumCell, TextCell, format } from './Cells';
 import { ElementPreview } from './ElementPreview';
@@ -65,14 +70,12 @@ import { ElementPreview } from './ElementPreview';
 interface Settings {
   /** 間隔表記 (true) or 位置表記. */
   intervals: boolean;
-  /** 波長表記 */
-  wavelengths: boolean;
   /** 全ての座標を同一比率で変更 (true) or 端点のみ変更. */
   scaleAll: boolean;
   view: Projection;
 }
 
-const DEFAULT_SETTINGS: Settings = { intervals: true, wavelengths: false, scaleAll: false, view: { azimuth: -50, elevation: 25 } };
+const DEFAULT_SETTINGS: Settings = { intervals: true, scaleAll: false, view: { azimuth: -50, elevation: 25 } };
 const SETTINGS_KEY = 'mmana.element-editor';
 
 // the dialog's check boxes are remembered per viewer, like MMANA's ini file
@@ -121,6 +124,10 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
   const [revision, setRevision] = useState(0);
   const [replaceOpen, setReplaceOpen] = useState(false);
   const [settings, setSettingsState] = useState(loadSettings);
+  // 波長表記 is shared with the wire table, and so is the main window's mm setting
+  const wavelengths = useDisplay((s) => s.wavelengths);
+  const millimetres = useDisplay((s) => s.millimetres);
+  const setWavelengths = useDisplay((s) => s.setWavelengths);
   const setSettings = (patch: Partial<Settings>) => {
     const next = { ...settings, ...patch };
     setSettingsState(next);
@@ -155,7 +162,7 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
   const current = result != null && result.steps === steps;
   const rows = edit?.elements ?? [];
   const baseRow = edit?.base ?? 0;
-  const units: Units = { wavelengths: settings.wavelengths && lambda > 0, lambda };
+  const units: Units = { wavelengths: wavelengths && lambda > 0, millimetres, lambda };
   const lu = lengthUnit(units);
   const lengthCols: ElementColumn[] = [settings.intervals ? 'interval' : 'position', 'width', 'height', 'perimeter'];
 
@@ -215,7 +222,10 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
         </Text>
       ),
       labels: { confirm: '丸める', cancel: 'キャンセル' },
-      onConfirm: () => push([{ op: 'roundValues', decimals, inWavelengths: units.wavelengths, scaleAll: settings.scaleAll }]),
+      onConfirm: () =>
+        push([
+          { op: 'roundValues', decimals, inWavelengths: units.wavelengths, inMillimetres: units.millimetres, scaleAll: settings.scaleAll },
+        ]),
     });
 
   const exportCsv = async () => {
@@ -228,9 +238,8 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
   };
 
   // expressions: R is the wavelength in the unit the cell shows
-  const exprWavelength = (col: ElementColumn) =>
-    units.wavelengths ? 1 : col === 'radius' ? lambda * 1000 : lambda;
-  const digits = (col: ElementColumn) => (col === 'radius' ? (units.wavelengths ? 7 : 3) : units.wavelengths ? 5 : 4);
+  const exprWavelength = (col: ElementColumn) => (col === 'radius' ? radiusWavelength(units) : lengthWavelength(units));
+  const digits = (col: ElementColumn) => (col === 'radius' ? radiusDigits(units) : lengthDigits(units));
 
   const numCell = (row: number, col: ElementColumn, isNew: boolean) => {
     const label = `エレメント ${row + 1} ${COLUMN_LABELS[col]}`;
@@ -329,7 +338,7 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
           label="波長表記"
           checked={units.wavelengths}
           disabled={!(lambda > 0)}
-          onChange={(e) => setSettings({ wavelengths: e.currentTarget.checked })}
+          onChange={(e) => setWavelengths(e.currentTarget.checked)}
         />
         <Menu position="bottom-start" shadow="md" width={230}>
           <Menu.Target>

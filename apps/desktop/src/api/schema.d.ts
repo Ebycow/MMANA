@@ -238,7 +238,12 @@ export interface components {
         };
         /** @description Writes the values of one trial back to the antenna. */
         ApplyTrialRequest: {
+            /** @description The options the optimisation started with. */
             options?: components["schemas"]["CalcOptions"];
+            /**
+             * @description The antenna the optimisation started from (the trial's values are for
+             *     its elements, which a later trial may have renumbered).
+             */
             project: components["schemas"]["Project"];
             setup: components["schemas"]["OptimizerSetup"];
             /** @description One value per variable (`Trial::values`). */
@@ -495,6 +500,7 @@ export interface components {
         } | {
             /** Format: int32 */
             decimals: number;
+            inMillimetres?: boolean;
             inWavelengths?: boolean;
             /** @enum {string} */
             op: "roundValues";

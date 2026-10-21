@@ -6,9 +6,14 @@ import {
   cellValue,
   elementsCsv,
   lengthFromDisplay,
+  lengthToDisplay,
+  lengthUnit,
+  lengthWavelength,
   project,
   radiusFromDisplay,
   radiusToDisplay,
+  radiusUnit,
+  radiusWavelength,
   replaceOps,
   strDbl,
 } from '../domain/elements';
@@ -33,8 +38,9 @@ const rows = [
   row({ interval: 0, position: 2.6, width: 10.63 }),
   row({ position: 5.2, width: 10, radius: null, segmentation: { kind: 'taperCustom', dm1: 400, dm2: 40 } }),
 ];
-const metres = { wavelengths: false, lambda: 21.338 };
-const lambdas = { wavelengths: true, lambda: 20 };
+const metres = { wavelengths: false, millimetres: false, lambda: 21.338 };
+const millis = { wavelengths: false, millimetres: true, lambda: 21.338 };
+const lambdas = { wavelengths: true, millimetres: true, lambda: 20 };
 
 describe('element editor helpers', () => {
   it('formats like StrDbl', () => {
@@ -50,6 +56,19 @@ describe('element editor helpers', () => {
     expect(radiusFromDisplay(12.5, metres)).toBe(0.0125);
     expect(radiusFromDisplay(0.001, lambdas)).toBe(0.02);
     expect(radiusToDisplay(0.02, lambdas)).toBeCloseTo(0.001, 12);
+  });
+
+  it('shows lengths in mm like GetRmdVal with MmSel, the radius unchanged', () => {
+    expect(lengthToDisplay(10.63, millis)).toBe(10630);
+    expect(lengthFromDisplay(2600, millis)).toBe(2.6);
+    expect(radiusToDisplay(0.0125, millis)).toBe(12.5);
+    expect([lengthUnit(millis), radiusUnit(millis)]).toEqual(['mm', 'mm']);
+    // 波長表記 takes precedence
+    expect(lengthToDisplay(10, lambdas)).toBe(0.5);
+    expect(lengthUnit(lambdas)).toBe('λ');
+    // R in expressions is the wavelength in the unit shown
+    expect([lengthWavelength(metres), lengthWavelength(millis), lengthWavelength(lambdas)]).toEqual([21.338, 21338, 1]);
+    expect([radiusWavelength(metres), radiusWavelength(lambdas)]).toEqual([21338, 1]);
   });
 
   it('shows text where the table has no value', () => {
@@ -87,6 +106,9 @@ describe('element editor helpers', () => {
     expect(lines[0]).toBe('No.,形式,位置(m),間隔(m),横幅(m),縦幅(m),Ｘ幅(m),R(mm),Seg.,ワイヤ数');
     expect(lines[2]).toBe('2,水平DP,2.6,基準位置,10.63,0.0,0.0,12.5,-1,1');
     expect(lines[3]).toBe('3,水平DP,5.2,2.6,10.0,0.0,0.0,複合,"400,40",1');
+    const mm = elementsCsv(rows, 1, millis).trimEnd().split('\r\n');
+    expect(mm[0]).toBe('No.,形式,位置(mm),間隔(mm),横幅(mm),縦幅(mm),Ｘ幅(mm),R(mm),Seg.,ワイヤ数');
+    expect(mm[2]).toBe('2,水平DP,2600.0,基準位置,10630.0,0.0,0.0,12.5,-1,1');
   });
 
   it('projects: front view shows Y to the right and Z up, top view shows X up', () => {

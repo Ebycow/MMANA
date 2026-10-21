@@ -1,0 +1,12 @@
+# Rounding with lengths shown in mm (通常単位をmmで表示); 波長表記 takes
+# precedence over it, as in GetRmdVal. Four decimals in mm are left out: the
+# original's int() overflows past 214.748 m (BEVERAGE), the port does not.
+width * *1.0001234567
+round * *1.0000987654
+roundup 4 l mm
+interval * +0.0004321987
+height * *1.0002345678
+roundup 3 mm all
+position * +0.0000456789
+width * *1.0000345678
+roundup 2 mm

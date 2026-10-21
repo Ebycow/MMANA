@@ -135,15 +135,25 @@ static int Delete(int Row)
 	return 0;
 }
 
-// ComLib.cpp GetRmdVal / SetRmdVal (MmSel is never set here)
+// ComLib.cpp GetRmdVal / SetRmdVal (MmSel is set only for "roundup ... mm")
 double GetRmdVal(double d)
 {
-	if( exeenv.RmdSel ) d = d / exeenv.rmd;
+	if( exeenv.RmdSel ){
+		d = d / exeenv.rmd;
+	}
+	else if( exeenv.MmSel ){
+		d = d * 1000.0;
+	}
 	return d;
 }
 double SetRmdVal(double d)
 {
-	if( exeenv.RmdSel ) d = d * exeenv.rmd;
+	if( exeenv.RmdSel ){
+		d = d * exeenv.rmd;
+	}
+	else if( exeenv.MmSel ){
+		d = d / 1000.0;
+	}
 	return d;
 }
 
@@ -334,10 +344,12 @@ int main(int argc, char **argv)
 		if( n < 1 ) continue;
 		if( !strcmp(op, "roundup") ){
 			int digits = atoi(row);
-			exeenv.RmdSel = (!strcmp(a1, "l") || !strcmp(a2, "l")) ? 1 : 0;
-			int all = (!strcmp(a1, "all") || !strcmp(a2, "all")) ? 1 : 0;
+			exeenv.RmdSel = (!strcmp(a1, "l") || !strcmp(a2, "l") || !strcmp(a3, "l")) ? 1 : 0;
+			exeenv.MmSel = (!strcmp(a1, "mm") || !strcmp(a2, "mm") || !strcmp(a3, "mm")) ? 1 : 0;
+			int all = (!strcmp(a1, "all") || !strcmp(a2, "all") || !strcmp(a3, "all")) ? 1 : 0;
 			AllRoundUp(pow(10.0, digits), all);
 			exeenv.RmdSel = 0;
+			exeenv.MmSel = 0;
 			printf("%s1", nop++ ? "," : "");
 			continue;
 		}

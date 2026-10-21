@@ -108,6 +108,7 @@ fn run_script(list: &mut ElementList, script: &str) -> Vec<bool> {
             let op = ElementOp::RoundValues {
                 decimals: t[1].parse().unwrap(),
                 in_wavelengths: flag("l"),
+                in_millimetres: flag("mm"),
                 scale_all: flag("all"),
             };
             applied.push(list.apply(&op));
