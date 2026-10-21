@@ -1,8 +1,10 @@
-use axum::body::Body;
+use axum::body::{Body, Bytes, HttpBody};
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use mmana_api::{AppState, app};
 use serde_json::{Value, json};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tower::ServiceExt;
 
 fn sample(name: &str) -> Vec<u8> {
@@ -141,6 +143,41 @@ async fn far_and_near_field() {
     let (status, _, v) = post_json("/v1/near-field", json!({ "project": parsed["project"], "spec": spec })).await;
     assert_eq!(status, StatusCode::OK, "{v}");
     assert_eq!(v["samples"].as_array().unwrap().len(), 3);
+}
+
+/// A body sent in chunks, without a length.
+struct Chunked(Option<Bytes>);
+
+impl HttpBody for Chunked {
+    type Data = Bytes;
+    type Error = std::io::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Bytes>, Self::Error>>> {
+        Poll::Ready(self.0.take().map(|b| Ok(http_body::Frame::data(b))))
+    }
+}
+
+#[tokio::test]
+async fn an_oversized_body_is_413_with_or_without_a_length() {
+    let body = vec![b' '; AppState::default().limits.max_body_bytes + 1];
+    let with_length = Request::post("/v1/calculations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CONTENT_LENGTH, body.len())
+        .body(Body::from(body.clone()))
+        .unwrap();
+    assert_eq!(send(with_length).await.0, StatusCode::PAYLOAD_TOO_LARGE);
+    // the limit is met while reading: this used to be 400 invalid-request
+    let chunked = Request::post("/v1/calculations")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::new(Chunked(Some(Bytes::from(body)))))
+        .unwrap();
+    let (status, ctype, body) = send(chunked).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(ctype, "application/problem+json");
+    assert_eq!(serde_json::from_slice::<Value>(&body).unwrap()["type"], "payload-too-large");
 }
 
 #[tokio::test]
