@@ -552,7 +552,9 @@ pub fn write(project: &Project) -> String {
             let pairs: Vec<String> = c
                 .sections
                 .iter()
-                .take_while(|s| s.length != 0.0)
+                // a zero length ends the list; so does one that is not finite,
+                // since it would be written as "inf" and read back as zero
+                .take_while(|s| s.length != 0.0 && s.length.is_finite())
                 .map(|s| format!("{},\t{}", str_dbl_e(s.length), str_dbl_e(s.radius)))
                 .collect();
             line(format!("{},\t{},\t{}", str_dbl_e(c.radius_key), c.mode, pairs.join(",\t")));
@@ -704,5 +706,16 @@ mod tests {
         assert_eq!(p.warnings.len(), 1);
         assert_eq!(p.project.environment.real_ground, RealGround::default());
         assert_eq!(p.project.antenna.comment, text);
+    }
+
+    #[test]
+    fn a_section_too_long_to_write_ends_the_combined_wire() {
+        let mut p = parse(DP).project;
+        let section = |length| CombinedSection { length, radius: 0.01 };
+        let combined = CombinedWire { radius_key: -1.0, mode: 0, sections: vec![section(2.0), section(f64::INFINITY)] };
+        p.antenna.combined_wires = vec![combined];
+        let once = reread(&p).project;
+        assert_eq!(once.antenna.combined_wires[0].sections, vec![section(2.0)]);
+        assert_eq!(reread(&once).project, once);
     }
 }
