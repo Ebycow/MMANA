@@ -122,6 +122,19 @@ fn rejects_wires_on_top_of_each_other() {
 }
 
 #[test]
+fn rejects_sources_that_all_have_no_voltage() {
+    let mut p = dp20();
+    p.antenna.sources[0].voltage = 0.0;
+    assert_eq!(calc(p.clone()), Err(CalcError::NoExcitation));
+    // one fed source is enough: the unfed one still carries the induced current
+    let mut fed = p.antenna.sources[0].clone();
+    fed.pulse = "w1b".into();
+    fed.voltage = 1.0;
+    p.antenna.sources.push(fed);
+    calc(p).unwrap();
+}
+
+#[test]
 fn rejects_stacked_copies_on_top_of_each_other() {
     let mut p = dp20();
     p.antenna.stack.horizontal = 2;

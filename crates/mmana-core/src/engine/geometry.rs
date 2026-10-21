@@ -474,6 +474,10 @@ impl Mininec {
         if ap.sources.is_empty() {
             return Err(CalcError::NoSources);
         }
+        // no current flows, and the feed impedance is 0 / 0
+        if ap.sources.iter().all(|c| c.ev == 0.0) {
+            return Err(CalcError::NoExcitation);
+        }
         for c in &ap.sources {
             if c.plus_no > self.n as i32 || c.plus_no < 1 {
                 return Err(CalcError::PulseOutOfRange { what: "source", name: c.plus.clone(), max: self.n });

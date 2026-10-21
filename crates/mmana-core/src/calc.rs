@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::engine::antdef::AntDef;
-use crate::engine::{EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec};
+use crate::engine::{
+    EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec, SourceSolution,
+};
 use crate::error::CalcError;
 use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation, Stack, StackDirection, Wire};
 use crate::pattern::{self, PatternState};
@@ -264,8 +266,12 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
     let cfg = engine_config(project, opts);
     let mut engine = Mininec::new(&mut ap, &cfg)?;
     engine.solve();
-    // other degenerate geometry (stacked copies 0 m apart...) ends the same way
-    if engine.solutions.iter().any(|s| !(s.current.0.is_finite() && s.current.1.is_finite())) {
+    // other degenerate geometry (stacked copies 0 m apart...) ends the same way;
+    // the feed figures are checked too, as a source with no current has none
+    let finite = |s: &SourceSolution| {
+        [s.current.0, s.current.1, s.impedance.0, s.impedance.1, s.swr].iter().all(|v| v.is_finite())
+    };
+    if !engine.solutions.iter().all(finite) {
         return Err(CalcError::NoFiniteSolution);
     }
     let mut warnings = Vec::new();

@@ -9,6 +9,8 @@ pub enum CalcError {
     NoWires,
     #[error("the antenna has no sources")]
     NoSources,
+    #[error("every source has a voltage of 0")]
+    NoExcitation,
     #[error("wire {wire} has zero length")]
     ZeroLengthWire { wire: usize },
     #[error("wire {wire}: no combined-wire definition with R = {radius}")]
