@@ -81,6 +81,12 @@ fn accepts_settings_in_range() {
     p.antenna.wires[0].segmentation = Segmentation::TaperCustom { dm1: 800, dm2: Some(20) };
     calc(p.clone()).unwrap();
     p.antenna.auto_segmentation.sc = 1.01;
+    calc(p.clone()).unwrap();
+    // the smallest DM1, DM2 and EC
+    p.antenna.auto_segmentation.dm1 = 1;
+    p.antenna.auto_segmentation.dm2 = 1;
+    p.antenna.auto_segmentation.ec = 1;
+    p.antenna.wires[0].segmentation = Segmentation::Taper;
     calc(p).unwrap();
 }
 

@@ -3,9 +3,35 @@ use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
 use mmana_api::{AppState, app};
 use serde_json::{Value, json};
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower::ServiceExt;
+
+/// Refuses any single allocation over 256 MB, so a request limit that stops
+/// working (field_point_limits_do_not_wrap) ends this test binary at once
+/// instead of filling memory and swap.
+struct Capped;
+
+const CAP: usize = 256 << 20;
+
+unsafe impl GlobalAlloc for Capped {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if layout.size() > CAP { std::ptr::null_mut() } else { unsafe { System.alloc(layout) } }
+    }
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        if layout.size() > CAP { std::ptr::null_mut() } else { unsafe { System.alloc_zeroed(layout) } }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) }
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        if new_size > CAP { std::ptr::null_mut() } else { unsafe { System.realloc(ptr, layout, new_size) } }
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: Capped = Capped;
 
 fn sample(name: &str) -> Vec<u8> {
     std::fs::read(format!("{}/../../testdata/maa/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()

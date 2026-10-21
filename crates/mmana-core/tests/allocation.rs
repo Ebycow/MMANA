@@ -1,6 +1,11 @@
 //! A segment count or stacking far over the limits must fail on the limit,
 //! not allocate for that size first. Its own test binary, so the counting
 //! allocator sees only these calculations; they take turns.
+//!
+//! These inputs are what a broken limit would turn into gigabytes and hours,
+//! so the allocator also refuses any single allocation over [`CAP`]: the test
+//! binary then stops at once ("memory allocation of … bytes failed") instead
+//! of filling memory and swap. Inputs that big belong in this file only.
 
 use mmana_core::{
     AxisRange, CalcError, CalcOptions, MAX_FIELD_POINTS, MAX_SWEEP_POINTS, NearFieldKind, NearFieldSpec, Project,
@@ -11,18 +16,27 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-/// Records the largest single allocation.
+/// Records the largest single allocation and refuses any over [`CAP`].
 struct Largest;
 
 static LARGEST: AtomicUsize = AtomicUsize::new(0);
 
+/// Far above what any test here needs (they assert under 1 MB).
+const CAP: usize = 256 << 20;
+
 unsafe impl GlobalAlloc for Largest {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         LARGEST.fetch_max(layout.size(), Ordering::Relaxed);
+        if layout.size() > CAP {
+            return std::ptr::null_mut();
+        }
         unsafe { System.alloc(layout) }
     }
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
         LARGEST.fetch_max(layout.size(), Ordering::Relaxed);
+        if layout.size() > CAP {
+            return std::ptr::null_mut();
+        }
         unsafe { System.alloc_zeroed(layout) }
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -30,6 +44,9 @@ unsafe impl GlobalAlloc for Largest {
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         LARGEST.fetch_max(new_size, Ordering::Relaxed);
+        if new_size > CAP {
+            return std::ptr::null_mut();
+        }
         unsafe { System.realloc(ptr, layout, new_size) }
     }
 }
@@ -60,16 +77,21 @@ fn huge_segment_count_fails_without_allocating_for_it() {
 
 #[test]
 fn huge_stack_fails_without_copying_the_wires() {
-    let mut project = dp20();
-    project.antenna.stack.horizontal = 100_000;
-    let opts = CalcOptions { max_pulses: 1, ..CalcOptions::default() };
-    let _measuring = MEASURING.lock().unwrap_or_else(|e| e.into_inner());
-    LARGEST.store(0, Ordering::Relaxed);
-    assert_eq!(calculate(&project, &opts).map(|_| ()), Err(CalcError::TooManySegmentWires { max: 4096 }));
-    assert_eq!(pulse_layout(&project, &opts).map(|_| ()), Err(CalcError::TooManySegmentWires { max: 4096 }));
-    // the copies of the one wire alone are 9 MB
-    let largest = LARGEST.load(Ordering::Relaxed);
-    assert!(largest < 1 << 20, "largest allocation {largest} bytes");
+    // across, and across and up (counted as their product)
+    for (horizontal, vertical) in [(100_000, 1), (1000, 1000)] {
+        let mut project = dp20();
+        project.antenna.stack.horizontal = horizontal;
+        project.antenna.stack.vertical = vertical;
+        let opts = CalcOptions { max_pulses: 1, ..CalcOptions::default() };
+        let _measuring = MEASURING.lock().unwrap_or_else(|e| e.into_inner());
+        LARGEST.store(0, Ordering::Relaxed);
+        let too_many = Err(CalcError::TooManySegmentWires { max: 4096 });
+        assert_eq!(calculate(&project, &opts).map(|_| ()), too_many);
+        assert_eq!(pulse_layout(&project, &opts).map(|_| ()), too_many);
+        // the copies of the one wire alone are 9 MB
+        let largest = LARGEST.load(Ordering::Relaxed);
+        assert!(largest < 1 << 20, "{horizontal} × {vertical}: largest allocation {largest} bytes");
+    }
 }
 
 #[test]

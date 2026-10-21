@@ -6,8 +6,8 @@
 use mmana_core::contract::{self, SweepRequest};
 use mmana_core::{
     AxisRange, CalcError, CalcOptions, CombinedSection, CombinedWire, GroundKind, GroundScreen, Load, LoadKind,
-    MAX_FIELD_POINTS, MAX_SWEEP_POINTS, Medium, NearFieldKind, NearFieldSpec, Project, calculate, maa, pulse_layout,
-    solve,
+    MAX_FIELD_POINTS, MAX_SWEEP_POINTS, Medium, NearFieldKind, NearFieldSpec, Project, Source, calculate, maa,
+    pulse_layout, solve,
 };
 use std::path::Path;
 
@@ -127,6 +127,22 @@ fn wires() {
             out_of_range("wire 1 length", "a finite number", INF),
         ),
         case(
+            "ends 2e300 apart in y",
+            |p, _| {
+                p.antenna.wires[0].start.y = -1e300;
+                p.antenna.wires[0].end.y = 1e300;
+            },
+            out_of_range("wire 1 length", "a finite number", INF),
+        ),
+        case(
+            "ends 2e300 apart in z",
+            |p, _| {
+                p.antenna.wires[0].start.z = 1e300;
+                p.antenna.wires[0].end.z = -1e300;
+            },
+            out_of_range("wire 1 length", "a finite number", INF),
+        ),
+        case(
             "a disabled wire may have any ends",
             |p, _| {
                 let mut w = p.antenna.wires[0].clone();
@@ -184,6 +200,27 @@ fn stacking() {
             out_of_range("stack vertical spacing", "a finite number", INF),
         ),
         case("an unused spacing is not read", |p, _| p.antenna.stack.horizontal_spacing = NAN, Ok(())),
+        case(
+            "copies of an antenna that is mostly disabled wires",
+            |p, _| {
+                let mut off = p.antenna.wires[0].clone();
+                off.radius = 0.0;
+                for k in 0..5000 {
+                    off.start.x = 100.0 + k as f64;
+                    p.antenna.wires.push(off.clone());
+                }
+                p.antenna.stack.horizontal = 2;
+            },
+            Ok(()),
+        ),
+        case(
+            "64 × 65 copies",
+            |p, _| {
+                p.antenna.stack.horizontal = 64;
+                p.antenna.stack.vertical = 65;
+            },
+            Err(CalcError::TooManySegmentWires { max: 4096 }),
+        ),
         case(
             "4096 copies of one wire",
             |p, _| p.antenna.stack.horizontal = 4096,
@@ -327,6 +364,14 @@ fn environment() {
             Ok(()),
         ),
         case(
+            "16 radials of 0.5 m",
+            |p, _| {
+                real(p);
+                p.environment.real_ground.screen = Some(GroundScreen { radials: 16, radial_radius: 0.5 });
+            },
+            Ok(()),
+        ),
+        case(
             "-1 radials",
             |p, _| {
                 real(p);
@@ -396,6 +441,21 @@ fn sources_and_loads() {
             out_of_range("source 1 phase", "a finite number", INF),
         ),
         solve_only("voltage 0", |p, _| p.antenna.sources[0].voltage = 0.0, Err(CalcError::NoExcitation)),
+        // the second replaced the first, and both reported its own voltage
+        // over the other's current
+        solve_only(
+            "two sources on one pulse",
+            |p, _| p.antenna.sources.push(Source { pulse: "9".into(), phase_deg: 90.0, voltage: 1.0 }),
+            Err(CalcError::DuplicateSource { first: 1, second: 2, pulse: 9 }),
+        ),
+        solve_only(
+            "two sources on one pulse of a stack",
+            |p, _| {
+                p.antenna.sources.push(Source { pulse: "9".into(), phase_deg: 90.0, voltage: 1.0 });
+                p.antenna.stack.horizontal = 2;
+            },
+            Err(CalcError::DuplicateSource { first: 1, second: 2, pulse: 9 }),
+        ),
         case("negative voltage", |p, _| p.antenna.sources[0].voltage = -1.0, Ok(())),
         // 2^32 + 1 wrapped to pulse 1
         solve_only(
@@ -478,10 +538,11 @@ fn far_field_scans() {
         scan(axis(0.0, 1.0, 3), axis(INF, 1.0, 3)).map(|_| ()),
         out_of_range("azimuth start", "a finite number", INF)
     );
-    // i32 products used to wrap: 100 000² is 1 410 065 408 in 32 bits
+    // counts that wrap are in allocation.rs, whose allocator stops a test
+    // that would take gigabytes
     let max = Err(CalcError::TooManyFieldPoints { max: MAX_FIELD_POINTS });
+    assert_eq!(scan(axis(0.0, 0.18, 1000), axis(0.0, 0.36, 1000)).unwrap().len(), MAX_FIELD_POINTS);
     assert_eq!(scan(axis(0.0, 1.0, 1000), axis(0.0, 1.0, 1001)).map(|_| ()), max);
-    assert_eq!(scan(axis(0.0, 1.0, 100_000), axis(0.0, 1.0, 100_000)).map(|_| ()), max);
 }
 
 #[test]
@@ -505,14 +566,10 @@ fn near_field_scans() {
         Err(CalcError::OutOfRange { field, .. }) if field == "near-field power"
     ));
     assert_eq!(check(NearFieldSpec { y: axis(0.0, 1.0, -2), ..base }), out_of_range("y count", "0 or more", -2.0));
-    // 2^21 · 2^21 · 2^22 is 2^64, which wrapped to 0 in usize
+    // 101 × 100 × 100 points, just over the limit (counts that wrap are in
+    // allocation.rs)
     assert_eq!(
-        check(NearFieldSpec {
-            x: axis(0.0, 1.0, 1 << 21),
-            y: axis(0.0, 1.0, 1 << 21),
-            z: axis(0.0, 1.0, 1 << 22),
-            ..base
-        }),
+        check(NearFieldSpec { x: axis(0.0, 1.0, 101), y: axis(0.0, 1.0, 100), z: axis(0.0, 1.0, 100), ..base }),
         Err(CalcError::TooManyFieldPoints { max: MAX_FIELD_POINTS })
     );
 }
