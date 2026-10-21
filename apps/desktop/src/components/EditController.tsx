@@ -4,8 +4,9 @@
 //
 // Picking is done in screen space, in a capture listener on the canvas
 // container that runs before OrbitControls and the gizmo: when the pointer
-// goes down on a wire, an end or (with Shift) empty space, the event stops
-// there; otherwise it reaches the camera controls as before.
+// goes down on a wire, an end or (with the box-selection key, Shift by
+// default) empty space, the event stops there; otherwise it reaches the
+// camera controls as before.
 import { Grid, Html, Line, TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
@@ -13,6 +14,7 @@ import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3, type Camera } 
 import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 import type { Point3, Wire } from '../api/types';
 import type { DisplayWire } from '../domain/geometry';
+import { isHeld } from '../domain/shortcuts';
 import {
   PLANE_NORMAL,
   add,
@@ -43,6 +45,7 @@ import {
   type Pt2,
 } from '../domain/wireEdit';
 import { isDrawTool, useEditor, type DrawCursor, type Hover } from '../state/editor';
+import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { addWires, canEditWires, commitWires, selectConnected } from '../state/wireCommands';
 
@@ -72,6 +75,10 @@ function facingPlane(camera: Camera): Plane {
 }
 
 /** Mantine keeps some closed modals mounted; an open one has a box. */
+/** Whether a key of the viewer's mouse setting is held. */
+const held = (setting: 'boxSelect' | 'addToSelection' | 'constrain' | 'followToggle', e: MouseEvent) =>
+  isHeld(useInput.getState().mouse[setting], e);
+
 const modalOpen = () => [...document.querySelectorAll('.mantine-Modal-content')].some((e) => e.getClientRects().length > 0);
 
 export interface EditSceneProps {
@@ -92,8 +99,8 @@ type Pending = {
   kind: 'pending';
   at: Pt2;
   hit: Hit | null;
-  shift: boolean;
-  toggle: boolean;
+  /** Adds the wire to the selection (or takes it out) instead of selecting it alone. */
+  add: boolean;
   box: boolean;
   draw: boolean;
 };
@@ -218,18 +225,18 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       return ed.draftPlane ?? (ed.plane === 'auto' ? facingPlane(latest.current.camera) : ed.plane);
     };
 
-    const drawCursor = (p: Pt2, shift: boolean): DrawCursor | null => {
+    const drawCursor = (p: Pt2, constrain: boolean): DrawCursor | null => {
       const ed = useEditor.getState();
       const plane = drawPlane();
       const last = ed.draft.at(-1);
-      if (ed.vertexSnap && !(shift && last)) {
+      if (ed.vertexSnap && !(constrain && last)) {
         const s = snapTarget(p);
         if (s) return { point: s.point, plane, snap: s.snap };
       }
       const q = onPlane(p, plane, toWorld(last ?? ORIGIN));
       if (!q) return null;
       let point = toWire(q);
-      if (shift && last) return { point: snapAngle(last, point, plane, 15), plane, snap: 'free' };
+      if (constrain && last) return { point: snapAngle(last, point, plane, 15), plane, snap: 'free' };
       if (ed.gridSnap) point = snapToGrid(point, plane, latest.current.step);
       return { point: cleanPoint(point), plane, snap: ed.gridSnap ? 'grid' : 'free' };
     };
@@ -297,7 +304,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       const p = local(e);
       if (isDrawTool(ed.tool)) {
         el.style.cursor = 'crosshair';
-        const cursor = drawCursor(p, e.shiftKey);
+        const cursor = drawCursor(p, held('constrain', e));
         const last = ed.draft.at(-1);
         let hud: string | null = null;
         if (cursor && last) {
@@ -345,7 +352,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       } else {
         let sel = app.selectedWires;
         if (!sel.includes(hit.wire)) {
-          sel = d.shift || d.toggle ? [...sel, hit.wire] : [hit.wire];
+          sel = d.add ? [...sel, hit.wire] : [hit.wire];
           app.setSelection(sel, hit.wire);
         }
         const anchor = onPlane(d.at, plane, hit.grab);
@@ -364,22 +371,24 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       const ed = useEditor.getState();
       const p = local(e);
       const step = latest.current.step;
+      const constrain = held('constrain', e);
+      const follow = ed.follow !== held('followToggle', e);
       if (drag.kind === 'box') {
         ed.set({ hud: null, box: { x0: Math.min(drag.from.x, p.x), y0: Math.min(drag.from.y, p.y), x1: Math.max(drag.from.x, p.x), y1: Math.max(drag.from.y, p.y) } });
       } else if (drag.kind === 'move') {
         const q = onPlane(p, drag.plane, drag.through);
         if (!q) return;
         let d = sub(q, drag.anchor);
-        if (e.shiftKey) d = dominantAxis(d);
+        if (constrain) d = dominantAxis(d);
         if (ed.gridSnap) d = cleanPoint({ x: snapValue(d.x, step), y: snapValue(d.y, step), z: snapValue(d.z, step) });
         ed.set({
-          preview: transformWires(drag.base, drag.sel, translation(d), ed.follow !== e.altKey),
+          preview: transformWires(drag.base, drag.sel, translation(d), follow),
           hud: `移動 ΔX ${fmt(d.x)}  ΔY ${fmt(d.y)}  ΔZ ${fmt(d.z)} m（${PLANE_LABEL[drag.plane]} 面）`,
         });
       } else if (drag.kind === 'end') {
         let target: Point3 | null = null;
         let snapped = '';
-        if (ed.vertexSnap && !e.shiftKey) {
+        if (ed.vertexSnap && !constrain) {
           const s = snapTarget(p, drag.origin);
           if (s) {
             target = s.point;
@@ -390,13 +399,13 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
           const q = onPlane(p, drag.plane, toWorld(drag.origin));
           if (!q) return;
           target = toWire(q);
-          if (e.shiftKey) {
+          if (constrain) {
             const d = dominantAxis(sub(target, drag.origin));
             const k = (['x', 'y', 'z'] as const).find((a) => d[a] !== 0) ?? 'x';
             target = { ...drag.origin, [k]: ed.gridSnap ? snapValue(target[k], step) : target[k] };
           } else if (ed.gridSnap) target = snapToGrid(target, drag.plane, step);
         }
-        const wires = moveEndpoint(drag.base, drag.wire, drag.end, target, ed.follow !== e.altKey, drag.sel);
+        const wires = moveEndpoint(drag.base, drag.wire, drag.end, target, follow, drag.sel);
         const w = wires[drag.wire];
         ed.set({ preview: wires, hud: `端点 ${fmtPoint(target)}  長さ ${fmt(distance(w.start, w.end))} m${snapped}` });
       }
@@ -422,7 +431,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
       if (p.x > L.size.width - VIEW_GIZMO_PX && p.y > L.size.height - VIEW_GIZMO_PX) return;
       // the gizmo under the pointer takes the drag (`axis` is set while it is hovered)
       if ((gizmo.current as unknown as { axis: string | null } | null)?.axis) return;
-      const mods = { shift: e.shiftKey, toggle: e.metaKey || e.ctrlKey };
+      const add = held('addToSelection', e);
       if (isDrawTool(ed.tool)) {
         if (e.button === 2 && ed.draft.length) {
           // right click ends the line instead of panning
@@ -432,13 +441,13 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         }
         if (e.button !== 0) return;
         // the camera still turns when the pointer is dragged
-        drag = { kind: 'pending', at: p, hit: null, box: false, draw: true, ...mods };
+        drag = { kind: 'pending', at: p, hit: null, add, box: false, draw: true };
       } else {
         if (e.button !== 0) return;
         const hit = pickEnd(p) ?? pickWire(p);
-        const box = !hit && e.shiftKey;
+        const box = !hit && held('boxSelect', e);
         if (hit || box) e.stopPropagation();
-        drag = { kind: 'pending', at: p, hit, box, draw: false, ...mods };
+        drag = { kind: 'pending', at: p, hit, add, box, draw: false };
       }
       window.addEventListener('pointermove', onWindowMove);
       window.addEventListener('pointerup', onWindowUp);
@@ -472,10 +481,10 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         app.setSelection([...app.selectedWires, ...hits]);
       } else if (d.kind === 'pending') {
         if (d.draw) {
-          const c = drawCursor(local(e), e.shiftKey);
+          const c = drawCursor(local(e), held('constrain', e));
           if (c) placePoint(c.point, c.plane);
         } else if (d.hit) {
-          if (d.toggle || d.shift) app.toggleWire(d.hit.wire);
+          if (d.add) app.toggleWire(d.hit.wire);
           else app.selectWire(d.hit.wire);
         } else if (!d.box) {
           app.setSelection([]);
@@ -498,7 +507,7 @@ function PointerController({ wires, display, offset, step, editable, gizmo }: Ed
         return;
       }
       const hit = pickWire(local(e));
-      if (hit) selectConnected(hit.wire, e.shiftKey || e.metaKey || e.ctrlKey);
+      if (hit) selectConnected(hit.wire, held('addToSelection', e));
     };
     const onContextMenu = (e: MouseEvent) => {
       if (isDrawTool(useEditor.getState().tool)) e.preventDefault();

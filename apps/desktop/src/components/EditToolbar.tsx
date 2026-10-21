@@ -6,7 +6,6 @@ import {
   Checkbox,
   Divider,
   Group,
-  Kbd,
   Menu,
   Modal,
   NumberInput,
@@ -40,6 +39,7 @@ import { evaluate } from '../domain/expr';
 import { wavelength } from '../domain/project';
 import { AXES, type Axis } from '../domain/wireEdit';
 import { useEditor, type PlaneMode, type Tool } from '../state/editor';
+import { useHeldText, useKeyText } from '../state/input';
 import { useApp } from '../state/store';
 import {
   alignSelected,
@@ -50,16 +50,24 @@ import {
   rotateSelected,
   transformSelected,
 } from '../state/wireCommands';
+import { KeyHint } from './InputSettings';
 
-const TOOLS: { tool: Tool; label: string; key: string; help: string; icon: ReactNode }[] = [
-  { tool: 'select', label: '選択', key: 'V', help: 'クリックで選択、Shift / ⌘ で追加、Shift + ドラッグで範囲選択、ダブルクリックでつながったワイヤー。ワイヤーや端点はそのままドラッグで動かせます', icon: <IconPointer size={15} /> },
-  { tool: 'move', label: '移動', key: 'G', help: '矢印・平面のハンドルをドラッグして、選択を軸に沿って動かします', icon: <IconArrowsMove size={15} /> },
-  { tool: 'rotate', label: '回転', key: 'R', help: 'リングをドラッグして、選択をその中心で回します', icon: <IconRotate size={15} /> },
-  { tool: 'wire', label: 'ワイヤーを描く', key: 'W', help: 'クリックで点を打ってつなげます。始点をクリックで閉じたループ。数字を打つと長さを指定。Enter・Esc・右クリックで終了', icon: <IconLine size={15} /> },
-  { tool: 'rect', label: '四角ループ', key: 'Q', help: '対角の 2 点をクリックして、作図面の上に四角形のループを描きます', icon: <IconRectangle size={15} /> },
-  { tool: 'polygon', label: '多角形ループ', key: 'O', help: '中心と 1 つの頂点をクリックして、正多角形のループを描きます。数字を打つと半径を指定', icon: <IconHexagon size={15} /> },
+/** The keys held for selecting, as written in the help. */
+type Held = { add: string; box: string };
+
+const TOOLS: { tool: Tool; label: string; help: (h: Held) => string; icon: ReactNode }[] = [
+  {
+    tool: 'select',
+    label: '選択',
+    help: (h) => `クリックで選択、${h.add} で追加、${h.box} + ドラッグで範囲選択、ダブルクリックでつながったワイヤー。ワイヤーや端点はそのままドラッグで動かせます`,
+    icon: <IconPointer size={15} />,
+  },
+  { tool: 'move', label: '移動', help: () => '矢印・平面のハンドルをドラッグして、選択を軸に沿って動かします', icon: <IconArrowsMove size={15} /> },
+  { tool: 'rotate', label: '回転', help: () => 'リングをドラッグして、選択をその中心で回します', icon: <IconRotate size={15} /> },
+  { tool: 'wire', label: 'ワイヤーを描く', help: () => 'クリックで点を打ってつなげます。始点をクリックで閉じたループ。数字を打つと長さを指定。Enter・Esc・右クリックで終了', icon: <IconLine size={15} /> },
+  { tool: 'rect', label: '四角ループ', help: () => '対角の 2 点をクリックして、作図面の上に四角形のループを描きます', icon: <IconRectangle size={15} /> },
+  { tool: 'polygon', label: '多角形ループ', help: () => '中心と 1 つの頂点をクリックして、正多角形のループを描きます。数字を打つと半径を指定', icon: <IconHexagon size={15} /> },
 ];
-export const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(TOOLS.map((t) => [t.key, t.tool]));
 
 const STEPS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 5];
 const stepLabel = (m: number) => (m < 0.01 ? `${m * 1000} mm` : m < 1 ? `${Number((m * 100).toFixed(1))} cm` : `${m} m`);
@@ -67,6 +75,7 @@ const stepLabel = (m: number) => (m < 0.01 ? `${m * 1000} mm` : m < 1 ? `${Numbe
 export function EditToolbar({ autoStep, editable }: { autoStep: number; editable: boolean }) {
   const tool = useEditor((s) => s.tool);
   const setTool = useEditor((s) => s.setTool);
+  const held = { add: useHeldText('addToSelection'), box: useHeldText('boxSelect') };
   return (
     <div className="view3d-toolbar">
       <Paper className="view3d-toolbar-row" shadow="xs" withBorder>
@@ -83,9 +92,9 @@ export function EditToolbar({ autoStep, editable }: { autoStep: number; editable
                     <Text size="xs" fw={600}>
                       {t.label}
                     </Text>
-                    <Kbd size="xs">{t.key}</Kbd>
+                    <KeyHint id={`tool.${t.tool}`} />
                   </Group>
-                  <Text size="xs">{t.help}</Text>
+                  <Text size="xs">{t.help(held)}</Text>
                 </>
               }
             >
@@ -112,6 +121,8 @@ export function EditToolbar({ autoStep, editable }: { autoStep: number; editable
 
 function SnapSettings({ autoStep }: { autoStep: number }) {
   const s = useEditor();
+  const constrainKey = useHeldText('constrain');
+  const followKey = useHeldText('followToggle');
   const stepValue = s.step == null ? 'auto' : String(s.step);
   return (
     <Popover position="bottom-start" shadow="md" withinPortal>
@@ -139,7 +150,7 @@ function SnapSettings({ autoStep }: { autoStep: number }) {
           </Group>
           <Switch label="端点・中点に吸着" checked={s.vertexSnap} onChange={(e) => s.set({ vertexSnap: e.currentTarget.checked })} />
           <Switch label="回転を 15° 刻みにする" checked={s.angleSnap} onChange={(e) => s.set({ angleSnap: e.currentTarget.checked })} />
-          <Tooltip label="動かした端点に接していたほかのワイヤーの端も一緒に動かします（Alt を押しながらドラッグで一時的に切り替え）" multiline w={240}>
+          <Tooltip label={`動かした端点に接していたほかのワイヤーの端も一緒に動かします（${followKey} を押しながらドラッグで一時的に切り替え）`} multiline w={240}>
             <div>
               <Switch label="つながりを保つ" checked={s.follow} onChange={(e) => s.set({ follow: e.currentTarget.checked })} />
             </div>
@@ -162,7 +173,7 @@ function SnapSettings({ autoStep }: { autoStep: number }) {
               ]}
             />
             <Text size="xs" c="dimmed" mt={4}>
-              自動は視線に最も向いた面。直前の点を通る面に描きます。Shift で 15° 刻み。
+              自動は視線に最も向いた面。直前の点を通る面に描きます。{constrainKey} で 15° 刻み。
             </Text>
           </div>
           <NumberInput
@@ -183,6 +194,8 @@ function SelectionBar({ editable }: { editable: boolean }) {
   const count = useApp((s) => s.selectedWires.length);
   const open = useEditor((s) => s.transformOpen);
   const set = useEditor((s) => s.set);
+  const duplicateKey = useKeyText('duplicate');
+  const deleteKey = useKeyText('delete');
   if (count === 0) return null;
   const axisItems = (f: (a: Axis) => void, label: (a: string) => string) =>
     AXES.map((a) => (
@@ -200,7 +213,7 @@ function SelectionBar({ editable }: { editable: boolean }) {
           <IconAdjustments size={15} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label="その場に複製 (⌘D)">
+      <Tooltip label={duplicateKey ? `その場に複製 (${duplicateKey})` : 'その場に複製'}>
         <ActionIcon aria-label="複製" variant="subtle" color="gray" disabled={!editable} onClick={duplicateSelected}>
           <IconCopy size={15} />
         </ActionIcon>
@@ -253,7 +266,7 @@ function SelectionBar({ editable }: { editable: boolean }) {
           ])}
         </Menu.Dropdown>
       </Menu>
-      <Tooltip label="削除 (Delete)">
+      <Tooltip label={deleteKey ? `削除 (${deleteKey})` : '削除'}>
         <ActionIcon aria-label="選択したワイヤーを削除" variant="subtle" color="red" disabled={!editable} onClick={deleteSelected}>
           <IconTrash size={15} />
         </ActionIcon>

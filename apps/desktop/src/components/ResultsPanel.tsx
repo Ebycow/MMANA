@@ -2,6 +2,7 @@ import { Alert, Badge, Button, Center, Group, Kbd, Paper, SimpleGrid, Stack, Tab
 import { IconAlertTriangle, IconChartDots3, IconCircuitGround, IconPlayerPlay, IconRadar2, IconWaveSine } from '@tabler/icons-react';
 import type { CalcResult } from '../api/types';
 import { PolarLegend, PolarPlot, PolarScaleSwitch } from '../charts/PolarPlot';
+import { useKeyText } from '../state/input';
 import { useApp } from '../state/store';
 import { Panel } from './Panel';
 import { SweepPanel } from './SweepPanel';
@@ -138,6 +139,7 @@ function Sources({ r }: { r: CalcResult }) {
 function EmptyState() {
   const calculate = useApp((s) => s.calculate);
   const calculating = useApp((s) => s.calculating);
+  const calcKey = useKeyText('calculate');
   return (
     <Center h="100%">
       <Stack align="center" gap="xs">
@@ -151,9 +153,11 @@ function EmptyState() {
         <Button leftSection={<IconPlayerPlay size={14} />} onClick={calculate} loading={calculating} mt={4}>
           計算する
         </Button>
-        <Text size="xs" c="dimmed">
-          <Kbd size="xs">⌘</Kbd> + <Kbd size="xs">Enter</Kbd> でも計算できます
-        </Text>
+        {calcKey && (
+          <Text size="xs" c="dimmed">
+            <Kbd size="xs">{calcKey}</Kbd> でも計算できます
+          </Text>
+        )}
       </Stack>
     </Center>
   );

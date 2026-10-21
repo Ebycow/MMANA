@@ -22,7 +22,6 @@ import {
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import { useHotkeys } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
 import {
@@ -63,6 +62,7 @@ import { evaluate } from '../domain/expr';
 import { wavelength } from '../domain/project';
 import { formatSegmentation, parseSegmentation } from '../domain/segmentation';
 import { useDisplay } from '../state/display';
+import { useCommandKeys } from '../state/input';
 import { useApp } from '../state/store';
 import { NumCell, TextCell, format } from './Cells';
 import { ElementPreview } from './ElementPreview';
@@ -181,10 +181,7 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
     setSteps([...steps, undone[0]]);
     setUndone(undone.slice(1));
   };
-  useHotkeys([
-    ['mod+Z', undo],
-    ['mod+shift+Z', redo],
-  ]);
+  useCommandKeys({ undo, redo });
 
   const apply = () => {
     if (!edit || !current) return;

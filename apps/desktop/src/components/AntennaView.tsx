@@ -3,16 +3,21 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
 import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Color, Vector3 } from 'three';
+import { Color, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { Point3 } from '../api/types';
 import { bounds, currentPolylines, displayWires, pulseLocation, type DisplayWire } from '../domain/geometry';
+import type { CameraAction } from '../domain/shortcuts';
 import { niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
+import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { EditScene } from './EditController';
 import { EditToolbar } from './EditToolbar';
 import { Panel } from './Panel';
+
+// an unassigned button does nothing in OrbitControls
+const CAMERA_MOUSE: Record<CameraAction, MOUSE> = { rotate: MOUSE.ROTATE, pan: MOUSE.PAN, zoom: MOUSE.DOLLY, none: -1 as MOUSE };
 
 type Preset = 'iso' | 'top' | 'front' | 'side';
 const PRESET_DIRS: Record<Preset, [number, number, number]> = {
@@ -191,6 +196,11 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, invalidate, size } = useThree();
+  const mouse = useInput((s) => s.mouse);
+  const mouseButtons = useMemo(
+    () => ({ LEFT: CAMERA_MOUSE[mouse.buttons.left], MIDDLE: CAMERA_MOUSE[mouse.buttons.middle], RIGHT: CAMERA_MOUSE[mouse.buttons.right] }),
+    [mouse.buttons],
+  );
 
   const colors = useMemo(
     () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--chart-grid'), axis: cssVar('--chart-axis') }),
@@ -230,7 +240,17 @@ function Scene({ wires, box, currents, preset, scheme, groundZ }: SceneProps) {
     <>
       <ambientLight intensity={1.4} />
       <directionalLight position={[5, -5, 10]} intensity={1.2} />
-      <OrbitControls ref={controls} makeDefault enableDamping={false} onChange={() => invalidate()} />
+      <OrbitControls
+        ref={controls}
+        makeDefault
+        enableDamping={false}
+        mouseButtons={mouseButtons}
+        // a negative speed turns the zoom round
+        zoomSpeed={mouse.reverseZoom ? -mouse.zoomSpeed : mouse.zoomSpeed}
+        zoomToCursor={mouse.zoomToCursor}
+        rotateSpeed={mouse.rotateSpeed}
+        onChange={() => invalidate()}
+      />
 
       {/* ground plane (real / perfect ground) or a reference grid at z = 0 */}
       <Grid

@@ -6,14 +6,15 @@ import { useEffect } from 'react';
 import { EngineError, files, isTauri, startupFile, transport } from './api/transport';
 import { AppHeader, type FileActions } from './components/AppHeader';
 import { ElementEditor } from './components/ElementEditor';
+import { InputSettings } from './components/InputSettings';
 import { OptimizerDialog } from './components/OptimizerDialog';
 import { OptimizerResults } from './components/OptimizerResults';
 import { SamplesModal } from './components/SamplesModal';
 import { StatusBar } from './components/StatusBar';
-import { TOOL_KEYS } from './components/EditToolbar';
 import { Workspace } from './components/Workspace';
 import { loadSampleBytes, samples as samplesList, type Sample } from './domain/samples';
-import { useEditor } from './state/editor';
+import { useEditor, type Tool } from './state/editor';
+import { useCommandKeys, useInput } from './state/input';
 import { useApp } from './state/store';
 import { canEditWires, copySelected, cutSelected, deleteSelected, duplicateSelected, paste, selectAll } from './state/wireCommands';
 
@@ -104,38 +105,41 @@ export function App() {
   const wireKey = (f: () => void) => () => {
     if (canEditWires() && !samplesOpen && !useEditor.getState().transformOpen) f();
   };
-  useHotkeys([
-    ['mod+Enter', () => s.getState().calculate(), { preventDefault: true }],
-    ['mod+O', actions.open],
-    ['mod+S', actions.save],
-    ['mod+shift+S', actions.saveAs],
-    // the element editor has its own undo while it is open; a running
-    // optimisation applies its result to the antenna it started from
-    ['mod+Z', () => !s.getState().elementEditorOpen && !s.getState().optimizer.running && s.getState().undo()],
-    ['mod+shift+Z', () => !s.getState().elementEditorOpen && !s.getState().optimizer.running && s.getState().redo()],
-    ['Escape', () => s.getState().selectWire(null)],
-    ['Delete', wireKey(deleteSelected)],
-    ['Backspace', wireKey(deleteSelected)],
-    ['mod+D', wireKey(duplicateSelected)],
-    ['mod+C', copySelected],
-    ['mod+X', wireKey(cutSelected)],
-    ['mod+V', wireKey(paste)],
-    ['mod+A', selectAll],
-    ...Object.entries(TOOL_KEYS).map(
-      ([key, tool]) => [key, tool === 'select' ? () => useEditor.getState().setTool(tool) : wireKey(() => useEditor.getState().setTool(tool))] as [string, () => void],
-    ),
-  ]);
-  // Cmd+Enter must also work while typing in a cell
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && e.target instanceof HTMLInputElement) {
-        e.target.blur();
-        s.getState().calculate();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [s]);
+  // the element editor has its own undo while it is open; a running
+  // optimisation applies its result to the antenna it started from
+  const historyKey = (f: () => void) => () => {
+    if (!s.getState().elementEditorOpen && !s.getState().optimizer.running) f();
+  };
+  const tool = (t: Tool) => (t === 'select' ? () => useEditor.getState().setTool(t) : wireKey(() => useEditor.getState().setTool(t)));
+  useCommandKeys(
+    {
+      newFile: actions.newFile,
+      open: actions.open,
+      openSample: actions.openSample,
+      save: actions.save,
+      saveAs: actions.saveAs,
+      undo: historyKey(() => s.getState().undo()),
+      redo: historyKey(() => s.getState().redo()),
+      copy: copySelected,
+      cut: wireKey(cutSelected),
+      paste: wireKey(paste),
+      duplicate: wireKey(duplicateSelected),
+      selectAll,
+      delete: wireKey(deleteSelected),
+      calculate: () => s.getState().calculate(),
+      optimize: () => !s.getState().optimizer.running && s.getState().setOptimizer({ dialogOpen: true }),
+      settings: () => useInput.getState().setDialogOpen(true),
+      'tool.select': tool('select'),
+      'tool.move': tool('move'),
+      'tool.rotate': tool('rotate'),
+      'tool.wire': tool('wire'),
+      'tool.rect': tool('rect'),
+      'tool.polygon': tool('polygon'),
+    },
+    // calculating must also work while typing in a cell
+    ['calculate'],
+  );
+  useHotkeys([['Escape', () => s.getState().selectWire(null)]]);
 
   // automatic recalculation
   const project = useApp((st) => st.project);
@@ -204,6 +208,7 @@ export function App() {
       <ElementEditor />
       <OptimizerDialog />
       <OptimizerResults />
+      <InputSettings />
     </AppShell>
   );
 }

@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Divider, Group, Kbd, Menu, Switch, Text, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, Tooltip, useMantineColorScheme } from '@mantine/core';
 import {
   IconAntenna,
   IconArrowBackUp,
@@ -9,14 +9,17 @@ import {
   IconFile,
   IconFileImport,
   IconFolderOpen,
+  IconKeyboard,
   IconListDetails,
   IconMoon,
   IconPlayerPlay,
   IconSun,
   IconTarget,
 } from '@tabler/icons-react';
+import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
 import { useApp } from '../state/store';
+import { KeyHint } from './InputSettings';
 
 export interface FileActions {
   newFile: () => void;
@@ -25,8 +28,6 @@ export interface FileActions {
   save: () => void;
   saveAs: () => void;
 }
-
-const MOD = navigator.platform.toLowerCase().includes('mac') ? '⌘' : 'Ctrl';
 
 const PANES: [PaneId, string][] = [
   ['editor', 'アンテナ（ワイヤー表など）'],
@@ -51,6 +52,9 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const shown = useLayout((s) => s.shown);
   const setShown = useLayout((s) => s.setShown);
   const shownCount = PANES.filter(([id]) => shown[id]).length;
+  const openSettings = useInput((s) => s.setDialogOpen);
+  const undoKey = useKeyText('undo');
+  const redoKey = useKeyText('redo');
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const dark = colorScheme === 'dark';
 
@@ -70,20 +74,20 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Button>
         </Menu.Target>
         <Menu.Dropdown>
-          <Menu.Item leftSection={<IconFile size={14} />} onClick={actions.newFile}>
+          <Menu.Item leftSection={<IconFile size={14} />} rightSection={<KeyHint id="newFile" />} onClick={actions.newFile}>
             新規作成
           </Menu.Item>
-          <Menu.Item leftSection={<IconFolderOpen size={14} />} rightSection={<Kbd size="xs">{MOD} O</Kbd>} onClick={actions.open}>
+          <Menu.Item leftSection={<IconFolderOpen size={14} />} rightSection={<KeyHint id="open" />} onClick={actions.open}>
             開く…
           </Menu.Item>
-          <Menu.Item leftSection={<IconFileImport size={14} />} onClick={actions.openSample}>
+          <Menu.Item leftSection={<IconFileImport size={14} />} rightSection={<KeyHint id="openSample" />} onClick={actions.openSample}>
             サンプルを開く…
           </Menu.Item>
           <Menu.Divider />
-          <Menu.Item leftSection={<IconDeviceFloppy size={14} />} rightSection={<Kbd size="xs">{MOD} S</Kbd>} onClick={actions.save}>
+          <Menu.Item leftSection={<IconDeviceFloppy size={14} />} rightSection={<KeyHint id="save" />} onClick={actions.save}>
             保存
           </Menu.Item>
-          <Menu.Item rightSection={<Kbd size="xs">{MOD} ⇧ S</Kbd>} onClick={actions.saveAs}>
+          <Menu.Item rightSection={<KeyHint id="saveAs" />} onClick={actions.saveAs}>
             名前を付けて保存…
           </Menu.Item>
         </Menu.Dropdown>
@@ -108,13 +112,25 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           ))}
         </Menu.Dropdown>
       </Menu>
+      <Menu position="bottom-start" shadow="md" width={260}>
+        <Menu.Target>
+          <Button variant="subtle" color="gray" rightSection={<IconChevronDown size={14} />}>
+            設定
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconKeyboard size={14} />} rightSection={<KeyHint id="settings" />} onClick={() => openSettings(true)}>
+            キーボードとマウス…
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
       <Group gap={2} wrap="nowrap">
-        <Tooltip label={`元に戻す (${MOD} Z)`}>
+        <Tooltip label={undoKey ? `元に戻す (${undoKey})` : '元に戻す'}>
           <ActionIcon aria-label="元に戻す" disabled={!canUndo} onClick={undo}>
             <IconArrowBackUp size={17} />
           </ActionIcon>
         </Tooltip>
-        <Tooltip label={`やり直す (${MOD} ⇧ Z)`}>
+        <Tooltip label={redoKey ? `やり直す (${redoKey})` : 'やり直す'}>
           <ActionIcon aria-label="やり直す" disabled={!canRedo} onClick={redo}>
             <IconArrowForwardUp size={17} />
           </ActionIcon>
@@ -149,7 +165,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
       <Tooltip label="編集するたびに自動で再計算します">
         <Switch label="自動計算" checked={autoCalc} onChange={(e) => setAutoCalc(e.currentTarget.checked)} />
       </Tooltip>
-      <Button size="sm" leftSection={<IconPlayerPlay size={15} />} loading={calculating} onClick={calculate} rightSection={<Kbd size="xs">{MOD} ↵</Kbd>}>
+      <Button size="sm" leftSection={<IconPlayerPlay size={15} />} loading={calculating} onClick={calculate} rightSection={<KeyHint id="calculate" />}>
         計算
       </Button>
       <Tooltip label={dark ? 'ライトモード' : 'ダークモード'}>
