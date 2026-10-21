@@ -53,6 +53,9 @@ pub const PMAX: usize = 8192;
 pub(crate) const NULLV: f64 = 1.0e-99;
 pub(crate) const PAI: f64 = std::f64::consts::PI;
 pub(crate) const PAI2: f64 = PAI * 2.0;
+/// A wire end within this fraction of the wire's length of the ground is
+/// on it (the original asks for exactly 0).
+pub(crate) const GROUND_CONTACT: f64 = 1e-9;
 
 #[inline]
 pub(crate) fn sgn(c: i32) -> i32 {

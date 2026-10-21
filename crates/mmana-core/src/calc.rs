@@ -215,7 +215,11 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         return Err(CalcError::NoFiniteSolution);
     }
     let mut warnings = Vec::new();
-    if project.environment.ground != GroundKind::FreeSpace && ap.min_z + project.environment.height < 0.0 {
+    // (an end an ulp below the ground is on it, see `GROUND_CONTACT`)
+    let longest = ap.wz.iter().map(|w| (w.x2 - w.x1).hypot(w.y2 - w.y1).hypot(w.z2 - w.z1)).fold(0.0, f64::max);
+    if project.environment.ground != GroundKind::FreeSpace
+        && ap.min_z + project.environment.height < -crate::engine::GROUND_CONTACT * longest
+    {
         warnings.push("some wires are below ground".to_owned());
     }
     // a passive antenna always takes power; less than none means the method
