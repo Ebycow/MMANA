@@ -46,7 +46,7 @@ impl AntDef {
         let bf = to_half_width(name).to_ascii_uppercase();
         let b = bf.as_bytes();
         match b.first() {
-            Some(c) if c.is_ascii_digit() => leading_uint(&bf),
+            Some(c) if c.is_ascii_digit() => leading_uint(&bf).unwrap_or(0),
             Some(b'W') => {
                 let digits = b[1..].iter().take_while(|c| c.is_ascii_digit()).count();
                 let wire_part = &bf[1..1 + digits];
@@ -56,10 +56,12 @@ impl AntDef {
                     Some(_) => return 0,
                     None => (b'C', ""),
                 };
-                let n = if rest.is_empty() { 0 } else { leading_int(rest) };
+                let n = if rest.is_empty() { Some(0) } else { leading_int(rest) };
                 let mut w: i64 = 0;
                 if !wire_part.is_empty() {
-                    w = leading_uint(wire_part) as i64;
+                    // a number past i32 is no wire, not the wire it wraps to
+                    let Some(no) = leading_uint(wire_part) else { return 0 };
+                    w = no as i64;
                     if w != 0 {
                         w -= 1;
                     }
@@ -68,12 +70,14 @@ impl AntDef {
                     }
                 }
                 let Some(wp) = self.wires.get(w as usize) else { return 0 };
+                let Some(n) = n else { return 0 };
                 match kind {
-                    b'C' => (wp.pmax / 2) + wp.pno + n,
-                    b'B' => wp.pno + n,
-                    b'E' => wp.pno + wp.pmax - n,
-                    _ => 0,
+                    b'C' => (wp.pmax / 2 + wp.pno).checked_add(n),
+                    b'B' => wp.pno.checked_add(n),
+                    b'E' => (wp.pno + wp.pmax).checked_sub(n),
+                    _ => None,
                 }
+                .unwrap_or(0)
             }
             _ => 0,
         }
@@ -92,21 +96,22 @@ pub(crate) fn to_half_width(s: &str) -> String {
         .collect()
 }
 
-/// `sscanf("%u")` on the leading digits.
-fn leading_uint(s: &str) -> i32 {
+/// `sscanf("%u")` on the leading digits: 0 without digits, `None` past
+/// `i32::MAX` (the original wraps such a number onto a small one).
+fn leading_uint(s: &str) -> Option<i32> {
     let digits: String = s.trim_start().chars().take_while(char::is_ascii_digit).collect();
-    digits.parse::<i64>().map_or(0, |v| v as i32)
+    if digits.is_empty() { Some(0) } else { digits.parse::<i32>().ok() }
 }
 
 /// `sscanf("%d")` on the leading signed integer.
-fn leading_int(s: &str) -> i32 {
+fn leading_int(s: &str) -> Option<i32> {
     let s = s.trim_start();
     let (sign, body) = match s.as_bytes().first() {
         Some(b'-') => (-1, &s[1..]),
         Some(b'+') => (1, &s[1..]),
         _ => (1, s),
     };
-    sign * leading_uint(body)
+    leading_uint(body).map(|v| sign * v)
 }
 
 #[cfg(test)]
@@ -159,6 +164,18 @@ mod tests {
         assert_eq!(ap.copy_pulse_no("0", 1), 0);
         // the copy's wire number is already in the name
         assert_eq!(ap.copy_pulse_no("w3c", 1), 24);
+    }
+
+    #[test]
+    fn numbers_past_i32_are_invalid_not_wrapped() {
+        let ap = two_wires();
+        // 2^32 + 1 wraps to 1
+        assert_eq!(ap.pulse_no("4294967297"), 0);
+        assert_eq!(ap.pulse_no("w4294967297c"), 0);
+        assert_eq!(ap.pulse_no("w1b4294967297"), 0);
+        assert_eq!(ap.pulse_no("w1c2147483647"), 0);
+        assert_eq!(ap.pulse_no("w1e-2147483648"), 0);
+        assert_eq!(ap.pulse_no("w2b2147483647"), 0);
     }
 
     #[test]
