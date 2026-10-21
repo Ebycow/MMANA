@@ -59,18 +59,50 @@ textarea {
 
 /* ---- layout ---- */
 .workspace {
-  display: grid;
-  grid-template-columns: minmax(480px, 44%) minmax(0, 1fr);
-  gap: 8px;
   padding: 8px;
   height: 100%;
   box-sizing: border-box;
 }
-.right-column {
-  display: grid;
-  grid-template-rows: minmax(220px, 38%) minmax(0, 1fr);
-  gap: 8px;
-  min-height: 0;
+.workspace-column {
+  height: 100%;
+}
+.workspace-pane {
+  display: flex;
+  flex-direction: column;
+}
+.workspace-pane > .panel {
+  flex: 1;
+}
+/* the gap between panels doubles as the drag handle */
+.workspace-separator {
+  position: relative;
+  outline: none;
+}
+.workspace-separator[aria-orientation='vertical'] {
+  width: 8px;
+}
+.workspace-separator[aria-orientation='horizontal'] {
+  height: 8px;
+}
+.workspace-separator::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 120ms;
+}
+.workspace-separator[aria-orientation='vertical']::after {
+  width: 2px;
+}
+.workspace-separator[aria-orientation='horizontal']::after {
+  height: 2px;
+}
+.workspace-separator:hover::after,
+.workspace-separator:focus-visible::after,
+.workspace-separator[data-separator='active']::after {
+  background: var(--mantine-primary-color-filled);
 }
 .panel {
   background: var(--panel-bg);

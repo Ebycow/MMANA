@@ -2,19 +2,16 @@ import { AppShell } from '@mantine/core';
 import { useDisclosure, useHotkeys } from '@mantine/hooks';
 import { modals } from '@mantine/modals';
 import { notifications } from '@mantine/notifications';
-import { lazy, Suspense, useEffect } from 'react';
+import { useEffect } from 'react';
 import { EngineError, files, isTauri, startupFile, transport } from './api/transport';
 import { AppHeader, type FileActions } from './components/AppHeader';
-import { EditorPanel } from './components/EditorPanel';
 import { ElementEditor } from './components/ElementEditor';
 import { OptimizerDialog } from './components/OptimizerDialog';
 import { OptimizerResults } from './components/OptimizerResults';
-import { Panel } from './components/Panel';
-import { PanelBoundary } from './components/PanelBoundary';
-import { ResultsPanel } from './components/ResultsPanel';
 import { SamplesModal } from './components/SamplesModal';
 import { StatusBar } from './components/StatusBar';
 import { TOOL_KEYS } from './components/EditToolbar';
+import { Workspace } from './components/Workspace';
 import { loadSampleBytes, samples as samplesList, type Sample } from './domain/samples';
 import { useEditor } from './state/editor';
 import { useApp } from './state/store';
@@ -43,9 +40,6 @@ function confirmDiscard(): Promise<boolean> {
 function showWarnings(warnings: string[]) {
   if (warnings.length) notifications.show({ color: 'yellow', title: 'ファイルの読み込みで注意があります', message: warnings.join('\n') });
 }
-
-// three.js is the largest dependency; load the 3D view in its own chunk
-const AntennaView = lazy(() => import('./components/AntennaView').then((m) => ({ default: m.AntennaView })));
 
 let startupSampleHandled = false;
 
@@ -187,7 +181,6 @@ export function App() {
   // keep the window title in sync
   const fileName = useApp((st) => st.fileName);
   const dirty = useApp((st) => st.dirty);
-  const result = useApp((st) => st.result);
   useEffect(() => {
     const title = `${dirty ? '● ' : ''}${fileName} — MMANA`;
     document.title = title;
@@ -201,21 +194,7 @@ export function App() {
       </AppShell.Header>
       <AppShell.Main style={{ height: '100dvh' }}>
         <div style={{ height: 'calc(100dvh - 52px - 26px)' }}>
-          <div className="workspace">
-            <PanelBoundary title="アンテナ" resetKey={fileName}>
-              <EditorPanel />
-            </PanelBoundary>
-            <div className="right-column">
-              <PanelBoundary title="アンテナ形状" resetKey={fileName}>
-                <Suspense fallback={<Panel title="アンテナ形状">{null}</Panel>}>
-                  <AntennaView />
-                </Suspense>
-              </PanelBoundary>
-              <PanelBoundary title="計算結果" resetKey={result}>
-                <ResultsPanel />
-              </PanelBoundary>
-            </div>
-          </div>
+          <Workspace />
         </div>
       </AppShell.Main>
       <AppShell.Footer>
