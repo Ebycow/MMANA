@@ -299,6 +299,8 @@ export function issueMessage(i: SetupIssue): string {
       return `${v}自由空間なので地上高を変化させても意味はありません。`;
     case 'duplicate':
       return `${v}変数 ${other} と重複しています。`;
+    case 'overlapping':
+      return `${v}変数 ${other} と同じ座標や値を動かすため、動かした順でアンテナが変わります（試行の値から計算したアンテナに戻せません）。どちらかを外してください。`;
     case 'missingVariable':
       return `${v}変数 ${other} は存在しません。`;
     case 'linkLoop':

@@ -337,7 +337,10 @@ export interface components {
         CalcResult: {
             /**
              * @description Current magnitude per pulse as MMANA plots it: signed by the dominant
-             *     direction; index = pulse − 1.
+             *     direction; index = pulse − 1. Like the original's list it ends at the
+             *     pulse set last, so it can be shorter than `pulseCount` (a loop's
+             *     closing pulse is left out), and a pulse it gives no value is
+             *     1.2345e-37. `currents` has every pulse.
              */
             currentDisplay: number[];
             currents: components["schemas"]["PulseCurrent"][];
@@ -607,7 +610,8 @@ export interface components {
             totalDb: number;
             /**
              * Format: double
-             * @description Vertically polarised gain (dBi), -999 when below 1e-30.
+             * @description Vertically polarised gain (dBi), -999 when below 1e-30 and below the
+             *     horizon of a ground.
              */
             verticalDb: number;
             /** Format: double */
@@ -677,7 +681,7 @@ export interface components {
             x: number;
         };
         /** @enum {string} */
-        IssueCode: "noVariables" | "tooManyVariables" | "missingTarget" | "zeroValue" | "sDomainLoad" | "heightInFreeSpace" | "duplicate" | "missingVariable" | "linkLoop" | "tooManyBands" | "bandWithoutSources" | "bandMissingSource" | "linkValueDiffers";
+        IssueCode: "noVariables" | "tooManyVariables" | "missingTarget" | "zeroValue" | "sDomainLoad" | "heightInFreeSpace" | "duplicate" | "overlapping" | "missingVariable" | "linkLoop" | "tooManyBands" | "bandWithoutSources" | "bandMissingSource" | "linkValueDiffers";
         /**
          * @description How a variable follows another one (連携). `variable` is the 0-based
          *     index of the variable it follows; a chain of links ends at an independent

@@ -1,0 +1,6 @@
+# sloper in polar form: the length about the centre alone; SWR
+file SLOPER.MAA
+weights 0 0 0 100 0 0 0
+minswr 1.1
+set 0 wirep 1 2
+limit 200
