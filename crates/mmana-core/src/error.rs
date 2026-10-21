@@ -45,6 +45,8 @@ pub enum CalcError {
     NoGroundMedia,
     #[error("the input power is not positive ({power} W), so the near field cannot be scaled to a power")]
     NonPositivePower { power: f64 },
+    #[error("the {what} are too large to represent; reduce the voltages, the power or the coordinates")]
+    NotRepresentable { what: &'static str },
     #[error("too many field points (maximum {max})")]
     TooManyFieldPoints { max: usize },
     #[error("a sweep has 1 to {max} points")]

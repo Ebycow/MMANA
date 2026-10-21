@@ -283,7 +283,9 @@ fn most_divided_conductor(ap: &AntDef) -> Option<(usize, i64)> {
 
 impl Solved {
     /// The standard MMANA result: impedance, gain, F/B, patterns, currents.
-    pub fn result(&self, project: &Project, opts: &CalcOptions) -> CalcResult {
+    /// Fails only when a value of it cannot be represented
+    /// ([`CalcError::NotRepresentable`]).
+    pub fn result(&self, project: &Project, opts: &CalcOptions) -> Result<CalcResult, CalcError> {
         let e = &self.engine;
         let ptn_f = match opts.pattern_resolution {
             PatternResolution::Fine => 1,
@@ -297,7 +299,7 @@ impl Solved {
             pattern::rescan_horizontal(e, &mut p, el, fbr);
         }
         let first = e.solutions[0];
-        CalcResult {
+        let r = CalcResult {
             frequency_mhz: e.f,
             wavelength_m: e.wavelength,
             pulse_count: e.n,
@@ -337,7 +339,9 @@ impl Solved {
                 })
                 .collect(),
             warnings: self.warnings.clone(),
-        }
+        };
+        validate::result(&r)?;
+        Ok(r)
     }
 
     fn currents(&self) -> Vec<PulseCurrent> {
@@ -378,6 +382,7 @@ impl Solved {
         }
         let mut out = Vec::new();
         self.engine.far_field(za, zc, nz, aa, ac, na, |s| out.push(s));
+        validate::far_samples(&out)?;
         Ok(out)
     }
 
@@ -387,7 +392,9 @@ impl Solved {
         if self.engine.pwr <= 0.0 {
             return Err(CalcError::NonPositivePower { power: self.engine.pwr });
         }
-        Ok(self.engine.near_field(spec))
+        let samples = self.engine.near_field(spec);
+        validate::near_samples(&samples)?;
+        Ok(samples)
     }
 
     /// `Str2PlusNo` on the calculated (stacked) model: the 1-based pulse a
@@ -422,7 +429,7 @@ fn patterns(p: &PatternState) -> Patterns {
 
 /// Convenience: solve and produce the standard result.
 pub fn calculate(project: &Project, opts: &CalcOptions) -> Result<CalcResult, CalcError> {
-    Ok(solve(project, opts)?.result(project, opts))
+    solve(project, opts)?.result(project, opts)
 }
 
 /// A pulse a source or load can be placed on, with the name that addresses it.
@@ -504,12 +511,14 @@ pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout
             WirePulses { wire: i + 1, pulses }
         })
         .collect();
-    Ok(PulseLayout {
+    let layout = PulseLayout {
         pulse_count: e.n,
         wires,
         sources: ap.sources.iter().take(ant.sources.len()).map(|c| position(c.plus_no)).collect(),
         loads: ap.loads.iter().take(ant.loads.len()).map(|l| position(l.plus_no)).collect(),
-    })
+    };
+    validate::layout(&layout)?;
+    Ok(layout)
 }
 
 /// How far `AntDef::stack` moves the first copy: along Y, along Z.

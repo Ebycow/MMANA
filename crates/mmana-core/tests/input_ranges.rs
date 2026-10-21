@@ -201,6 +201,14 @@ fn stacking() {
         ),
         case("an unused spacing is not read", |p, _| p.antenna.stack.horizontal_spacing = NAN, Ok(())),
         case(
+            "3 across 1e308 apart",
+            |p, _| {
+                p.antenna.stack.horizontal = 3;
+                p.antenna.stack.horizontal_spacing = 1e308;
+            },
+            out_of_range("stack horizontal extent", "a finite number", INF),
+        ),
+        case(
             "copies of an antenna that is mostly disabled wires",
             |p, _| {
                 let mut off = p.antenna.wires[0].clone();
@@ -457,6 +465,14 @@ fn sources_and_loads() {
             Err(CalcError::DuplicateSource { first: 1, second: 2, pulse: 9 }),
         ),
         case("negative voltage", |p, _| p.antenna.sources[0].voltage = -1.0, Ok(())),
+        // finite, but the currents pass f32 in the current display: the
+        // result used to carry 17 nulls
+        case("voltage 1e30", |p, _| p.antenna.sources[0].voltage = 1e30, Ok(())),
+        solve_only(
+            "voltage 1e100",
+            |p, _| p.antenna.sources[0].voltage = 1e100,
+            Err(CalcError::NotRepresentable { what: "currents" }),
+        ),
         // 2^32 + 1 wrapped to pulse 1
         solve_only(
             "pulse number past i32",
@@ -538,6 +554,12 @@ fn far_field_scans() {
         scan(axis(0.0, 1.0, 3), axis(INF, 1.0, 3)).map(|_| ()),
         out_of_range("azimuth start", "a finite number", INF)
     );
+    // each finite, but the third sample is 2e308: its angle used to be null
+    assert_eq!(
+        scan(axis(1e308, 1e308, 3), axis(0.0, 0.0, 1)).map(|_| ()),
+        out_of_range("zenith end", "a finite number", INF)
+    );
+    assert_eq!(scan(axis(1e308, -1e308, 3), axis(0.0, 0.0, 1)).unwrap().len(), 3);
     // counts that wrap are in allocation.rs, whose allocator stops a test
     // that would take gigabytes
     let max = Err(CalcError::TooManyFieldPoints { max: MAX_FIELD_POINTS });
@@ -566,6 +588,16 @@ fn near_field_scans() {
         Err(CalcError::OutOfRange { field, .. }) if field == "near-field power"
     ));
     assert_eq!(check(NearFieldSpec { y: axis(0.0, 1.0, -2), ..base }), out_of_range("y count", "0 or more", -2.0));
+    // finite, but the field at that power is past f64: used to be 9 nulls
+    assert_eq!(check(NearFieldSpec { power_w: 1e300, ..base }), Ok(()));
+    assert_eq!(
+        check(NearFieldSpec { power_w: 1e308, ..base }),
+        Err(CalcError::NotRepresentable { what: "near-field values" })
+    );
+    assert_eq!(
+        check(NearFieldSpec { x: axis(1e308, 1e308, 2), ..base }),
+        out_of_range("x end", "a finite number", INF)
+    );
     // 101 × 100 × 100 points, just over the limit (counts that wrap are in
     // allocation.rs)
     assert_eq!(

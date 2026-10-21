@@ -7,8 +7,8 @@
 //! `.maa` expressions (`1/0`) and the optimiser's trials do not. The ranges
 //! follow the desktop's input fields; `docs/guarantees.md` lists them.
 
-use crate::calc::CalcOptions;
-use crate::engine::{AxisRange, NearFieldSpec, SMAX, WZMAX};
+use crate::calc::{CalcOptions, CalcResult, Complex, PulseLayout};
+use crate::engine::{AxisRange, FarFieldSample, NearFieldSample, NearFieldSpec, SMAX, WZMAX};
 use crate::error::CalcError;
 use crate::model::{Antenna, Environment, GroundKind, LoadKind, Point3, Project, Segmentation};
 
@@ -161,6 +161,8 @@ fn stack(ant: &Antenna) -> Result<(), CalcError> {
         }
         if count > 1 {
             finite(|| format!("{field} spacing"), spacing)?;
+            // the copies are spread over (count - 1) spacings
+            finite(|| format!("{field} extent"), (count - 1) as f64 * spacing)?;
         }
     }
     if !st.is_stacked() {
@@ -306,7 +308,13 @@ fn axis(name: &str, a: &AxisRange) -> Result<(), CalcError> {
     if a.count < 0 {
         return Err(out_of_range(format!("{name} count"), "0 or more", a.count as f64));
     }
-    Ok(())
+    // and so must the last sample (1e308 + 1e308 is not). Halved, so the
+    // product does not overflow where the sum would not: 1e308 - 2 × 1e308
+    // is the finite -1e308
+    let steps = if a.step == 0.0 { 0.0 } else { (a.count.max(1) - 1) as f64 };
+    let half = 0.5 * a.start + 0.5 * a.step * steps;
+    let last = if half.abs() <= f64::MAX / 2.0 { 2.0 * half } else { half * f64::INFINITY };
+    finite(|| format!("{name} end"), last)
 }
 
 fn field_points(axes: &[&AxisRange]) -> Result<(), CalcError> {
@@ -338,4 +346,69 @@ pub(crate) fn sweep_points(points: usize) -> Result<(), CalcError> {
         return Err(CalcError::InvalidSweepPoints { max: MAX_SWEEP_POINTS });
     }
     Ok(())
+}
+
+// Results. Finite inputs can still give values past f64, or past f32 where a
+// result is stored as the original stores it: 1e100 V makes currents beyond
+// f32 in the current display, 1e308 W a near field beyond f64. Every result
+// is checked before it is returned, so none carries NaN or infinity (which
+// JSON would turn into null).
+
+fn representable(what: &'static str, values: impl IntoIterator<Item = f64>) -> Result<(), CalcError> {
+    if values.into_iter().all(f64::is_finite) { Ok(()) } else { Err(CalcError::NotRepresentable { what }) }
+}
+
+fn complex(c: &Complex) -> [f64; 2] {
+    [c.re, c.im]
+}
+
+fn point(p: &crate::model::Point3) -> [f64; 3] {
+    [p.x, p.y, p.z]
+}
+
+fn floats(v: &[f32]) -> impl Iterator<Item = f64> + '_ {
+    v.iter().map(|&x| f64::from(x))
+}
+
+pub(crate) fn result(r: &CalcResult) -> Result<(), CalcError> {
+    let figures = [r.frequency_mhz, r.wavelength_m, r.swr, r.total_power_w]
+        .into_iter()
+        .chain(complex(&r.impedance))
+        .chain([r.gain_dbi, r.fb_db, r.elevation_deg, r.max_horizontal_pol_dbi, r.max_vertical_pol_dbi].map(f64::from));
+    representable("calculated figures", figures)?;
+    let sources = r.sources.iter().flat_map(|s| {
+        [complex(&s.voltage), complex(&s.current), complex(&s.impedance), [s.power_w, s.swr]].into_iter().flatten()
+    });
+    representable("source figures", sources)?;
+    let p = &r.patterns;
+    let cuts = [&p.horizontal, &p.vertical];
+    let pattern = cuts.iter().flat_map(|c| {
+        [c.start_deg, c.step_deg]
+            .into_iter()
+            .chain(floats(&c.vertical_pol))
+            .chain(floats(&c.horizontal_pol))
+            .chain(floats(&c.total))
+    });
+    representable("patterns", pattern.chain([f64::from(p.horizontal_elevation_deg)]))?;
+    let currents = r.currents.iter().flat_map(|c| point(&c.position).into_iter().chain(complex(&c.current)));
+    representable("currents", currents.chain(floats(&r.current_display)))?;
+    let wires =
+        r.segmented_wires.iter().flat_map(|w| point(&w.start).into_iter().chain(point(&w.end)).chain([w.radius]));
+    representable("segmented wires", wires)
+}
+
+pub(crate) fn far_samples(samples: &[FarFieldSample]) -> Result<(), CalcError> {
+    let values = samples.iter().flat_map(|s| [s.zenith, s.azimuth, s.vertical_db, s.horizontal_db, s.total_db]);
+    representable("far-field values", values)
+}
+
+pub(crate) fn near_samples(samples: &[NearFieldSample]) -> Result<(), CalcError> {
+    let values = samples.iter().flat_map(|s| [s.x, s.y, s.z, s.real, s.imag, s.magnitude, s.phase_deg]);
+    representable("near-field values", values)
+}
+
+pub(crate) fn layout(l: &PulseLayout) -> Result<(), CalcError> {
+    let pulses = l.wires.iter().flat_map(|w| w.pulses.iter().flat_map(|p| point(&p.position)));
+    let placed = l.sources.iter().chain(&l.loads).flatten().flat_map(point);
+    representable("pulse positions", pulses.chain(placed))
 }
