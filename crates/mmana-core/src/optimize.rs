@@ -1261,6 +1261,9 @@ struct Reading {
     current: Option<f32>,
     horizontal: Vec<f32>,
     vertical: Vec<f32>,
+    /// The antenna takes power the calculation can tell from rounding
+    /// (its result has no warning about the input power).
+    takes_power: bool,
 }
 
 /// `ABS()` of the original, which keeps the sign of -0.
@@ -1483,6 +1486,13 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             current,
             horizontal: every(&r.patterns.horizontal.total),
             vertical: every(&r.patterns.vertical.total),
+            takes_power: crate::calc::takes_power(
+                r.total_power_w,
+                r.sources
+                    .iter()
+                    .map(|s| s.voltage.re.hypot(s.voltage.im) * s.current.re.hypot(s.current.im) / 2.0)
+                    .sum(),
+            ),
         })
     }
 
@@ -1578,12 +1588,14 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         self.v = 0.0;
         let mut bv = vec![0.0; self.bands];
         let mut first = None;
+        let mut meaningless = false;
         for b in 0..self.bands {
             if self.bands != 1 {
                 self.model.set_band(b);
             }
             let rd = self.calculate().map_err(Stop::Failed)?;
             bv[b] = self.score(&rd);
+            meaningless |= !rd.takes_power;
             let last = b == self.bands - 1;
             if last {
                 // (the original adds the last band's score in place of
@@ -1591,6 +1603,13 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                 self.v = bv[0];
                 for &s in &bv[1..] {
                     self.v += if self.setup.emphasize_first_band { s / self.bands as f64 } else { s };
+                }
+                // a band that takes no power (MININEC broke down, as with a
+                // feed resistance below 0, or one within rounding of 0)
+                // scores the least, never the best; the original scores it,
+                // and the matching goal gets a NaN
+                if !self.setup.sweep_only && (meaningless || !self.v.is_finite()) {
+                    self.v = f64::MIN;
                 }
             }
             self.calculations += 1;
@@ -2744,6 +2763,33 @@ mod tests {
         let sizes =
             [Element { element: 0, part: ElementPart::Width }, Element { element: 0, part: ElementPart::Height }];
         assert_eq!(errors_of("LOOP20.MAA", &sizes, &[]), vec![]);
+    }
+
+    #[test]
+    fn a_trial_that_takes_no_power_is_never_the_best() {
+        // the HB9CV's feed resistance goes below 0 on the way, where the
+        // matching goal took the square root of a negative number
+        let project = sample("HB9CV.MAA");
+        let targets = [ElementPart::Width; 2].iter().enumerate().map(|(i, &part)| SetupOp::SetTarget {
+            index: i,
+            target: VariableTarget::Element { element: 1 - i, part },
+        });
+        let opts = CalcOptions::default();
+        let base = OptimizerSetup { absolute_pitch: false, ..Default::default() };
+        let mut setup = edit_setup(&project, &opts, &base, &targets.collect::<Vec<_>>()).setup;
+        for v in &mut setup.variables {
+            v.pitch = 0.2;
+        }
+        setup.weights = Weights { gain: 0, fb: 0, jx: 0, swr: 0, elevation: 0, matching: 1, current: 0 };
+        let mut scores = Vec::new();
+        let out = optimize(&project, &opts, &setup, Some(40), |p| {
+            scores.extend(p.score.map(|s| (s, p.impedance.re)));
+            true
+        })
+        .unwrap();
+        assert!(scores.iter().any(|&(s, r)| s == f64::MIN && r < 0.0), "{scores:?}");
+        assert!(scores.iter().all(|(s, _)| !s.is_nan()));
+        assert!(out.best.unwrap().impedance.re > 0.0);
     }
 
     #[test]
