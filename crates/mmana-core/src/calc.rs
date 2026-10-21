@@ -235,7 +235,8 @@ fn check_overlap(ant: &Antenna) -> Result<(), CalcError> {
     let same = |a: &Point3, b: &Point3| a.x == b.x && a.y == b.y && a.z == b.z;
     for (i, a) in ant.wires.iter().enumerate().filter(|(_, w)| w.radius != 0.0) {
         for (j, b) in ant.wires.iter().enumerate().skip(i + 1).filter(|(_, w)| w.radius != 0.0) {
-            if (same(&a.start, &b.start) && same(&a.end, &b.end)) || (same(&a.start, &b.end) && same(&a.end, &b.start)) {
+            if (same(&a.start, &b.start) && same(&a.end, &b.end)) || (same(&a.start, &b.end) && same(&a.end, &b.start))
+            {
                 return Err(CalcError::OverlappingWires { first: i + 1, second: j + 1 });
             }
         }
