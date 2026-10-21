@@ -12,7 +12,8 @@ use serde::Serialize;
 pub struct FarFieldSample {
     pub zenith: f64,
     pub azimuth: f64,
-    /// Vertically polarised gain (dBi), -999 when below 1e-30.
+    /// Vertically polarised gain (dBi), -999 when below 1e-30 and below the
+    /// horizon of a ground.
     pub vertical_db: f64,
     pub horizontal_db: f64,
     pub total_db: f64,
@@ -84,6 +85,19 @@ impl Mininec {
         let v2 = u3.cos();
         let u4 = q2 * p0;
         let r3 = u4.cos();
+        // Below the horizon of a ground there is no far field; the original
+        // computes one there anyway, from the image. Zenith angles past 270°
+        // (the back of MMANA's own vertical cut) are above it again, and
+        // 1e-12 keeps a horizon reached by adding steps.
+        if self.g == -1 && r3 < -1e-12 {
+            return FarFieldSample {
+                zenith: q2,
+                azimuth: q1,
+                vertical_db: -999.0,
+                horizontal_db: -999.0,
+                total_db: -999.0,
+            };
+        }
         let t3 = -u4.sin();
         let t1 = r3 * v2;
         let t2 = -r3 * v1;

@@ -352,14 +352,17 @@ fn a_calculation_does_not_depend_on_the_ones_before_it_or_beside_it() {
     });
 }
 
-/// Gain integrated over the sphere, from a 2° midpoint grid: P_radiated /
-/// P_in. Over ground only the upper half: the scan does not stop at the
-/// horizon, and below it shows the image's field.
+/// Gain integrated over the whole sphere, from a 2° midpoint grid: P_radiated
+/// / P_in. Below a ground's horizon there is no field, so over ground only
+/// the upper half counts (the original gives the image's field there).
 fn radiated_fraction(p: &Project) -> f64 {
     let solved = solve(p, &CalcOptions::default()).unwrap();
     let step = 2.0f64;
-    let zenith_steps = if p.environment.ground == GroundKind::FreeSpace { 90 } else { 45 };
-    let samples = solved.far_field((step / 2.0, step, zenith_steps), (step / 2.0, step, 180)).unwrap();
+    let samples = solved.far_field((step / 2.0, step, 90), (step / 2.0, step, 180)).unwrap();
+    if p.environment.ground != GroundKind::FreeSpace {
+        let below = samples.iter().filter(|s| s.zenith > 90.0);
+        assert!(below.clone().all(|s| s.total_db == -999.0), "a field below the ground");
+    }
     let cell = (step * PI / 180.0).powi(2);
     samples.iter().map(|s| 10f64.powf(s.total_db / 10.0) * (s.zenith * PI / 180.0).sin() * cell).sum::<f64>()
         / (4.0 * PI)
@@ -379,6 +382,32 @@ fn a_lossless_antenna_radiates_its_input_power() {
     p.environment.height = 10.0;
     let fraction = radiated_fraction(&p);
     assert!((fraction - 1.0).abs() < 0.02, "over perfect ground: radiated {fraction} of the input power");
+}
+
+#[test]
+fn nothing_radiates_below_the_ground() {
+    // a horizontal cut 10° below the horizon: none over ground, the mirror
+    // of the cut 10° above in free space
+    let opts = CalcOptions { horizontal_cut_elevation_deg: Some(-10.0), ..CalcOptions::default() };
+    let mut p = dipole();
+    let free = calculate(&p, &opts).unwrap();
+    assert!(free.patterns.horizontal.total.iter().all(|&g| g > -999.0));
+    for ground in [GroundKind::Perfect, GroundKind::Real] {
+        p.environment.ground = ground;
+        p.environment.height = 10.0;
+        let r = calculate(&p, &opts).unwrap();
+        assert!(r.patterns.horizontal.total.iter().all(|&g| g == -999.0), "{ground:?}");
+        // just above the horizon there is a field: on it, over perfect
+        // ground, for a vertical wire (a horizontal one's image cancels it
+        // there, as a real ground's reflection does for both)
+        let mut vertical = project(vec![wire((0.0, 0.0, -5.2), (0.0, 0.0, 5.2), 20)], vec![source("w1c", 1.0, 0.0)]);
+        vertical.environment.ground = ground;
+        vertical.environment.height = 10.0;
+        let solved = solve(&vertical, &CalcOptions::default()).unwrap();
+        let zenith = if ground == GroundKind::Perfect { 90.0 } else { 89.0 };
+        let near_horizon = solved.far_field((zenith, 0.0, 1), (0.0, 0.0, 1)).unwrap()[0];
+        assert!(near_horizon.total_db > -999.0, "{ground:?}: {near_horizon:?}");
+    }
 }
 
 #[test]

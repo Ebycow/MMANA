@@ -6,6 +6,7 @@
 
 use mmana_core::{AxisRange, CalcOptions, GroundKind, NearFieldKind, NearFieldSpec, Project, calculate, maa, solve};
 use serde_json::Value;
+use std::f64::consts::PI;
 use std::path::{Path, PathBuf};
 
 fn root() -> PathBuf {
@@ -310,14 +311,26 @@ fn exports_match_original() {
             let theirs = far.as_array().unwrap();
             assert_eq!(ours.len(), theirs.len(), "{}: far-field sample count", case.name);
             let null_floor = f32v(&g["result"]["gain"]) - NULL_BELOW_PEAK_DB;
+            let grounded = project.environment.ground != GroundKind::FreeSpace;
+            let mut below = 0;
             for (o, t) in ours.iter().zip(theirs) {
                 let vals = [o.zenith, o.azimuth, o.vertical_db, o.horizontal_db, o.total_db];
+                // below a ground's horizon the original gives the image's field;
+                // the port gives none (porting-notes.md)
+                if grounded && (o.zenith * PI / 180.0).cos() < -1e-12 {
+                    assert_eq!(&vals[..2], [f(&t[0]), f(&t[1])], "{}", case.name);
+                    assert_eq!(&vals[2..], [-999.0; 3], "{}: far {vals:?}", case.name);
+                    below += 1;
+                    continue;
+                }
                 for (k, (&a, b)) in vals.iter().zip(t.as_array().unwrap()).enumerate() {
                     // angles are compared in full; only the dB columns may be nulls
                     let floor = if k >= 2 { null_floor } else { f64::NEG_INFINITY };
                     assert!(sample_diff(a, f(b), floor) <= 5.0001e-4, "{}: far {vals:?} vs {t}", case.name);
                 }
             }
+            // zenith 0 to 180 in steps of 15: 6 of the 13 are below
+            assert_eq!(below, if grounded { 6 * 8 } else { 0 }, "{}", case.name);
             checked += 1;
         }
     }
