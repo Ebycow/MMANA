@@ -9,7 +9,7 @@ use axum::response::IntoResponse;
 use mmana_core::contract::{
     self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
     NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, SweepRequest,
-    SweepResponse, axis_len,
+    SweepResponse, field_points,
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeOutcome, SetupEdit};
@@ -163,7 +163,7 @@ pub async fn far_field(
     State(state): State<AppState>,
     ApiJson(req): ApiJson<FarFieldRequest>,
 ) -> Result<ApiJson<FarFieldResponse>, ApiError> {
-    if axis_len(&req.zenith) * axis_len(&req.azimuth) > state.limits.max_field_points {
+    if field_points(&[&req.zenith, &req.azimuth]) > state.limits.max_field_points {
         return Err(ApiError::LimitExceeded(format!(
             "at most {} directions per request",
             state.limits.max_field_points
@@ -186,7 +186,7 @@ pub async fn near_field(
     ApiJson(req): ApiJson<NearFieldRequest>,
 ) -> Result<ApiJson<NearFieldResponse>, ApiError> {
     let s = &req.spec;
-    if axis_len(&s.x) * axis_len(&s.y) * axis_len(&s.z) > state.limits.max_field_points {
+    if field_points(&[&s.x, &s.y, &s.z]) > state.limits.max_field_points {
         return Err(ApiError::LimitExceeded(format!("at most {} points per request", state.limits.max_field_points)));
     }
     let req = NearFieldRequest { options: checked_options(req.options, &state.limits), ..req };

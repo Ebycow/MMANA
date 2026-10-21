@@ -162,6 +162,61 @@ async fn calculation_errors_are_422() {
 }
 
 #[tokio::test]
+async fn field_point_limits_do_not_wrap() {
+    let parsed = parse("DP20.MAA").await;
+    let axis = |count: i32| json!({ "start": 0.0, "step": 1.0, "count": count });
+    // 2^21 · 2^21 · 2^22 is 2^64, which wrapped to 0 and passed the limit
+    let spec =
+        json!({ "kind": "electric", "powerW": 100.0, "x": axis(1 << 21), "y": axis(1 << 21), "z": axis(1 << 22) });
+    let (status, _, v) = post_json("/v1/near-field", json!({ "project": parsed["project"], "spec": spec })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{v}");
+    assert_eq!(v["type"], "limit-exceeded");
+    let (status, _, v) = post_json(
+        "/v1/far-field",
+        json!({ "project": parsed["project"], "zenith": axis(i32::MAX), "azimuth": axis(i32::MAX) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{v}");
+    assert_eq!(v["type"], "limit-exceeded");
+}
+
+/// Every endpoint that calculates starts with the same checks, so an input
+/// is rejected with the same problem wherever it is sent.
+#[tokio::test]
+async fn an_invalid_input_is_rejected_alike_by_every_endpoint() {
+    let mut parsed = parse("DP20.MAA").await;
+    parsed["project"]["antenna"]["stack"]["horizontal"] = json!(0);
+    parsed["project"]["antenna"]["stack"]["vertical"] = json!(2);
+    let project = &parsed["project"];
+    let axis = json!({ "start": 0.0, "step": 0.0, "count": 1 });
+    let requests = [
+        ("/v1/calculations", json!({ "project": project })),
+        ("/v1/pulses", json!({ "project": project })),
+        ("/v1/sweeps", json!({ "project": project, "startMhz": 14.0, "stopMhz": 14.1, "points": 2 })),
+        ("/v1/sweeps", json!({ "project": project, "startMhz": 14.0, "stopMhz": 14.1, "points": 2, "indices": [1] })),
+        ("/v1/far-field", json!({ "project": project, "zenith": axis, "azimuth": axis })),
+        (
+            "/v1/near-field",
+            json!({ "project": project, "spec": { "kind": "electric", "powerW": 100.0, "x": axis, "y": axis, "z": axis } }),
+        ),
+    ];
+    for (path, body) in requests {
+        let (status, _, v) = post_json(path, body).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{path}: {v}");
+        assert_eq!(v["type"], "calculation-failed", "{path}");
+        assert_eq!(v["detail"], "stack horizontal count must be at least 1 (got 0)", "{path}");
+    }
+}
+
+#[test]
+fn server_limits_are_within_the_engine_limits() {
+    let limits = mmana_api::Limits::default();
+    assert!(limits.max_pulses <= mmana_core::engine::PMAX);
+    assert!(limits.max_sweep_points <= mmana_core::MAX_SWEEP_POINTS);
+    assert!(limits.max_field_points <= mmana_core::MAX_FIELD_POINTS);
+}
+
+#[tokio::test]
 async fn sweep_point_limit() {
     let parsed = parse("DP20.MAA").await;
     let (status, _, v) = post_json(

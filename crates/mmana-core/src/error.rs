@@ -35,4 +35,14 @@ pub enum CalcError {
     SweepPointOutOfRange { index: usize, points: usize },
     #[error("the calculation has no finite solution (the impedance matrix is singular)")]
     NoFiniteSolution,
+    #[error("{field} must be {rule} (got {value})")]
+    OutOfRange { field: String, rule: &'static str, value: f64 },
+    #[error("load {load}: {reason}")]
+    InvalidLoad { load: usize, reason: &'static str },
+    #[error("a real ground needs at least one ground medium")]
+    NoGroundMedia,
+    #[error("too many field points (maximum {max})")]
+    TooManyFieldPoints { max: usize },
+    #[error("a sweep has 1 to {max} points")]
+    InvalidSweepPoints { max: usize },
 }

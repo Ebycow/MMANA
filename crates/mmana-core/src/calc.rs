@@ -8,11 +8,12 @@ use utoipa::ToSchema;
 
 use crate::engine::antdef::AntDef;
 use crate::engine::{
-    EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec, SourceSolution,
+    AxisRange, EngineConfig, FarFieldSample, MediumDef, Mininec, NULLV, NearFieldSample, NearFieldSpec, SourceSolution,
 };
 use crate::error::CalcError;
-use crate::model::{Antenna, GroundKind, Point3, Project, Segmentation, Stack, StackDirection, Wire};
+use crate::model::{GroundKind, Point3, Project, Stack, StackDirection, Wire};
 use crate::pattern::{self, PatternState};
+use crate::validate::{self, Scope};
 
 /// Angular resolution of the stored pattern cuts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -191,98 +192,15 @@ fn engine_config(project: &Project, opts: &CalcOptions) -> EngineConfig {
     }
 }
 
-/// The smallest `SC`, as in the desktop's dialog.
-const MIN_SC: f64 = 1.01;
-
-/// Rejects segmentation settings the tapering loops never finish with
-/// (`DM2 <= 0`, or `SC` at or barely above 1: 1.000000000000001 divides by so
-/// little that the loop runs on for ever). MMANA's dialogs keep them in
-/// range; project JSON and API requests do not.
-fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
-    let s = &ant.auto_segmentation;
-    if s.dm1 < 1 || s.dm2 < 1 {
-        return Err(CalcError::InvalidAutoSegmentation("DM1 and DM2 must be at least 1"));
-    }
-    if !(s.sc >= MIN_SC && s.sc <= 3.0) {
-        return Err(CalcError::InvalidAutoSegmentation("SC must be from 1.01 to 3"));
-    }
-    if s.ec < 1 {
-        return Err(CalcError::InvalidAutoSegmentation("EC must be at least 1"));
-    }
-    for (i, w) in ant.wires.iter().enumerate() {
-        // wires with R = 0 are not expanded
-        if w.radius == 0.0 {
-            continue;
-        }
-        // the SEG code packs each DM into 15 bits; a bare DM1 above 10000
-        // would be read back as a packed pair
-        let (values, max) = match w.segmentation {
-            // a count below 1 would be read as SEG 0 or a tapering code
-            // (-2147483248 is DM1 = 400 with DM2 = 0, which never finishes)
-            Segmentation::Fixed { count } if count < 1 => {
-                return Err(CalcError::InvalidSegmentCount { wire: i + 1, count });
-            }
-            Segmentation::TaperCustom { dm1, dm2: Some(dm2) } => ([dm1, dm2], 0x7fff),
-            Segmentation::TaperCustom { dm1, dm2: None } => ([dm1, dm1], 10000),
-            _ => continue,
-        };
-        if values.iter().any(|v| !(1..=max).contains(&v.unsigned_abs())) {
-            return Err(CalcError::InvalidWireSegmentation { wire: i + 1, max: max as i32 });
-        }
-    }
-    Ok(())
-}
-
-/// Rejects stacking that makes more segment wires than the engine takes
-/// before the copies are made: each copy of a wire with R ≠ 0 expands into
-/// at least one, and 100 000 copies would fill memory first. Counted as at
-/// least one wire, so copies of wires that are all R = 0 are bounded too.
-fn check_stack(ant: &Antenna) -> Result<(), CalcError> {
-    let st = &ant.stack;
-    if !st.is_stacked() {
-        return Ok(());
-    }
-    let max = crate::engine::WZMAX;
-    let copies = i64::from(st.horizontal.max(1)) * i64::from(st.vertical.max(1));
-    let active = ant.wires.iter().filter(|w| w.radius != 0.0).count().max(1);
-    if copies.saturating_mul(active as i64) > max as i64 {
-        return Err(CalcError::TooManySegmentWires { max });
-    }
-    Ok(())
-}
-
-/// Rejects two wires with the same ends (in either direction), such as a
-/// copy left where it was made. Their impedance matrix is singular and the
-/// original carries on with NaN currents. Wires with R = 0 are not
-/// calculated, so they may lie anywhere.
-fn check_overlap(ant: &Antenna) -> Result<(), CalcError> {
-    let same = |a: &Point3, b: &Point3| a.x == b.x && a.y == b.y && a.z == b.z;
-    for (i, a) in ant.wires.iter().enumerate().filter(|(_, w)| w.radius != 0.0) {
-        for (j, b) in ant.wires.iter().enumerate().skip(i + 1).filter(|(_, w)| w.radius != 0.0) {
-            if (same(&a.start, &b.start) && same(&a.end, &b.end)) || (same(&a.start, &b.end) && same(&a.end, &b.start))
-            {
-                return Err(CalcError::OverlappingWires { first: i + 1, second: j + 1 });
-            }
-        }
-    }
-    Ok(())
+/// Checks the input and builds the definition the engine works on.
+fn prepare(project: &Project, opts: &CalcOptions, scope: Scope) -> Result<(AntDef, EngineConfig), CalcError> {
+    let cfq = validate::project(project, opts, scope)?;
+    Ok((AntDef::from_model(&project.antenna, cfq), engine_config(project, opts)))
 }
 
 /// Builds the geometry and solves for the currents at one frequency.
 pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError> {
-    let ant = &project.antenna;
-    let cfq = opts.frequency_mhz.unwrap_or(ant.frequency_mhz);
-    if !(cfq.is_finite() && cfq > 0.0) {
-        return Err(CalcError::InvalidFrequency(cfq));
-    }
-    if ant.wires.is_empty() {
-        return Err(CalcError::NoWires);
-    }
-    check_segmentation(ant)?;
-    check_stack(ant)?;
-    check_overlap(ant)?;
-    let mut ap = AntDef::from_model(ant, cfq);
-    let cfg = engine_config(project, opts);
+    let (mut ap, cfg) = prepare(project, opts, Scope::Solve)?;
     let mut engine = Mininec::new(&mut ap, &cfg)?;
     engine.solve();
     // other degenerate geometry (stacked copies 0 m apart...) ends the same way;
@@ -378,7 +296,13 @@ impl Solved {
 
     /// Arbitrary far-field scan (MMANA's "far field file"): `nz` zenith
     /// angles from `zenith_start` for each of `na` azimuths.
-    pub fn far_field(&self, zenith: (f64, f64, i32), azimuth: (f64, f64, i32)) -> Vec<FarFieldSample> {
+    pub fn far_field(
+        &self,
+        zenith: (f64, f64, i32),
+        azimuth: (f64, f64, i32),
+    ) -> Result<Vec<FarFieldSample>, CalcError> {
+        let axis = |(start, step, count)| AxisRange { start, step, count };
+        validate::far_field(&axis(zenith), &axis(azimuth))?;
         let (za, mut zc, mut nz) = zenith;
         let (aa, mut ac, mut na) = azimuth;
         if zc == 0.0 {
@@ -391,11 +315,12 @@ impl Solved {
         }
         let mut out = Vec::new();
         self.engine.far_field(za, zc, nz, aa, ac, na, |s| out.push(s));
-        out
+        Ok(out)
     }
 
-    pub fn near_field(&self, spec: &NearFieldSpec) -> Vec<NearFieldSample> {
-        self.engine.near_field(spec)
+    pub fn near_field(&self, spec: &NearFieldSpec) -> Result<Vec<NearFieldSample>, CalcError> {
+        validate::near_field(spec)?;
+        Ok(self.engine.near_field(spec))
     }
 
     /// `Str2PlusNo` on the calculated (stacked) model: the 1-based pulse a
@@ -473,19 +398,10 @@ pub struct PulseLayout {
 /// Segments the antenna as the calculation would, without solving it.
 pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout, CalcError> {
     let ant = &project.antenna;
-    let cfq = opts.frequency_mhz.unwrap_or(ant.frequency_mhz);
-    if !(cfq.is_finite() && cfq > 0.0) {
-        return Err(CalcError::InvalidFrequency(cfq));
-    }
-    if ant.wires.is_empty() {
-        return Err(CalcError::NoWires);
-    }
-    check_segmentation(ant)?;
-    check_stack(ant)?;
     // segmented stacked, as calculated: a copy that reaches the ground is
     // divided differently from the wire as defined
-    let mut ap = AntDef::from_model(ant, cfq);
-    let e = Mininec::layout(&mut ap, &engine_config(project, opts))?;
+    let (mut ap, cfg) = prepare(project, opts, Scope::Layout)?;
+    let e = Mininec::layout(&mut ap, &cfg)?;
     // names address the first copy, whose pulses come first
     let own = ap.wires[ant.wires.len()..].iter().find(|w| w.pmax > 0).map_or(e.n, |w| (w.pno - 1) as usize);
     let (dy, dz) = first_copy_offset(&ant.stack);
@@ -581,7 +497,7 @@ pub fn sweep(
     stop: f64,
     points: usize,
 ) -> Result<Vec<SweepPoint>, CalcError> {
-    let points = points.max(1);
+    validate::sweep_points(points)?;
     let frequencies: Vec<f64> = (0..points).map(|i| sweep_frequency(start, stop, points, i)).collect();
     sweep_at(project, opts, &frequencies)
 }

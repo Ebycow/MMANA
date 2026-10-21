@@ -61,7 +61,7 @@ impl Mininec {
         }
         let nz = if nz == 0 { 1 } else { nz };
         let na = if na == 0 { 1 } else { na };
-        let mut dirs = Vec::with_capacity((nz.max(0) * na.max(0)) as usize);
+        let mut dirs = Vec::with_capacity(nz.max(0) as usize * na.max(0) as usize);
         let mut q1 = aa;
         for _ in 1..=na {
             let mut q2 = za;
