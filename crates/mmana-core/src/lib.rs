@@ -29,7 +29,7 @@ mod pattern;
 
 pub use calc::{
     CalcOptions, CalcResult, Complex, PatternCut, PatternResolution, Patterns, PulseCurrent, SegmentedWire, Solved,
-    SourceResult, SweepPoint, calculate, solve, sweep,
+    SourceResult, SweepPoint, calculate, solve, sweep, sweep_at, sweep_frequency,
 };
 pub use engine::{AxisRange, FarFieldSample, NearFieldKind, NearFieldSample, NearFieldSpec};
 pub use error::CalcError;

@@ -41,6 +41,11 @@ pub struct SweepRequest {
     pub start_mhz: f64,
     pub stop_mhz: f64,
     pub points: usize,
+    /// Evaluates only these points of the sweep (0-based), in this order, so
+    /// a client can fill a long sweep in a few points at a time. All points
+    /// when omitted.
+    #[serde(default)]
+    pub indices: Option<Vec<usize>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -162,7 +167,23 @@ pub fn calculate(req: &CalculationRequest) -> Result<CalcResult, CalcError> {
 }
 
 pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
-    Ok(SweepResponse { points: crate::sweep(&req.project, &req.options, req.start_mhz, req.stop_mhz, req.points)? })
+    let Some(indices) = &req.indices else {
+        return Ok(SweepResponse {
+            points: crate::sweep(&req.project, &req.options, req.start_mhz, req.stop_mhz, req.points)?,
+        });
+    };
+    let points = req.points.max(1);
+    let frequencies = indices
+        .iter()
+        .map(|&index| {
+            if index < points {
+                Ok(crate::sweep_frequency(req.start_mhz, req.stop_mhz, points, index))
+            } else {
+                Err(CalcError::SweepPointOutOfRange { index, points })
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(SweepResponse { points: crate::sweep_at(&req.project, &req.options, &frequencies)? })
 }
 
 pub fn far_field(req: &FarFieldRequest) -> Result<FarFieldResponse, CalcError> {

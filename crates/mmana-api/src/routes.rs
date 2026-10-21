@@ -127,6 +127,9 @@ pub async fn sweep(
     if req.points == 0 || req.points > state.limits.max_sweep_points {
         return Err(ApiError::LimitExceeded(format!("points must be 1-{}", state.limits.max_sweep_points)));
     }
+    if req.indices.as_ref().is_some_and(|i| i.len() > state.limits.max_sweep_points) {
+        return Err(ApiError::LimitExceeded(format!("at most {} indices", state.limits.max_sweep_points)));
+    }
     let req = SweepRequest { options: checked_options(req.options, &state.limits), ..req };
     Ok(ApiJson(blocking(move || Ok(contract::sweep(&req)?)).await?))
 }

@@ -1175,6 +1175,12 @@ export interface components {
             swr: number;
         };
         SweepRequest: {
+            /**
+             * @description Evaluates only these points of the sweep (0-based), in this order, so
+             *     a client can fill a long sweep in a few points at a time. All points
+             *     when omitted.
+             */
+            indices?: number[] | null;
             options?: components["schemas"]["CalcOptions"];
             points: number;
             project: components["schemas"]["Project"];

@@ -1,5 +1,5 @@
 import { Badge, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Tooltip } from '@mantine/core';
-import { IconAlertTriangle, IconPlayerPlay } from '@tabler/icons-react';
+import { IconAlertTriangle, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
 import { useState } from 'react';
 import { LineChart } from '../charts/LineChart';
 import { useApp } from '../state/store';
@@ -8,6 +8,7 @@ export function SweepPanel() {
   const sweep = useApp((s) => s.sweep);
   const setRange = useApp((s) => s.setSweepRange);
   const run = useApp((s) => s.runSweep);
+  const stop = useApp((s) => s.stopSweep);
   const designFreq = useApp((s) => s.project.antenna.frequencyMhz);
   const [hover, setHover] = useState<number | null>(null);
   const [view, setView] = useState<'chart' | 'table'>('chart');
@@ -24,6 +25,16 @@ export function SweepPanel() {
         <Button leftSection={<IconPlayerPlay size={14} />} loading={sweep.running} onClick={run} disabled={!(sweep.stopMhz > sweep.startMhz)}>
           計算
         </Button>
+        {sweep.running && (
+          <Button variant="default" leftSection={<IconPlayerStop size={14} />} onClick={stop} disabled={sweep.stopping}>
+            {sweep.stopping ? '中止中…' : '中止'}
+          </Button>
+        )}
+        {sweep.progress && (
+          <Text size="sm" c="dimmed" mb={6} className="num" style={{ whiteSpace: 'nowrap' }}>
+            {sweep.running ? '計算中' : '中止'} {sweep.progress.done} / {sweep.progress.total} 点
+          </Text>
+        )}
         {data && sweep.stale && (
           <Tooltip label="周波数特性の計算後にアンテナや条件が変更されています">
             <Badge color="yellow" variant="light" mb={6} leftSection={<IconAlertTriangle size={12} />}>

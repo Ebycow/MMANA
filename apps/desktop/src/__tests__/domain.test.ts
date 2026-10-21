@@ -5,6 +5,7 @@ import { evaluate } from '../domain/expr';
 import { displayWires, normalizePulse, pulseLocation } from '../domain/geometry';
 import { newProject, newSource, setAutoVoltage } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
+import { sweepOrder } from '../domain/sweep';
 
 describe('segmentation codes (must match mmana-core Segmentation::to_code/from_code)', () => {
   it.each([11, 0, -1, -2, -3, -5])('round-trips %i', (code) => {
@@ -63,6 +64,17 @@ describe('polar geometry (MMANA orientation)', () => {
     expect(sampleAngle('vertical', 90, 1)).toBeCloseTo(Math.PI / 2);
     expect(sampleAt('vertical', 0, -10, 1, 181)).toBe(90);
     expect(sampleAt('vertical', 0, 10, 1, 181)).toBeNull();
+  });
+});
+
+describe('sweep order', () => {
+  it('starts with the ends, quarters and centre, then fills the widest gaps', () => {
+    const order = sweepOrder(21);
+    expect(order.slice(0, 5)).toEqual([0, 5, 10, 15, 20]);
+    expect(order.slice(5, 9)).toEqual([2, 7, 12, 17]);
+  });
+  it.each([1, 2, 3, 4, 5, 6, 21, 100, 401])('visits each of %i points once', (n) => {
+    expect([...sweepOrder(n)].sort((a, b) => a - b)).toEqual(Array.from({ length: n }, (_, i) => i));
   });
 });
 

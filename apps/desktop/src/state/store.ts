@@ -3,6 +3,7 @@ import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedPr
 import { EngineError, files, transport } from '../api/transport';
 import { defaultSetup } from '../domain/optimize';
 import { defaultOptions, newProject } from '../domain/project';
+import { OUTLINE_POINTS, sweepOrder } from '../domain/sweep';
 
 const HISTORY_LIMIT = 200;
 
@@ -10,11 +11,21 @@ export interface SweepState {
   startMhz: number;
   stopMhz: number;
   points: number;
+  /** By frequency; while a sweep runs, the points calculated so far. */
   data: SweepPoint[] | null;
   /** The project or options changed since `data` was computed. */
   stale: boolean;
   running: boolean;
+  /** Points of the running sweep calculated so far; kept when it was stopped short. */
+  progress: { done: number; total: number } | null;
+  /** 中止 was pressed: the sweep ends when the points being calculated arrive. */
+  stopping: boolean;
 }
+
+/** A sweep is sent in batches that take about this long, so its points appear as they are done. */
+const SWEEP_BATCH_MS = 1000;
+/** Smallest batch after the outline (keeps the cores busy on a large model). */
+const SWEEP_MIN_BATCH = 4;
 
 /** Calculations kept for the optimisation log. */
 const LOG_LIMIT = 300;
@@ -122,6 +133,7 @@ export interface AppState {
   setSweepRange: (patch: Partial<Pick<SweepState, 'startMhz' | 'stopMhz' | 'points'>>) => void;
   calculate: () => Promise<void>;
   runSweep: () => Promise<void>;
+  stopSweep: () => void;
   save: (saveAs: boolean) => Promise<boolean>;
   setOptimizer: (patch: Partial<OptimizerState>) => void;
   /** Optimises the antenna with the sheet and applies the result as one undoable edit. */
@@ -148,7 +160,7 @@ const freshDocument = (project: Project) => ({
   result: null,
   resultStale: false,
   calcError: null,
-  sweep: { ...sweepAround(project.antenna.frequencyMhz), points: 21, data: null, stale: false, running: false },
+  sweep: { ...sweepAround(project.antenna.frequencyMhz), points: 21, data: null, stale: false, running: false, progress: null, stopping: false },
   optimizer: freshOptimizer(),
 });
 
@@ -300,22 +312,53 @@ export const useApp = create<AppState>()((set, get) => {
     runSweep: async () => {
       const { project, options, sweep } = get();
       const request = ++sweepRequest;
-      set({ sweep: { ...sweep, running: true } });
+      const { startMhz, stopMhz, points } = sweep;
+      const order = sweepOrder(points);
+      set({ sweep: { ...sweep, running: true, stopping: false, progress: { done: 0, total: order.length } } });
+      let data: SweepPoint[] = [];
+      let done = 0;
+      let size = Math.min(OUTLINE_POINTS, order.length);
       try {
-        const res = await transport.sweep({
-          project,
-          options: { ...options, patternResolution: 'coarse' },
-          startMhz: sweep.startMhz,
-          stopMhz: sweep.stopMhz,
-          points: sweep.points,
-        });
-        if (request !== sweepRequest) return;
-        const stale = get().project !== project || get().options !== options;
-        set({ sweep: { ...get().sweep, data: res.points, stale, running: false }, calcError: null });
+        while (done < order.length) {
+          const indices = order.slice(done, done + size);
+          const t0 = performance.now();
+          const res = await transport.sweep({
+            project,
+            options: { ...options, patternResolution: 'coarse' },
+            startMhz,
+            stopMhz,
+            points,
+            indices,
+          });
+          if (request !== sweepRequest) return;
+          done += indices.length;
+          data = [...data, ...res.points].sort((a, b) => a.frequencyMhz - b.frequencyMhz);
+          const stale = get().project !== project || get().options !== options;
+          const finished = done >= order.length;
+          const ends = finished || get().sweep.stopping;
+          set({
+            sweep: {
+              ...get().sweep,
+              data,
+              stale,
+              running: !ends,
+              stopping: false,
+              progress: finished ? null : { done, total: order.length },
+            },
+            calcError: null,
+          });
+          if (ends) return;
+          const msPerPoint = (performance.now() - t0) / indices.length;
+          size = Math.max(SWEEP_MIN_BATCH, Math.floor(SWEEP_BATCH_MS / Math.max(msPerPoint, 1e-3)));
+        }
       } catch (e) {
         if (request !== sweepRequest) return;
-        set({ sweep: { ...get().sweep, running: false }, calcError: toEngineError(e) });
+        set({ sweep: { ...get().sweep, running: false, stopping: false }, calcError: toEngineError(e) });
       }
+    },
+
+    stopSweep: () => {
+      if (get().sweep.running) set({ sweep: { ...get().sweep, stopping: true } });
     },
 
     save: async (saveAs) => {

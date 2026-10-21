@@ -29,6 +29,8 @@ pub enum CalcError {
     PulseOutOfRange { what: &'static str, name: String, max: usize },
     #[error("wires {first} and {second} lie exactly on top of each other")]
     OverlappingWires { first: usize, second: usize },
+    #[error("sweep point {index} does not exist (the sweep has {points} points)")]
+    SweepPointOutOfRange { index: usize, points: usize },
     #[error("the calculation has no finite solution (the impedance matrix is singular)")]
     NoFiniteSolution,
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CalcResult, ParsedProject, SweepResponse } from '../api/types';
+import type { CalcResult, ParsedProject, SweepRequest, SweepResponse } from '../api/types';
 import { files, transport } from '../api/transport';
 import { newProject } from '../domain/project';
 import { useApp } from '../state/store';
@@ -65,6 +65,44 @@ describe('sweep staleness', () => {
     moveWire();
     useApp.getState().load(parsed('B'), 'B.maa', null);
     expect(useApp.getState().sweep).toMatchObject({ data: null, stale: false });
+  });
+});
+
+describe('progressive sweep', () => {
+  /** Answers each batch with one point per index, at its index as the frequency. */
+  const pointsOf = (req: SweepRequest) =>
+    ({ points: (req.indices ?? []).map((i) => ({ frequencyMhz: i, gainDbi: 0 })) }) as unknown as SweepResponse;
+
+  it('shows the outline first, then fills in the rest in frequency order', async () => {
+    const batches: (number[] | null | undefined)[] = [];
+    const first = deferred<SweepResponse>();
+    vi.spyOn(transport, 'sweep').mockImplementation((req) => {
+      batches.push(req.indices);
+      return batches.length === 1 ? first.promise : Promise.resolve(pointsOf(req));
+    });
+    useApp.getState().setSweepRange({ points: 21 });
+    const run = useApp.getState().runSweep();
+    expect(batches[0]).toEqual([0, 5, 10, 15, 20]);
+    expect(useApp.getState().sweep).toMatchObject({ running: true, progress: { done: 0, total: 21 } });
+    first.resolve(pointsOf({ indices: [0, 5, 10, 15, 20] } as SweepRequest));
+    await run;
+    const s = useApp.getState().sweep;
+    expect(s.data?.map((p) => p.frequencyMhz)).toEqual(Array.from({ length: 21 }, (_, i) => i));
+    expect(s).toMatchObject({ running: false, progress: null });
+  });
+
+  it('stops after the points being calculated arrive and keeps them', async () => {
+    const first = deferred<SweepResponse>();
+    const sweep = vi.spyOn(transport, 'sweep').mockReturnValueOnce(first.promise);
+    useApp.getState().setSweepRange({ points: 21 });
+    const run = useApp.getState().runSweep();
+    useApp.getState().stopSweep();
+    expect(useApp.getState().sweep.stopping).toBe(true);
+    first.resolve(pointsOf({ indices: [0, 5, 10, 15, 20] } as SweepRequest));
+    await run;
+    expect(sweep).toHaveBeenCalledTimes(1);
+    expect(useApp.getState().sweep).toMatchObject({ running: false, stopping: false, progress: { done: 5, total: 21 } });
+    expect(useApp.getState().sweep.data).toHaveLength(5);
   });
 });
 

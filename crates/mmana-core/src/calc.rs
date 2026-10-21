@@ -417,6 +417,12 @@ pub struct SweepPoint {
     pub elevation_deg: f32,
 }
 
+/// Frequency of point `i` of `points` frequencies evenly spaced from `start`
+/// to `stop` (MHz).
+pub fn sweep_frequency(start: f64, stop: f64, points: usize, i: usize) -> f64 {
+    if points <= 1 { start } else { start + (stop - start) * i as f64 / (points - 1) as f64 }
+}
+
 /// Evaluates `points` frequencies evenly spaced from `start` to `stop` (MHz).
 pub fn sweep(
     project: &Project,
@@ -426,9 +432,15 @@ pub fn sweep(
     points: usize,
 ) -> Result<Vec<SweepPoint>, CalcError> {
     let points = points.max(1);
+    let frequencies: Vec<f64> = (0..points).map(|i| sweep_frequency(start, stop, points, i)).collect();
+    sweep_at(project, opts, &frequencies)
+}
+
+/// Evaluates the given frequencies (MHz); the points keep their order.
+pub fn sweep_at(project: &Project, opts: &CalcOptions, frequencies: &[f64]) -> Result<Vec<SweepPoint>, CalcError> {
     // frequencies are independent: solve them in parallel
-    crate::par::map(points, |i| {
-        let f = if points == 1 { start } else { start + (stop - start) * i as f64 / (points - 1) as f64 };
+    crate::par::map(frequencies.len(), |i| {
+        let f = frequencies[i];
         let o = CalcOptions { frequency_mhz: Some(f), ..opts.clone() };
         let r = calculate(project, &o)?;
         Ok(SweepPoint {

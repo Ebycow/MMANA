@@ -94,6 +94,23 @@ async fn sweep_returns_requested_points() {
     let pts = v["points"].as_array().unwrap();
     assert_eq!(pts.len(), 6);
     assert_eq!(pts[0]["frequencyMhz"], 13.9);
+
+    // selected points of the same sweep, in the order asked
+    let (status, _, w) = post_json(
+        "/v1/sweeps",
+        json!({ "project": parsed["project"], "startMhz": 13.9, "stopMhz": 14.4, "points": 6, "indices": [5, 2],
+                "options": { "patternResolution": "coarse" } }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    assert_eq!(w["points"], json!([pts[5], pts[2]]));
+
+    let (status, _, w) = post_json(
+        "/v1/sweeps",
+        json!({ "project": parsed["project"], "startMhz": 13.9, "stopMhz": 14.4, "points": 6, "indices": [6] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{w}");
 }
 
 #[tokio::test]
