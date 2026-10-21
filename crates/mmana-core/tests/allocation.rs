@@ -76,6 +76,20 @@ fn huge_segment_count_fails_without_allocating_for_it() {
 }
 
 #[test]
+fn tapering_a_wire_too_long_to_count_fails_on_the_limit() {
+    // the segment count saturates at i32::MAX; one more must not wrap it
+    for segmentation in [Segmentation::TaperStart, Segmentation::TaperEnd] {
+        let mut project = dp20();
+        let wire = &mut project.antenna.wires[0];
+        wire.start.y = -1e12;
+        wire.segmentation = segmentation;
+        let _measuring = MEASURING.lock().unwrap_or_else(|e| e.into_inner());
+        let result = calculate(&project, &CalcOptions::default());
+        assert_eq!(result.map(|_| ()), Err(CalcError::TooManyPulses { max: 4096 }));
+    }
+}
+
+#[test]
 fn huge_stack_fails_without_copying_the_wires() {
     // across, and across and up (counted as their product)
     for (horizontal, vertical) in [(100_000, 1), (1000, 1000)] {

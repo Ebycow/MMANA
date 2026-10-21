@@ -146,8 +146,10 @@ impl AntDef {
                     self.add_wz(xxc, yyc, zzc, xc, yc, zc, r, if dm == dm1 { ec } else { 1 }, wno);
                     dm /= sc;
                 }
+                // a wire too long for i32 already has `n` at i32::MAX; the
+                // pulse limit rejects it, so it must not wrap to a negative count
                 if (dd / n as f64) * DM2DEF > rmd / self.dm2 as f64 {
-                    n += 1;
+                    n = n.saturating_add(1);
                 }
                 self.add_wz(xc, yc, zc, x2, y2, z2, r, n, wno);
                 return;
@@ -185,8 +187,10 @@ impl AntDef {
                 let mut xc = x1 + (xx * dd / d);
                 let mut yc = y1 + (yy * dd / d);
                 let mut zc = z1 + (zz * dd / d);
+                // a wire too long for i32 already has `n` at i32::MAX; the
+                // pulse limit rejects it, so it must not wrap to a negative count
                 if (dd / n as f64) * DM2DEF > rmd / self.dm2 as f64 {
-                    n += 1;
+                    n = n.saturating_add(1);
                 }
                 self.add_wz(x1, y1, z1, xc, yc, zc, r, n, wno);
                 dm *= sc;
