@@ -381,6 +381,7 @@ impl Group {
         // corners: where the direction changes
         let mut lp: Vec<Vertex> = Vec::with_capacity(nm);
         let mut zz = 0.0;
+        let wire_bounds = (self.lo, self.hi);
         self.lo = [f64::MAX; 3];
         self.hi = [-f64::MAX; 3];
         for i in 0..nm {
@@ -405,6 +406,11 @@ impl Group {
                 }
             }
             lp.push(Vertex { p, vxy: rp.vxy, vyz: rp.vyz });
+        }
+        if lp.is_empty() {
+            // a closed chain that never turns (a wire and its reverse): the
+            // original keeps the empty bounds, ±f64::MAX, and shows sizes of -inf
+            (self.lo, self.hi) = wire_bounds;
         }
 
         use ElementKind::*;
@@ -1031,7 +1037,9 @@ impl ElementList {
         self.free_wires(n);
         self.groups.remove(n);
         for i in n..len - 1 {
-            self.intervals[i] = self.interval(i + 1);
+            // (an element made by `set_kind` in the new row has no interval yet)
+            let d = self.interval(i + 1);
+            *self.interval_mut(i) = d;
         }
         if n <= self.base {
             self.base -= 1;
@@ -1871,5 +1879,31 @@ mod tests {
         assert_eq!(round_up(0.25, 10.0), 0.3);
         // the original's int() overflows here (a 350 m wire rounded to 0.0001 mm)
         assert_eq!(round_up(350034.98082, 10000.0), 350034.9808);
+    }
+
+    fn finite(list: &ElementList) -> bool {
+        list.rows()
+            .iter()
+            .all(|r| [r.interval, r.position, r.width, r.height, r.perimeter].iter().all(|c| c.is_finite()))
+    }
+
+    #[test]
+    fn elements_made_in_the_new_row_can_be_deleted() {
+        // the original's fixed interval array had room for them; ours had not
+        let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+        assert!(list.apply(&ElementOp::SetKind { row: 1, kind: ElementKind::VerticalSquare }));
+        assert!(list.apply(&ElementOp::SetKind { row: 2, kind: ElementKind::VerticalSquare }));
+        assert!(list.apply(&ElementOp::Delete { row: 1 }));
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn a_closed_chain_that_never_turns_has_finite_sizes() {
+        // a wire and its reverse close a loop without corners; the original
+        // shows sizes of -inf
+        let list =
+            ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)), wire((0.0, 5.0, 0.0), (0.0, -5.0, 0.0))], 21.3);
+        assert!(finite(&list));
+        assert_eq!(list.rows()[0].width, 10.0);
     }
 }
