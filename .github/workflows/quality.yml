@@ -22,6 +22,7 @@ jobs:
       - run: cargo test -p mmana-core --release --test random_models
         env:
           PROPTEST_CASES: 20000
+          CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: true
 
   mutants:
     runs-on: ubuntu-latest
