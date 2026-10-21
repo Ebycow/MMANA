@@ -26,7 +26,9 @@ impl AntDef {
         let (xx, yy, zz) = (x2 - x1, y2 - y1, z2 - z1);
         let d = (xx * xx + yy * yy + zz * zz).sqrt();
         let mut n = (d / (self.rmd / dm as f64)) as i32;
-        n &= 0x0000_fffe;
+        // down to even; the original's `&= 0xfffe` also drops everything from
+        // 65536 up, so 65536 segments became 4 instead of over the limit
+        n &= !1;
         if n == 0 {
             n += 2;
         }
@@ -60,7 +62,7 @@ impl AntDef {
             }
             let mut dd = d - (x * 2.0);
             let mut n = (dd / (rmd / dm2)) as i32;
-            n &= 0x0000_fffe;
+            n &= !1;
             if dd > 0.0 && n >= 2 {
                 dd /= n as f64;
                 let (mut xc, mut yc, mut zc) = (x1, y1, z1);

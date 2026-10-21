@@ -1,6 +1,6 @@
 //! Inputs MMANA's dialogs never produce but project JSON and API requests can.
 
-use mmana_core::{CalcError, CalcOptions, Load, LoadKind, Point3, Project, Segmentation, calculate, maa};
+use mmana_core::{CalcError, CalcOptions, Load, LoadKind, Point3, Project, Segmentation, calculate, maa, pulse_layout};
 use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -170,4 +170,22 @@ fn rejects_loads_that_do_not_exist() {
         p.antenna.loads.push(Load { pulse: name.into(), kind: LoadKind::Impedance { r: 100.0, x: 0.0 } });
         assert_eq!(calc(p), Err(CalcError::PulseOutOfRange { what: "load", name: name.into(), max }), "{name}");
     }
+}
+
+#[test]
+fn an_automatic_count_from_65536_up_stays_over_the_limit() {
+    // a wire just over 1 λ in DM2 parts; the original's 0xfffe mask made
+    // 65536 parts 4 (3 pulses), and the calculation went ahead
+    let mut p = dp20();
+    let wavelength = 299.8 / p.antenna.frequency_mhz;
+    p.antenna.wires[0].start = Point3::new(0.0, 0.0, 0.0);
+    p.antenna.wires[0].end = Point3::new(0.0, wavelength * 1.000001, 0.0);
+    p.antenna.wires[0].segmentation = Segmentation::from_code(0);
+    for dm2 in [65534, 65536, 65537, 1 << 20] {
+        p.antenna.auto_segmentation.dm2 = dm2;
+        assert_eq!(calc(p.clone()), Err(CalcError::TooManyPulses { max: 4096 }), "{dm2}");
+    }
+    // still rounded down to an even count
+    p.antenna.auto_segmentation.dm2 = 3001;
+    assert_eq!(pulse_layout(&p, &CalcOptions::default()).unwrap().pulse_count, 2999);
 }
