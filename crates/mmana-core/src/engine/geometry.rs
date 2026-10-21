@@ -480,6 +480,19 @@ impl Mininec {
         if ap.sources.iter().all(|c| c.ev == 0.0) {
             return Err(CalcError::NoExcitation);
         }
+        // the excitation of a pulse is assigned, not added: the later source
+        // would replace the earlier, whose impedance and power would then be
+        // its own voltage over the other's current
+        let per_copy = ap.sources.iter().filter(|c| c.copy == 0).count().max(1);
+        for (i, c) in ap.sources.iter().enumerate() {
+            if let Some(j) = ap.sources[..i].iter().position(|d| d.plus_no == c.plus_no && c.plus_no >= 1) {
+                return Err(CalcError::DuplicateSource {
+                    first: j % per_copy + 1,
+                    second: i % per_copy + 1,
+                    pulse: c.plus_no as usize,
+                });
+            }
+        }
         for c in &ap.sources {
             if c.plus_no > self.n as i32 || c.plus_no < 1 {
                 return Err(CalcError::PulseOutOfRange { what: "source", name: c.plus.clone(), max: self.n });

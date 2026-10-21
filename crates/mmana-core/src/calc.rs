@@ -151,7 +151,10 @@ pub struct CalcResult {
     pub patterns: Patterns,
     pub currents: Vec<PulseCurrent>,
     /// Current magnitude per pulse as MMANA plots it: signed by the dominant
-    /// direction; index = pulse − 1.
+    /// direction; index = pulse − 1. Like the original's list it ends at the
+    /// pulse set last, so it can be shorter than `pulseCount` (a loop's
+    /// closing pulse is left out), and a pulse it gives no value is
+    /// 1.2345e-37. `currents` has every pulse.
     pub current_display: Vec<f32>,
     pub segmented_wires: Vec<SegmentedWire>,
     pub warnings: Vec<String>,
@@ -214,6 +217,16 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
     let mut warnings = Vec::new();
     if project.environment.ground != GroundKind::FreeSpace && ap.min_z + project.environment.height < 0.0 {
         warnings.push("some wires are below ground".to_owned());
+    }
+    // a passive antenna always takes power; less than none means the method
+    // has broken down (each source alone may still take some), and every
+    // gain is then -999
+    if engine.pwr <= 0.0 {
+        warnings.push(format!(
+            "the input power is not positive ({:e} W): the model is outside what MININEC can calculate, \
+             such as wires meeting at a sharp angle or with very different radii",
+            engine.pwr
+        ));
     }
     Ok(Solved { ap, engine, warnings })
 }
@@ -320,6 +333,10 @@ impl Solved {
 
     pub fn near_field(&self, spec: &NearFieldSpec) -> Result<Vec<NearFieldSample>, CalcError> {
         validate::near_field(spec)?;
+        // the field is scaled by √(power / input power)
+        if self.engine.pwr <= 0.0 {
+            return Err(CalcError::NonPositivePower { power: self.engine.pwr });
+        }
         Ok(self.engine.near_field(spec))
     }
 

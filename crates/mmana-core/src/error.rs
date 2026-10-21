@@ -29,6 +29,8 @@ pub enum CalcError {
     InvalidWireSegmentation { wire: usize, max: i32 },
     #[error("{what} pulse '{name}' does not exist (valid pulses: 1-{max})")]
     PulseOutOfRange { what: &'static str, name: String, max: usize },
+    #[error("sources {first} and {second} are on the same pulse ({pulse})")]
+    DuplicateSource { first: usize, second: usize, pulse: usize },
     #[error("wires {first} and {second} lie exactly on top of each other")]
     OverlappingWires { first: usize, second: usize },
     #[error("sweep point {index} does not exist (the sweep has {points} points)")]
@@ -41,6 +43,8 @@ pub enum CalcError {
     InvalidLoad { load: usize, reason: &'static str },
     #[error("a real ground needs at least one ground medium")]
     NoGroundMedia,
+    #[error("the input power is not positive ({power} W), so the near field cannot be scaled to a power")]
+    NonPositivePower { power: f64 },
     #[error("too many field points (maximum {max})")]
     TooManyFieldPoints { max: usize },
     #[error("a sweep has 1 to {max} points")]

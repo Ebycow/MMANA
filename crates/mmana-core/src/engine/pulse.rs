@@ -65,10 +65,8 @@ impl AntDef {
                     if w != 0 {
                         w -= 1;
                     }
-                    if w < 0 || w >= self.wires.len() as i64 {
-                        return 0;
-                    }
                 }
+                // a wire past the last is no wire
                 let Some(wp) = self.wires.get(w as usize) else { return 0 };
                 let Some(n) = n else { return 0 };
                 match kind {
