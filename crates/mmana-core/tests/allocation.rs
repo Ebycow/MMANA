@@ -1,10 +1,11 @@
-//! A segment count far over the pulse limit must fail on the limit, not
-//! allocate for that count first. Its own test binary, so the counting
-//! allocator sees only this calculation.
+//! A segment count or stacking far over the limits must fail on the limit,
+//! not allocate for that size first. Its own test binary, so the counting
+//! allocator sees only these calculations; they take turns.
 
-use mmana_core::{CalcError, CalcOptions, Segmentation, calculate, maa};
+use mmana_core::{CalcError, CalcOptions, Project, Segmentation, calculate, maa, pulse_layout};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::path::Path;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Records the largest single allocation.
@@ -33,15 +34,37 @@ unsafe impl GlobalAlloc for Largest {
 #[global_allocator]
 static ALLOCATOR: Largest = Largest;
 
+/// Held while measuring, so one test's allocations do not count for another.
+static MEASURING: Mutex<()> = Mutex::new(());
+
+fn dp20() -> Project {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa/DP20.MAA");
+    maa::parse_bytes(&std::fs::read(path).unwrap()).project
+}
+
 #[test]
 fn huge_segment_count_fails_without_allocating_for_it() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa/DP20.MAA");
-    let mut project = maa::parse_bytes(&std::fs::read(path).unwrap()).project;
+    let mut project = dp20();
     project.antenna.wires[0].segmentation = Segmentation::Fixed { count: 10_000_000 };
+    let _measuring = MEASURING.lock().unwrap_or_else(|e| e.into_inner());
     LARGEST.store(0, Ordering::Relaxed);
     let result = calculate(&project, &CalcOptions::default());
     assert_eq!(result.map(|_| ()), Err(CalcError::TooManyPulses { max: 4096 }));
     // sized by the segment count, the coordinate arrays alone are 80 MB each
+    let largest = LARGEST.load(Ordering::Relaxed);
+    assert!(largest < 1 << 20, "largest allocation {largest} bytes");
+}
+
+#[test]
+fn huge_stack_fails_without_copying_the_wires() {
+    let mut project = dp20();
+    project.antenna.stack.horizontal = 100_000;
+    let opts = CalcOptions { max_pulses: 1, ..CalcOptions::default() };
+    let _measuring = MEASURING.lock().unwrap_or_else(|e| e.into_inner());
+    LARGEST.store(0, Ordering::Relaxed);
+    assert_eq!(calculate(&project, &opts).map(|_| ()), Err(CalcError::TooManySegmentWires { max: 4096 }));
+    assert_eq!(pulse_layout(&project, &opts).map(|_| ()), Err(CalcError::TooManySegmentWires { max: 4096 }));
+    // the copies of the one wire alone are 9 MB
     let largest = LARGEST.load(Ordering::Relaxed);
     assert!(largest < 1 << 20, "largest allocation {largest} bytes");
 }

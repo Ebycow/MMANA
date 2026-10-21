@@ -233,6 +233,24 @@ fn check_segmentation(ant: &Antenna) -> Result<(), CalcError> {
     Ok(())
 }
 
+/// Rejects stacking that makes more segment wires than the engine takes
+/// before the copies are made: each copy of a wire with R ≠ 0 expands into
+/// at least one, and 100 000 copies would fill memory first. Counted as at
+/// least one wire, so copies of wires that are all R = 0 are bounded too.
+fn check_stack(ant: &Antenna) -> Result<(), CalcError> {
+    let st = &ant.stack;
+    if !st.is_stacked() {
+        return Ok(());
+    }
+    let max = crate::engine::WZMAX;
+    let copies = i64::from(st.horizontal.max(1)) * i64::from(st.vertical.max(1));
+    let active = ant.wires.iter().filter(|w| w.radius != 0.0).count().max(1);
+    if copies.saturating_mul(active as i64) > max as i64 {
+        return Err(CalcError::TooManySegmentWires { max });
+    }
+    Ok(())
+}
+
 /// Rejects two wires with the same ends (in either direction), such as a
 /// copy left where it was made. Their impedance matrix is singular and the
 /// original carries on with NaN currents. Wires with R = 0 are not
@@ -261,6 +279,7 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         return Err(CalcError::NoWires);
     }
     check_segmentation(ant)?;
+    check_stack(ant)?;
     check_overlap(ant)?;
     let mut ap = AntDef::from_model(ant, cfq);
     let cfg = engine_config(project, opts);
@@ -462,6 +481,7 @@ pub fn pulse_layout(project: &Project, opts: &CalcOptions) -> Result<PulseLayout
         return Err(CalcError::NoWires);
     }
     check_segmentation(ant)?;
+    check_stack(ant)?;
     // segmented stacked, as calculated: a copy that reaches the ground is
     // divided differently from the wire as defined
     let mut ap = AntDef::from_model(ant, cfq);
