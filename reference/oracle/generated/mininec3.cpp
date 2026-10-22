@@ -472,7 +472,7 @@ void L135(void)
 	L=7;
 	T=(D0+D3)/aS[P4i];
 	/* REM ----- CRITERIA FOR EXACT KERNEL*/
-	if( T > 1.1 ) goto L165;
+	if( T > 1.1*(1.0+1e-9) ) goto L165;
 	if( FVS == -1 ) goto L165;
 	i = aWi[I];
 	j = aWi[J];
@@ -496,8 +496,8 @@ void L135(void)
 		return;
 	}
 L165:;
-	if( T > 6 ) L=3;
-	if( T > 10 ) L=1;
+	if( T > 6*(1.0+1e-9) ) L=3;
+	if( T > 10*(1.0+1e-9) ) L=1;
 L167:;
 	I5=L+L;
 L168:;

@@ -13,9 +13,9 @@
 //! a different libm may move a score by an ulp, so figures get a tolerance
 //! and the search may part ways where two scores were that close. Edits that
 //! go through `sin`/`cos` (the polar form) may also put a coordinate an ulp
-//! from the original's, and where MININEC's integration order switches there
-//! (docs/guarantees.md, 既知の限界) |Z| moves by up to 0.3 %: MSVC's libm does
-//! this to the sloper's jX by 4e-4 Ω.
+//! from the original's (MSVC's libm does); the integration order no longer
+//! switches on that (`ORDER_MARGIN`), so the figures stay within the same
+//! tolerance.
 
 use mmana_core::optimize::{
     self, Band, ElementAxis, ElementCombination, Link, Matching, OptimizerSetup, SetupOp, StopReason, Variable,
@@ -26,10 +26,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 const GOLDEN_PLATFORM: bool = cfg!(all(target_os = "macos", target_arch = "aarch64"));
-/// For what the port works out by arithmetic: values, coordinates, loads.
 const TOL_REL: f64 = 1e-5;
-/// For what the engine calculates: figures, currents and scores.
-const TOL_FIGURE_REL: f64 = 3e-3;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -46,7 +43,7 @@ fn same(a: f64, b: f64) -> bool {
 /// `same` for a figure, with the difference measured against `scale` too
 /// (|Z| for R and jX).
 fn same_figure(a: f64, b: f64, scale: f64) -> bool {
-    same_within(a, b, TOL_FIGURE_REL, scale)
+    same_within(a, b, TOL_REL, scale)
 }
 
 fn same_within(a: f64, b: f64, tol: f64, scale: f64) -> bool {
@@ -333,7 +330,7 @@ fn run_case(name: &str) -> Vec<String> {
         if let Some(v) = c.score {
             let gv = f(&g[9]);
             if v.to_bits() != gv.to_bits() {
-                if !close(v, gv, TOL_FIGURE_REL, 1.0) || GOLDEN_PLATFORM {
+                if !close(v, gv, TOL_REL, 1.0) || GOLDEN_PLATFORM {
                     problems.push(format!("calculation {}: score {v} != original {gv}", k + 1));
                 }
                 near_tie = true;

@@ -9,6 +9,16 @@
 
 use super::{Mininec, int_};
 
+/// How far past 1.1, 6 or 10 the distance ratio must be before the exact
+/// kernel or the full order of integration is given up. The original
+/// compares exactly; on a regular grid the ratio lands on a threshold, and
+/// the rounding of the coordinates chose the side: one coordinate an ulp off
+/// moved LAZY-H's |Z| by 0.03 %, and a trial the optimiser listed came out
+/// 0.47 % apart when its values were written back (a quarter-wave vertical
+/// fed through a 5 cm stub). Within the margin the more accurate side is
+/// taken, as the oracle does (reference/oracle/extract.sh).
+const ORDER_MARGIN: f64 = 1.0 + 1e-9;
+
 /// Source-to-observation vectors handed to the integrator.
 #[derive(Clone, Copy)]
 struct Span {
@@ -84,7 +94,7 @@ impl Mininec {
 
         // criteria for exact kernel
         let mut skip_order_reduction = false;
-        if !(t > 1.1) && fvs != -1 {
+        if !(t > 1.1 * ORDER_MARGIN) && fvs != -1 {
             let i = self.wi[obs] as usize;
             let j = self.wi[src] as usize;
             let (ji, jj) = (self.j2[i], self.j2[j]);
@@ -101,10 +111,10 @@ impl Mininec {
             }
         }
         if !skip_order_reduction {
-            if t > 6.0 {
+            if t > 6.0 * ORDER_MARGIN {
                 l = 3;
             }
-            if t > 10.0 {
+            if t > 10.0 * ORDER_MARGIN {
                 l = 1;
             }
         }
