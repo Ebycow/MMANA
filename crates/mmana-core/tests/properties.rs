@@ -385,6 +385,28 @@ fn a_lossless_antenna_radiates_its_input_power() {
 }
 
 #[test]
+fn an_end_an_ulp_off_the_ground_is_on_it() {
+    // the Ewe's down-lead set to a zenith angle of 180° in polar form ends
+    // at -4e-16 m; MININEC asks for exactly 0 and left the antenna unfed
+    let mut p = sample("EWE.MAA");
+    let on = calc(&p);
+    assert!(on.warnings.is_empty());
+    for z in [-4.440892098500626e-16, 4.440892098500626e-16] {
+        p.antenna.wires[2].end.z = z;
+        let off = calc(&p);
+        assert_eq!(off.sources, on.sources, "an end at {z} m");
+        // (the pulses' positions are reported where the wire is)
+        let currents = |r: &CalcResult| r.currents.iter().map(|c| c.current).collect::<Vec<_>>();
+        assert_eq!(currents(&off), currents(&on), "an end at {z} m");
+        assert_eq!(off.patterns, on.patterns, "an end at {z} m");
+        assert!(off.warnings.is_empty(), "{:?}", off.warnings);
+    }
+    // a millimetre is a gap
+    p.antenna.wires[2].end.z = 0.001;
+    assert!(rel(calc(&p).impedance, on.impedance) > 0.5);
+}
+
+#[test]
 fn nothing_radiates_below_the_ground() {
     // a horizontal cut 10° below the horizon: none over ground, the mirror
     // of the cut 10° above in free space

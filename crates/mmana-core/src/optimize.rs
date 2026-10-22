@@ -522,6 +522,10 @@ pub enum IssueCode {
     HeightInFreeSpace,
     /// Varies the same thing as variable `other`.
     Duplicate,
+    /// Changes a coordinate, load or setting that variable `other` (or a
+    /// variable linked to it) changes too, so the values of a trial do not
+    /// tell the antenna: it depends on which was varied last.
+    Overlapping,
     /// The link (or a `#` bound) refers to a variable that does not exist.
     MissingVariable,
     /// The links go round without reaching an independent variable.
@@ -557,6 +561,9 @@ impl SetupIssue {
             IssueCode::SDomainLoad => format!("variable {}: S-domain loads cannot vary", v(variable)),
             IssueCode::HeightInFreeSpace => format!("variable {}: the height means nothing in free space", v(variable)),
             IssueCode::Duplicate => format!("variable {}: same as variable {}", v(variable), v(other)),
+            IssueCode::Overlapping => {
+                format!("variable {}: changes what variable {} changes too", v(variable), v(other))
+            }
             IssueCode::MissingVariable => format!("variable {}: variable {} does not exist", v(variable), v(other)),
             IssueCode::LinkLoop => format!("variable {}: its links never reach an independent variable", v(variable)),
             IssueCode::TooManyBands => format!("at most {MAX_BANDS} bands"),
@@ -1071,7 +1078,118 @@ fn check(model: &mut Model, setup: &OptimizerSetup) -> (Vec<SetupIssue>, Vec<Set
             }
         }
     }
+    if errors.is_empty() {
+        errors = overlaps(model, vars);
+    }
     (errors, warnings)
+}
+
+/// Every number of the antenna a variable can change: the wires as written
+/// back, the loads, the sources, the height, the frequency and the stacking.
+fn snapshot(model: &Model) -> Vec<f64> {
+    let mut out = Vec::new();
+    for w in model.list.wires().wires {
+        out.extend([w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z, w.radius]);
+    }
+    for l in &model.antenna.loads {
+        match &l.kind {
+            LoadKind::Lc { inductance_uh, capacitance_pf, q } => out.extend([*inductance_uh, *capacitance_pf, *q]),
+            LoadKind::Impedance { r, x } => out.extend([*r, *x]),
+            LoadKind::SDomain { coefficients } => out.extend(coefficients.iter().flatten()),
+        }
+    }
+    for s in &model.antenna.sources {
+        out.extend([s.phase_deg, s.voltage]);
+    }
+    let stack = &model.antenna.stack;
+    out.extend([model.environment.height, model.frequency, stack.horizontal_spacing, stack.vertical_spacing]);
+    out
+}
+
+/// Independent variables (with the variables linked to them) whose order
+/// matters: what a trial's values give would depend on which of them was
+/// varied last, and so would the antenna written back at the end. (MMANA
+/// refuses only the same target twice; a wire end and its element's width,
+/// or L and C of one trap, run there and end with another antenna than the
+/// best one.) Each pair is set both ways round: intervals of two elements
+/// both move the elements behind them, but add up the same either way,
+/// while scaling the heights of an element about 0 does not move a wire end
+/// at 0 until another variable has moved it.
+fn overlaps(model: &Model, vars: &[Variable]) -> Vec<SetupIssue> {
+    // sets an independent variable and the variables linked to it
+    let set = |m: &mut Model, n: usize, d: f64| {
+        m.set(&vars[n].target, d);
+        for (i, v) in vars.iter().enumerate() {
+            if v.link != Link::Independent && last_in_chain(vars, i) == Ok(n) {
+                m.set(&v.target, v.link.apply(d));
+            }
+        }
+    };
+    // (a step of its own for each, in no simple ratio to the others: two
+    // sizes of one element set to the same value, or a dipole's length made
+    // 1.01 times from one end and its other end 1.02 times, end up the same
+    // either way round)
+    let probes: Vec<(usize, f64)> = (0..vars.len())
+        .filter(|&n| vars[n].link == Link::Independent)
+        .map(|n| {
+            let d = model.value(&vars[n].target);
+            let k = 1.0 + 0.0137 * ((n + 1) as f64).sqrt();
+            (n, if d != 0.0 { d * k } else { 0.001 * k })
+        })
+        .collect();
+    let same = |a: &[f64], b: &[f64]| a.iter().zip(b).all(|(a, b)| (a - b).abs() <= 1e-9 * a.abs().max(b.abs()));
+    // a wire and the element it belongs to always interfere, however little
+    // a probe moves them: once the wire end passes the element's bounds,
+    // resizing the element moves it too
+    let members = |n: usize| {
+        (0..vars.len())
+            .filter(move |&i| i == n || (vars[i].link != Link::Independent && last_in_chain(vars, i) == Ok(n)))
+    };
+    let wire_of = |i: usize| match vars[i].target {
+        VariableTarget::Wire { wire, .. } | VariableTarget::PolarWire { wire, .. } => model.list.element_of(wire),
+        _ => None,
+    };
+    let element_of = |i: usize| match vars[i].target {
+        VariableTarget::Element { element, .. } => Some(element),
+        _ => None,
+    };
+    let within = |a: usize, b: usize| wire_of(a).is_some_and(|e| element_of(b) == Some(e));
+    let mut errors = Vec::new();
+    for (k, (n, dn)) in probes.iter().enumerate() {
+        // variables linked to each other: setting them to one value and then
+        // another must give what setting them to the other gives at once (a
+        // wire's X counts from where its element is when it is set, so linked
+        // to that element's interval it ends up elsewhere each time)
+        let linked: Vec<usize> = (0..vars.len())
+            .filter(|&i| vars[i].link != Link::Independent && last_in_chain(vars, i) == Ok(*n))
+            .collect();
+        if let Some(&i) = linked.first() {
+            let d0 = model.value(&vars[*n].target);
+            let (mut twice, mut once) = (model.clone(), model.clone());
+            set(&mut twice, *n, *dn);
+            set(&mut twice, *n, 2.0 * d0 - dn);
+            set(&mut once, *n, 2.0 * d0 - dn);
+            if !same(&snapshot(&twice), &snapshot(&once)) {
+                errors.push(SetupIssue::new(IssueCode::Overlapping, Some(i), Some(*n)));
+                continue;
+            }
+        }
+        let order_matters = probes[..k].iter().find(|(m, dm)| {
+            if members(*n).any(|i| members(*m).any(|j| within(i, j) || within(j, i))) {
+                return true;
+            }
+            let (mut nm, mut mn) = (model.clone(), model.clone());
+            set(&mut nm, *n, *dn);
+            set(&mut nm, *m, *dm);
+            set(&mut mn, *m, *dm);
+            set(&mut mn, *n, *dn);
+            !same(&snapshot(&nm), &snapshot(&mn))
+        });
+        if let Some((m, _)) = order_matters {
+            errors.push(SetupIssue::new(IssueCode::Overlapping, Some(*n), Some(*m)));
+        }
+    }
+    errors
 }
 
 /// The variables ready for the search.
@@ -1143,6 +1261,9 @@ struct Reading {
     current: Option<f32>,
     horizontal: Vec<f32>,
     vertical: Vec<f32>,
+    /// The antenna takes power the calculation can tell from rounding
+    /// (its result has no warning about the input power).
+    takes_power: bool,
 }
 
 /// `ABS()` of the original, which keeps the sign of -0.
@@ -1159,9 +1280,36 @@ enum Stop {
     Failed(CalcError),
 }
 
+/// Which wire ends meet: for each end (start, end of each wire in turn) the
+/// first end at the same point.
+fn joints(wires: &[Wire]) -> Vec<usize> {
+    let ends: Vec<[f64; 3]> =
+        wires.iter().flat_map(|w| [[w.start.x, w.start.y, w.start.z], [w.end.x, w.end.y, w.end.z]]).collect();
+    // (+0.0 for -0.0, which is the same point)
+    let key = |k: usize| ends[k].map(|c| (c + 0.0).to_bits());
+    let mut order: Vec<usize> = (0..ends.len()).collect();
+    order.sort_by_key(|&k| (key(k), k));
+    let mut first = vec![0; ends.len()];
+    for (i, &k) in order.iter().enumerate() {
+        first[k] = if i > 0 && key(order[i - 1]) == key(k) { first[order[i - 1]] } else { k };
+    }
+    first
+}
+
+/// How many wires are a billionth of the antenna long or shorter: ends
+/// that close no longer meet exactly, but the matrix is singular all the
+/// same, and the next resize no longer tells them apart.
+fn short_wires(wires: &[Wire]) -> usize {
+    let length = |w: &Wire| (w.end.x - w.start.x).hypot(w.end.y - w.start.y).hypot(w.end.z - w.start.z);
+    let size = wires.iter().map(length).fold(0.0, f64::max);
+    wires.iter().filter(|w| length(w) <= 1e-9 * size).count()
+}
+
 /// `CACal` with its goal state (`ATRG`).
 struct Search<'a, F> {
     model: Model,
+    /// The antenna the values are set on when a trial is written back.
+    start: Model,
     vars: Vec<Variable>,
     state: Vec<VarState>,
     setup: &'a OptimizerSetup,
@@ -1224,6 +1372,82 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         clamp(&self.model, &self.vars, &self.state, n, d)
     }
 
+    /// Whether variable `n` at `d` would leave an antenna that the values
+    /// do not give, so that writing a trial back (`apply_trial`, and the
+    /// antenna the run ends with) would give another antenna than the one
+    /// scored. The search turns there as at a bound. (The original carries
+    /// on.) That is when
+    /// - an element size moves only the outermost points past other points
+    ///   of the element, which then lie over other wires and move with the
+    ///   ends afterwards;
+    /// - wire ends that did not meet come to meet (or a wire shrinks to
+    ///   nothing, or to a billionth of the antenna), or ends that met part:
+    ///   ends that meet move together, so writing the values back from there
+    ///   would move other points;
+    /// - an element size takes its bounds across 0 (or onto it): they then
+    ///   scale in proportion about 0 instead of moving about the centre, so
+    ///   the way back to the best value would end elsewhere;
+    /// - a wire in polar form does not read back what was set, or loses one
+    ///   of its other two quantities: a zenith angle past 180° reads back as
+    ///   less with the azimuth turned round, and at 0° the azimuth is gone;
+    /// - otherwise the antenna differs from the values set on the starting
+    ///   antenna (to 10 ppm of its size), as when a wire end met another one
+    ///   on the way and moved on with it.
+    fn breaks(&self, n: usize, d: f64) -> bool {
+        use VariableTarget as T;
+        let moved: Vec<usize> =
+            (0..self.vars.len()).filter(|&i| i == n || self.vars[i].link.followed() == Some(n)).collect();
+        let checked = |t: &VariableTarget| matches!(t, T::Element { .. } | T::PolarWire { .. } | T::Wire { .. });
+        if !moved.iter().any(|&i| checked(&self.vars[i].target)) {
+            return false;
+        }
+        let value = |i: usize| match i {
+            _ if i == n => d,
+            _ if moved.contains(&i) => self.vars[i].link.apply(d),
+            _ => self.state[i].dc,
+        };
+        let mut m = self.model.clone();
+        for &i in &moved {
+            let t = &self.vars[i].target;
+            let before = match *t {
+                T::PolarWire { wire, .. } => Some(polar(m.list.wire(wire))),
+                _ => None,
+            };
+            m.set(t, value(i));
+            if let (T::PolarWire { wire, quantity, .. }, Some((l, a, z))) = (*t, before) {
+                let mut want = [l, a, z];
+                want[quantity as usize] = value(i);
+                let (l, a, z) = polar(m.list.wire(wire));
+                let near = |x: f64, y: f64, scale: f64| (x - y).abs() <= 1e-9 * scale;
+                if !(near(l, want[0], want[0].abs()) && near(a, want[1], 360.0) && near(z, want[2], 360.0)) {
+                    return true;
+                }
+            }
+        }
+        let (before, after) = (self.model.list.wires().wires, m.list.wires().wires);
+        if joints(&before) != joints(&after) || short_wires(&before) < short_wires(&after) {
+            return true;
+        }
+        if moved.iter().any(|&i| matches!(self.vars[i].target, T::Element { .. })) {
+            let (described, now) = (self.model.list.described(), m.list.described());
+            if described.iter().zip(&now).any(|(was, now)| was.iter().zip(now).any(|(was, now)| *was && !now))
+                || self.model.list.bound_rules() != m.list.bound_rules()
+            {
+                return true;
+            }
+        }
+        // as `apply_trial` writes it
+        let mut fresh = self.start.clone();
+        for i in 0..self.vars.len() {
+            fresh.set(&self.vars[i].target, value(i));
+        }
+        let (a, b) = (m.list.wires().wires, fresh.list.wires().wires);
+        let coords = |w: &Wire| [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z];
+        let size = a.iter().flat_map(coords).fold(0.0, |s: f64, c| s.max(c.abs()));
+        let near = |x: f64, y: f64| (x - y).abs() <= 1e-5 * size;
+        a.iter().zip(&b).any(|(a, b)| coords(a).into_iter().zip(coords(b)).any(|(x, y)| !near(x, y)))
+    }
+
     /// `IsSameMax`: the values are those of the best trial.
     fn is_same_max(&self) -> bool {
         self.state.iter().zip(&self.ad).all(|(s, &d)| s.dc == d)
@@ -1262,6 +1486,13 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             current,
             horizontal: every(&r.patterns.horizontal.total),
             vertical: every(&r.patterns.vertical.total),
+            takes_power: crate::calc::takes_power(
+                r.total_power_w,
+                r.sources
+                    .iter()
+                    .map(|s| s.voltage.re.hypot(s.voltage.im) * s.current.re.hypot(s.current.im) / 2.0)
+                    .sum(),
+            ),
         })
     }
 
@@ -1357,12 +1588,14 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         self.v = 0.0;
         let mut bv = vec![0.0; self.bands];
         let mut first = None;
+        let mut meaningless = false;
         for b in 0..self.bands {
             if self.bands != 1 {
                 self.model.set_band(b);
             }
             let rd = self.calculate().map_err(Stop::Failed)?;
             bv[b] = self.score(&rd);
+            meaningless |= !rd.takes_power;
             let last = b == self.bands - 1;
             if last {
                 // (the original adds the last band's score in place of
@@ -1370,6 +1603,13 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                 self.v = bv[0];
                 for &s in &bv[1..] {
                     self.v += if self.setup.emphasize_first_band { s / self.bands as f64 } else { s };
+                }
+                // a band that takes no power (MININEC broke down, as with a
+                // feed resistance below 0, or one within rounding of 0)
+                // scores the least, never the best; the original scores it,
+                // and the matching goal gets a NaN
+                if !self.setup.sweep_only && (meaningless || !self.v.is_finite()) {
+                    self.v = f64::MIN;
                 }
             }
             self.calculations += 1;
@@ -1462,7 +1702,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                         // original loops on its memo forever, never calculating
                         // again, so it could not even be stopped
                         let stuck = self.setup.sweep_only && dc == before;
-                        if self.clamp(n, &mut dc) || stuck {
+                        if self.clamp(n, &mut dc) || stuck || self.breaks(n, dc) {
                             // back to the best value, and the other way
                             let mut d = max_d;
                             self.clamp(n, &mut d);
@@ -1564,6 +1804,7 @@ pub fn optimize(
     progress: impl FnMut(&Progress) -> bool,
 ) -> Result<OptimizeOutcome, OptimizeError> {
     let mut model = Model::new(project, options);
+    let start = model.clone();
     let start_frequency = model.frequency;
     let (errors, warnings) = check(&mut model, setup);
     if !errors.is_empty() {
@@ -1583,6 +1824,7 @@ pub fn optimize(
     let mut search = Search {
         bands: model.bands.len(),
         model,
+        start,
         vars,
         state,
         setup,
@@ -1607,6 +1849,13 @@ pub fn optimize(
         Err(Stop::Failed(e)) => StopReason::Failed { message: e.to_string() },
     };
     let (project, frequency_mhz) = if search.best.is_some() {
+        if matches!(stop, StopReason::Failed { .. }) {
+            // the antenna that failed may be past mending (a wire a few
+            // femtometres long, whose ends the next resize no longer tells
+            // apart): the best values go on the starting antenna instead, as
+            // `apply_trial` writes them
+            search.model = search.start.clone();
+        }
         if search.bands > 1 {
             // (the original keeps the last band's frequency and sources)
             search.model.antenna.sources = project.antenna.sources.clone();
@@ -2455,5 +2704,113 @@ mod tests {
         assert_eq!(get_normal(-0.004), -0.004);
         assert_eq!(round_up_str(1.23456789), 1.234568);
         assert_eq!(round_up_str(-0.0000004), -0.0);
+    }
+
+    /// The setup errors of variables on `targets` of a sample, with `links`.
+    fn errors_of(file: &str, targets: &[VariableTarget], links: &[(usize, Link)]) -> Vec<IssueCode> {
+        let project = sample(file);
+        let ops: Vec<SetupOp> =
+            targets.iter().enumerate().map(|(index, &target)| SetupOp::SetTarget { index, target }).collect();
+        let opts = CalcOptions::default();
+        let mut setup = edit_setup(&project, &opts, &OptimizerSetup::default(), &ops).setup;
+        assert_eq!(setup.variables.len(), targets.len());
+        for &(i, link) in links {
+            setup.variables[i].link = link;
+        }
+        edit_setup(&project, &opts, &setup, &[]).errors.iter().map(|e| e.code).collect()
+    }
+
+    #[test]
+    fn variables_whose_order_matters_are_refused() {
+        use VariableTarget::*;
+        let polar = |wire, quantity, anchor| PolarWire { wire, quantity, anchor };
+        let overlapping = vec![IssueCode::Overlapping];
+        // a wire end and the width of its element
+        let end_and_width = [Wire { wire: 0, part: WirePart::Y2 }, Element { element: 0, part: ElementPart::Width }];
+        assert_eq!(errors_of("DP20.MAA", &end_and_width, &[]), overlapping);
+        // L and C of one trap (changing one keeps the resonance)
+        let trap = [Load { load: 0, part: LoadPart::Primary }, Load { load: 0, part: LoadPart::Secondary }];
+        assert_eq!(errors_of("DUAL2EL.MAA", &trap, &[]), overlapping);
+        // a sloper's zenith angle from its top end and its length about the
+        // centre, which moves the top end off the mast
+        let sloper =
+            [polar(1, PolarQuantity::Zenith, PolarAnchor::Start), polar(1, PolarQuantity::Length, PolarAnchor::Center)];
+        assert_eq!(errors_of("SLOPER.MAA", &sloper, &[]), overlapping);
+        // a dipole's length from one end and its other end: 1.01 and 1.02
+        // times would end up the same either way round
+        let length_and_end = [polar(0, PolarQuantity::Length, PolarAnchor::End), Wire { wire: 0, part: WirePart::Y1 }];
+        assert_eq!(errors_of("DP20.MAA", &length_and_end, &[]), overlapping);
+        // a wire's X linked to its element's interval: X counts from where
+        // the element is when it is set
+        let model = Model::new(&sample("3EL20.MAA"), &CalcOptions::default());
+        let element = model.list.len() - 1;
+        assert_ne!(element, model.list.base());
+        let wire = (0..model.list.wire_count()).find(|&w| model.list.element_of(w) == Some(element)).unwrap();
+        let x_and_interval = [Wire { wire, part: WirePart::X1 }, Element { element, part: ElementPart::Interval }];
+        let same = (1, Link::Same { variable: 0 });
+        assert_eq!(errors_of("3EL20.MAA", &x_and_interval, &[same]), overlapping);
+        // but the intervals of two directors, which both move the last one,
+        // add up the same either way
+        let model = Model::new(&sample("5EL20.MAA"), &CalcOptions::default());
+        let last = model.list.len() - 1;
+        assert!(model.list.base() < last - 1);
+        let intervals = [
+            Element { element: last - 1, part: ElementPart::Interval },
+            Element { element: last, part: ElementPart::Interval },
+        ];
+        assert_eq!(errors_of("5EL20.MAA", &intervals, &[]), vec![]);
+        // and so do width and height of one element
+        let sizes =
+            [Element { element: 0, part: ElementPart::Width }, Element { element: 0, part: ElementPart::Height }];
+        assert_eq!(errors_of("LOOP20.MAA", &sizes, &[]), vec![]);
+    }
+
+    #[test]
+    fn a_trial_that_takes_no_power_is_never_the_best() {
+        // the HB9CV's feed resistance goes below 0 on the way, where the
+        // matching goal took the square root of a negative number
+        let project = sample("HB9CV.MAA");
+        let targets = [ElementPart::Width; 2].iter().enumerate().map(|(i, &part)| SetupOp::SetTarget {
+            index: i,
+            target: VariableTarget::Element { element: 1 - i, part },
+        });
+        let opts = CalcOptions::default();
+        let base = OptimizerSetup { absolute_pitch: false, ..Default::default() };
+        let mut setup = edit_setup(&project, &opts, &base, &targets.collect::<Vec<_>>()).setup;
+        for v in &mut setup.variables {
+            v.pitch = 0.2;
+        }
+        setup.weights = Weights { gain: 0, fb: 0, jx: 0, swr: 0, elevation: 0, matching: 1, current: 0 };
+        let mut scores = Vec::new();
+        let out = optimize(&project, &opts, &setup, Some(40), |p| {
+            scores.extend(p.score.map(|s| (s, p.impedance.re)));
+            true
+        })
+        .unwrap();
+        assert!(scores.iter().any(|&(s, r)| s == f64::MIN && r < 0.0), "{scores:?}");
+        assert!(scores.iter().all(|(s, _)| !s.is_nan()));
+        assert!(out.best.unwrap().impedance.re > 0.0);
+    }
+
+    #[test]
+    fn an_element_size_turns_before_passing_its_inner_points() {
+        // element 0 is a 20 m dipole with 15 m tips; narrower than the 20 m
+        // part, the tips would lie over it and the antenna would depend on
+        // the way the search took
+        let project = sample("DUAL2EL.MAA");
+        let opts = CalcOptions::default();
+        let base = OptimizerSetup { absolute_pitch: false, ..Default::default() };
+        let op =
+            SetupOp::SetTarget { index: 0, target: VariableTarget::Element { element: 0, part: ElementPart::Width } };
+        let setup = edit_setup(&project, &opts, &base, &[op]).setup;
+        let out = optimize(&project, &opts, &setup, Some(40), |_| true).unwrap();
+        let best = out.best.as_ref().unwrap();
+        let (written, _) = apply_trial(&project, &opts, &setup, &best.values).unwrap();
+        for (a, b) in written.antenna.wires.iter().zip(&out.project.antenna.wires) {
+            let d = [a.start.y - b.start.y, a.end.y - b.end.y];
+            assert!(d.iter().all(|d| d.abs() < 1e-9), "{a:?} != {b:?}");
+        }
+        let list = ElementList::new(&out.project.antenna.wires, SPEED_OF_LIGHT_MMANA / project.antenna.frequency_mhz);
+        assert!(list.described().iter().all(|d| d[1]), "the widths are not those of the wires");
     }
 }

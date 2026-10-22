@@ -6,6 +6,9 @@
 //! is described in `reference/oracle/elements_main.cpp`). The editor only adds,
 //! multiplies, divides and takes square roots, which IEEE 754 rounds the same
 //! everywhere, so every value must be bit-identical on every platform.
+//!
+//! The edits go through `apply_as_original`: `apply` also refuses edits
+//! that leave a broken antenna (random_edits.rs), which some scripts make.
 
 use mmana_core::elements::{ElementKind, ElementList, ElementOp, ElementRow};
 use mmana_core::{SPEED_OF_LIGHT_MMANA, Segmentation, maa};
@@ -111,7 +114,7 @@ fn run_script(list: &mut ElementList, script: &str) -> Vec<bool> {
                 in_millimetres: flag("mm"),
                 scale_all: flag("all"),
             };
-            applied.push(list.apply(&op));
+            applied.push(list.apply_as_original(&op));
             continue;
         }
         let len = list.len() as i64;
@@ -126,7 +129,7 @@ fn run_script(list: &mut ElementList, script: &str) -> Vec<bool> {
         for r in first..=last {
             let ok = r >= 0 && r <= list.len() as i64 && {
                 let op = op_for(op, r as usize, arg, list);
-                list.apply(&op)
+                list.apply_as_original(&op)
             };
             applied.push(ok);
         }

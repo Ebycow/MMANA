@@ -1,9 +1,10 @@
-# sloper in polar form: zenith angle from the top end and length about the
-# centre; SWR and a low elevation
+# sloper in polar form: zenith angle and length, both from the top end (the
+# length about the centre would move the top end off the mast, so the two
+# would not add up the same either way round); SWR and a low elevation
 file SLOPER.MAA
 weights 0 0 0 100 30 0 0
 minswr 1.1
 set 0 wirep 1 6
 var 0 pitch=1 min=20 max=80
-set 1 wirep 1 2
+set 1 wirep 1 0
 limit 200

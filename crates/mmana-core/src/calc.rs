@@ -215,16 +215,32 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         return Err(CalcError::NoFiniteSolution);
     }
     let mut warnings = Vec::new();
-    if project.environment.ground != GroundKind::FreeSpace && ap.min_z + project.environment.height < 0.0 {
+    // (an end an ulp below the ground is on it, see `GROUND_CONTACT`)
+    let longest = ap.wz.iter().map(|w| (w.x2 - w.x1).hypot(w.y2 - w.y1).hypot(w.z2 - w.z1)).fold(0.0, f64::max);
+    if project.environment.ground != GroundKind::FreeSpace
+        && ap.min_z + project.environment.height < -crate::engine::GROUND_CONTACT * longest
+    {
         warnings.push("some wires are below ground".to_owned());
     }
     // a passive antenna always takes power; less than none means the method
     // has broken down (each source alone may still take some), and every
     // gain is then -999
+    let apparent =
+        engine.solutions.iter().map(|s| s.voltage.0.hypot(s.voltage.1) * s.current.0.hypot(s.current.1) / 2.0);
+    let apparent: f64 = apparent.sum();
     if engine.pwr <= 0.0 {
         warnings.push(format!(
             "the input power is not positive ({:e} W): the model is outside what MININEC can calculate, \
              such as wires meeting at a sharp angle or with very different radii",
+            engine.pwr
+        ));
+    } else if !takes_power(engine.pwr, apparent) {
+        // the matrix is f32: a feed resistance under a millionth of |Z| is
+        // rounding, and so is the gain divided by the power it gives
+        warnings.push(format!(
+            "the input power is negligible ({:e} W of {apparent:e} VA): the feed resistance is within the \
+             rounding of the calculation, so the gain and the other figures that depend on the power are not \
+             reliable",
             engine.pwr
         ));
     }
@@ -236,6 +252,12 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         ));
     }
     Ok(Solved { ap, engine, warnings })
+}
+
+/// Whether an antenna taking `power` W of `apparent` VA takes power the
+/// calculation can tell from rounding (a millionth of it and more).
+pub(crate) fn takes_power(power: f64, apparent: f64) -> bool {
+    power > 1e-6 * apparent
 }
 
 /// Segments one conductor can be divided into before MININEC's results start

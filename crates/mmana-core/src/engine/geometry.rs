@@ -2,7 +2,7 @@
 
 use super::antdef::AntDef;
 use super::circuit::{calc_para_z, wire_loss};
-use super::{EngineConfig, LoadDef, Mininec, PAI2, SMAX, SourceDef, sgn};
+use super::{EngineConfig, GROUND_CONTACT, LoadDef, Mininec, PAI2, SMAX, SourceDef, sgn};
 use crate::error::CalcError;
 use crate::model::{GroundKind, WireMaterial};
 
@@ -175,8 +175,20 @@ impl Mininec {
         for i in 1..=nw {
             let wz = &ap.wz[i - 1];
             let s1 = wz.seg as f64;
-            let (x1, y1, z1) = (wz.x1, wz.y1, wz.z1 + self.height_off);
-            let (x2, y2, z2) = (wz.x2, wz.y2, wz.z2 + self.height_off);
+            let (x1, y1, mut z1) = (wz.x1, wz.y1, wz.z1 + self.height_off);
+            let (x2, y2, mut z2) = (wz.x2, wz.y2, wz.z2 + self.height_off);
+            if self.g != 1 {
+                // an end an ulp off the ground (a wire turned to 180° in
+                // polar form, a height that cancels a negative Z) is on it:
+                // the original asks for exactly 0, and an end at -4e-16 m
+                // left a ground-fed antenna unfed (486 Ω turned into 1.4 Ω)
+                let len = ((x2 - x1).powi(2) + (y2 - y1).powi(2) + (z2 - z1).powi(2)).sqrt();
+                for z in [&mut z1, &mut z2] {
+                    if z.abs() <= GROUND_CONTACT * len {
+                        *z = 0.0;
+                    }
+                }
+            }
             self.a[i] = wz.r;
             if x1 == x2 && y1 == y2 && z1 == z2 {
                 return Err(CalcError::ZeroLengthWire { wire: wz.wno + 1 });

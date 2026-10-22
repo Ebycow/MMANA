@@ -36,6 +36,10 @@ const X: usize = 0;
 const Y: usize = 1;
 const Z: usize = 2;
 
+/// What of an element the table describes (`Group::describes_wires`), and
+/// its bounds.
+type Described = ([bool; 4], ([f64; 3], [f64; 3]));
+
 /// The form of an element (`CWTYPE`), as recognised from its wires.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
@@ -381,6 +385,7 @@ impl Group {
         // corners: where the direction changes
         let mut lp: Vec<Vertex> = Vec::with_capacity(nm);
         let mut zz = 0.0;
+        let wire_bounds = (self.lo, self.hi);
         self.lo = [f64::MAX; 3];
         self.hi = [-f64::MAX; 3];
         for i in 0..nm {
@@ -405,6 +410,11 @@ impl Group {
                 }
             }
             lp.push(Vertex { p, vxy: rp.vxy, vyz: rp.vyz });
+        }
+        if lp.is_empty() {
+            // a closed chain that never turns (a wire and its reverse): the
+            // original keeps the empty bounds, ±f64::MAX, and shows sizes of -inf
+            (self.lo, self.hi) = wire_bounds;
         }
 
         use ElementKind::*;
@@ -730,6 +740,52 @@ impl Group {
         }
     }
 
+    /// Whether the bounds the table shows are the extent of the wires (to
+    /// 10 ppm, at least 0.01 mm): the size along X, Y and Z, and the centre
+    /// along X.
+    fn describes_wires(&self, slots: &[Slot]) -> [bool; 4] {
+        let ((lo, hi), near) = self.extent(slots);
+        let size = |axis: usize| near(self.hi[axis] - self.lo[axis], hi[axis] - lo[axis]);
+        [size(X), size(Y), size(Z), near(self.lo[X] / 2.0 + self.hi[X] / 2.0, lo[X] / 2.0 + hi[X] / 2.0)]
+    }
+
+    /// Moves bounds along Y and Z that have the size of the wires but not
+    /// their place back onto them. Scaling every coordinate scales about 0,
+    /// not about the element's centre, so an element off 0 moves while its
+    /// bounds stay centred where it was; the next edit that moves only the
+    /// outermost points would then look for them in the wrong place.
+    fn follow_wires(&mut self, slots: &[Slot]) {
+        let ((lo, hi), near) = self.extent(slots);
+        for axis in [Y, Z] {
+            if near(self.hi[axis] - self.lo[axis], hi[axis] - lo[axis]) && !near(self.lo[axis], lo[axis]) {
+                (self.lo[axis], self.hi[axis]) = (lo[axis], hi[axis]);
+                self.c[axis] = (lo[axis] + hi[axis]) / 2.0;
+            }
+        }
+    }
+
+    /// The extent of the wires, and a comparison to 10 ppm of their size
+    /// (at least 0.01 mm).
+    #[allow(clippy::type_complexity)]
+    fn extent(&self, slots: &[Slot]) -> (([f64; 3], [f64; 3]), impl Fn(f64, f64) -> bool + use<>) {
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        for r in &self.refs {
+            let w = &slots[r.slot].wire;
+            for p in [[w.start.x, w.start.y, w.start.z], [w.end.x, w.end.y, w.end.z]] {
+                for axis in [X, Y, Z] {
+                    lo[axis] = lo[axis].min(p[axis]);
+                    hi[axis] = hi[axis].max(p[axis]);
+                }
+            }
+        }
+        // 10 ppm of the element's size, at least 0.01 mm: far below what can
+        // be built, and above the micrometres the original leaves behind when
+        // an earlier edit moved an end by an ulp, so that it no longer finds it
+        let tol = (1e-5 * [X, Y, Z].iter().fold(0.0, |m: f64, &axis| m.max(hi[axis] - lo[axis]))).max(1e-5);
+        ((lo, hi), move |a: f64, b: f64| (a - b).abs() <= tol)
+    }
+
     fn same_shape(&self, other: &Group, slots: &[Slot]) -> bool {
         self.refs.len() == other.refs.len()
             && self.refs.iter().zip(&other.refs).all(|(a, b)| {
@@ -1031,7 +1087,9 @@ impl ElementList {
         self.free_wires(n);
         self.groups.remove(n);
         for i in n..len - 1 {
-            self.intervals[i] = self.interval(i + 1);
+            // (an element made by `set_kind` in the new row has no interval yet)
+            let d = self.interval(i + 1);
+            *self.interval_mut(i) = d;
         }
         if n <= self.base {
             self.base -= 1;
@@ -1254,9 +1312,108 @@ impl ElementList {
     ///
     /// The dialog accepts a width, height or perimeter of at least 0.001 in
     /// the unit it shows (metres or wavelengths). Values arrive here in
-    /// metres, so that check belongs to the front end; this only refuses
-    /// sizes that are not positive, never one the original accepts.
+    /// metres, so that check belongs to the front end; this refuses sizes
+    /// that are not positive.
+    ///
+    /// Unlike the original, it also refuses an edit that would leave a
+    /// broken antenna (the original writes it back; [`apply_as_original`]
+    /// does too):
+    /// - sizes, positions or wires that are not finite (a width of 1e300
+    ///   makes the perimeter infinite);
+    /// - a resize, rounding, change of form or copy after which the table
+    ///   no longer describes the element's wires where it did before: a
+    ///   width that moves only the outermost points (no `scaleAll`) past
+    ///   other points of the element shows the new width while the wires
+    ///   keep the old one, the moved wires lying over the others;
+    /// - a resize that moves only the outermost points along an axis the
+    ///   table does not describe (a corner reflector taken for one square
+    ///   shows half its width, and its other points would not move);
+    /// - a wire shrunk to zero length, which no calculation accepts (rounding
+    ///   a small element to whole metres, or reshaping a structure taken for
+    ///   an octagon).
+    ///
+    /// [`apply_as_original`]: Self::apply_as_original
     pub fn apply(&mut self, op: &ElementOp) -> bool {
+        use ElementOp::*;
+        let before = self.clone();
+        let zero_length = |list: &Self| list.slots.iter().filter(|s| s.live && s.wire.start == s.wire.end).count();
+        let collapsed = zero_length(self);
+        // the elements an edit reshapes, what of them the table described,
+        // and their bounds
+        let described = |list: &Self, row: usize| {
+            let g = &list.groups[row];
+            (g.describes_wires(&list.slots), (g.lo, g.hi))
+        };
+        let len = self.groups.len();
+        let resized: Vec<(usize, Described)> = match *op {
+            RoundValues { .. } => (0..len).map(|row| (row, described(self, row))).collect(),
+            // a rebuilt element is a template, which the table describes
+            SetKind { row, .. } if row <= len => vec![(row, ([true; 4], ([0.0; 3], [0.0; 3])))],
+            // an edit in the new row first copies the last element, and a copy
+            // is analysed again
+            SetInterval { row, .. }
+            | SetPosition { row, .. }
+            | SetWidth { row, .. }
+            | SetHeight { row, .. }
+            | SetPerimeter { row, .. }
+            | SetRadius { row, .. }
+            | SetSegmentation { row, .. }
+            | Insert { row }
+                if row == len && len > 0 =>
+            {
+                vec![(row, described(self, len - 1))]
+            }
+            SetWidth { row, .. } | SetHeight { row, .. } | SetPerimeter { row, .. } | Insert { row } if row < len => {
+                vec![(row, described(self, row))]
+            }
+            _ => Vec::new(),
+        };
+        // moving only the outermost points along an axis the table does not
+        // describe moves points the table does not show
+        let edge_only = matches!(
+            *op,
+            SetWidth { scale_all: false, .. }
+                | SetHeight { scale_all: false, .. }
+                | SetPerimeter { scale_all: false, .. }
+                | RoundValues { scale_all: false, .. }
+        );
+        if !self.apply_as_original(op) {
+            return false;
+        }
+        let broken = resized.iter().any(|&(row, (was, (lo, hi)))| {
+            let (now, (nlo, nhi)) = described(self, row);
+            let moved = |axis: usize| nlo[axis] != lo[axis] || nhi[axis] != hi[axis];
+            was.iter().zip(&now).any(|(was, now)| *was && !now)
+                || (edge_only && [X, Y, Z].into_iter().any(|axis| moved(axis) && !was[axis]))
+        });
+        if self.is_finite() && !broken && zero_length(self) <= collapsed {
+            for &(row, _) in &resized {
+                self.groups[row].follow_wires(&self.slots);
+            }
+            return true;
+        }
+        *self = before;
+        false
+    }
+
+    /// Every size and position of the table and every wire it writes back is finite.
+    fn is_finite(&self) -> bool {
+        let rows = self
+            .rows()
+            .into_iter()
+            .flat_map(|r| [r.interval, r.position, r.width, r.height, r.perimeter, r.radius.unwrap_or(0.0)]);
+        let wires = self
+            .wires()
+            .wires
+            .into_iter()
+            .flat_map(|w| [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z, w.radius]);
+        rows.chain(wires).all(f64::is_finite)
+    }
+
+    /// [`apply`](Self::apply) with only the original's rules, which may
+    /// leave infinite sizes, zero-length wires or a table that no longer
+    /// describes the wires. `tests/elements.rs` compares it with MMANA.
+    pub fn apply_as_original(&mut self, op: &ElementOp) -> bool {
         use ElementOp::*;
         let len = self.groups.len();
         // an edit in the "新規" row first creates the element (`GridNewLine`)
@@ -1545,6 +1702,24 @@ impl ElementList {
     /// `SetR`
     pub(crate) fn set_element_radius(&mut self, n: usize, d: f64) {
         self.groups[n].set_radius(&mut self.slots, d);
+    }
+
+    /// For each element, along which axes its sizes are those of its wires
+    /// (see [`ElementList::apply`]).
+    pub(crate) fn described(&self) -> Vec<[bool; 4]> {
+        self.groups.iter().map(|g| g.describes_wires(&self.slots)).collect()
+    }
+
+    /// For each element, which rule `new_bounds` takes along Y and Z: from
+    /// 0, to 0, in proportion across 0, or about the centre.
+    pub(crate) fn bound_rules(&self) -> Vec<[u8; 2]> {
+        let rule = |g: &Group, axis: usize| match (g.lo[axis], g.hi[axis]) {
+            (0.0, _) => 0,
+            (_, 0.0) => 1,
+            (lo, hi) if lo < 0.0 && hi > 0.0 && hi - lo != 0.0 => 2,
+            _ => 3,
+        };
+        self.groups.iter().map(|g| [rule(g, Y), rule(g, Z)]).collect()
     }
 }
 
@@ -1871,5 +2046,108 @@ mod tests {
         assert_eq!(round_up(0.25, 10.0), 0.3);
         // the original's int() overflows here (a 350 m wire rounded to 0.0001 mm)
         assert_eq!(round_up(350034.98082, 10000.0), 350034.9808);
+    }
+
+    fn sample(name: &str) -> Vec<Wire> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../testdata/maa/");
+        crate::maa::parse_bytes(&std::fs::read(format!("{path}{name}")).unwrap()).project.antenna.wires
+    }
+
+    fn finite(list: &ElementList) -> bool {
+        list.rows()
+            .iter()
+            .all(|r| [r.interval, r.position, r.width, r.height, r.perimeter].iter().all(|c| c.is_finite()))
+    }
+
+    #[test]
+    fn elements_made_in_the_new_row_can_be_deleted() {
+        // the original's fixed interval array had room for them; ours had not
+        let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+        assert!(list.apply(&ElementOp::SetKind { row: 1, kind: ElementKind::VerticalSquare }));
+        assert!(list.apply(&ElementOp::SetKind { row: 2, kind: ElementKind::VerticalSquare }));
+        assert!(list.apply(&ElementOp::Delete { row: 1 }));
+        assert_eq!(list.len(), 2);
+    }
+
+    #[test]
+    fn a_closed_chain_that_never_turns_has_finite_sizes() {
+        // a wire and its reverse close a loop without corners; the original
+        // shows sizes of -inf
+        let list =
+            ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)), wire((0.0, 5.0, 0.0), (0.0, -5.0, 0.0))], 21.3);
+        assert!(finite(&list));
+        assert_eq!(list.rows()[0].width, 10.0);
+    }
+
+    #[test]
+    fn edits_that_overflow_are_refused() {
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        let before = list.rows();
+        // (the perimeter of the square would be 4 × f64::MAX)
+        assert!(!list.apply(&ElementOp::SetWidth { row: 1, value: f64::MAX, scale_all: false }));
+        assert_eq!(list.rows(), before);
+        // the original writes the infinities back
+        assert!(list.apply_as_original(&ElementOp::SetWidth { row: 1, value: f64::MAX, scale_all: false }));
+        assert!(!finite(&list));
+    }
+
+    #[test]
+    fn a_width_that_moves_the_tips_past_the_rest_is_refused() {
+        // a 20 m dipole of 6.52 m with tips out to 8.38 m
+        let wires = vec![
+            wire((0.0, 3.26, 0.0), (0.0, -3.26, 0.0)),
+            wire((0.0, 3.26, 0.0), (0.0, 4.19, 0.0)),
+            wire((0.0, -3.26, 0.0), (0.0, -4.19, 0.0)),
+        ];
+        let mut list = ElementList::new(&wires, 21.3);
+        // the tips would end inside the dipole, lying over it, and the table
+        // would show 5 m for an antenna 6.52 m wide
+        assert!(!list.apply(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: false }));
+        assert!(list.clone().apply_as_original(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: false }));
+        // shorter tips, or everything scaled, are fine
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 7.0, scale_all: false }));
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: true }));
+        let ends = list.wires().wires.iter().flat_map(|w| [w.start.y, w.end.y]).fold(0.0, |m: f64, y| m.max(y));
+        assert!((ends - 2.5).abs() < 1e-12 && list.rows()[0].width == 5.0);
+    }
+
+    #[test]
+    fn rounding_that_shrinks_a_wire_to_nothing_is_refused() {
+        // a 4 mm stub at the end of a wire from 0, rounded to centimetres
+        let wires = vec![wire((0.0, 0.0, 0.0), (0.0, 1.0, 0.0)), wire((0.0, 1.0, 0.0), (0.0, 1.004, 0.0))];
+        let round = |decimals| ElementOp::RoundValues {
+            decimals,
+            in_wavelengths: false,
+            in_millimetres: false,
+            scale_all: false,
+        };
+        let mut list = ElementList::new(&wires, 21.3);
+        assert!(!list.apply(&round(2)));
+        assert!(list.clone().apply_as_original(&round(2)));
+        assert!(list.apply(&round(3)));
+    }
+
+    #[test]
+    fn scaling_an_element_off_0_keeps_later_edits_on_its_wires() {
+        // a vertical dipole from 2 m to 12 m: scaling every coordinate scales
+        // about 0, so it moves to 4 m to 24 m while its bounds stay centred
+        // at 7 m; the next edit of its ends must still find them
+        let mut list = ElementList::new(&[wire((0.0, 0.0, 2.0), (0.0, 0.0, 12.0))], 21.3);
+        assert!(list.apply(&ElementOp::SetHeight { row: 0, value: 20.0, scale_all: true }));
+        assert!(list.apply(&ElementOp::SetHeight { row: 0, value: 10.0, scale_all: false }));
+        let w = &list.wires().wires[0];
+        assert_eq!((w.start.z, w.end.z), (9.0, 19.0));
+        assert_eq!(list.rows()[0].height, 10.0);
+    }
+
+    #[test]
+    fn edge_edits_of_an_element_the_table_does_not_describe_are_refused() {
+        // the corner reflector's grid is taken for one square half its width
+        let mut list = ElementList::new(&sample("CR2.MAA"), 299.8 / 145.0);
+        let row = (0..list.len()).find(|&r| list.rows()[r].wire_count > 1).unwrap();
+        let width = list.rows()[row].width;
+        assert!(!list.apply(&ElementOp::SetWidth { row, value: width * 0.9, scale_all: false }));
+        // scaling every coordinate moves every point, so that one is fine
+        assert!(list.apply(&ElementOp::SetWidth { row, value: width * 0.9, scale_all: true }));
     }
 }

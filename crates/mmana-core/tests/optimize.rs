@@ -11,7 +11,11 @@
 //! which IEEE 754 rounds the same everywhere, but the scores come from the
 //! engine. On the golden platform everything must be bit-identical; elsewhere
 //! a different libm may move a score by an ulp, so figures get a tolerance
-//! and the search may part ways where two scores were that close.
+//! and the search may part ways where two scores were that close. Edits that
+//! go through `sin`/`cos` (the polar form) may also put a coordinate an ulp
+//! from the original's, and where MININEC's integration order switches there
+//! (docs/guarantees.md, 既知の限界) |Z| moves by up to 0.3 %: MSVC's libm does
+//! this to the sloper's jX by 4e-4 Ω.
 
 use mmana_core::optimize::{
     self, Band, ElementAxis, ElementCombination, Link, Matching, OptimizerSetup, SetupOp, StopReason, Variable,
@@ -22,7 +26,10 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 const GOLDEN_PLATFORM: bool = cfg!(all(target_os = "macos", target_arch = "aarch64"));
+/// For what the port works out by arithmetic: values, coordinates, loads.
 const TOL_REL: f64 = 1e-5;
+/// For what the engine calculates: figures, currents and scores.
+const TOL_FIGURE_REL: f64 = 3e-3;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -33,11 +40,21 @@ fn f(v: &Value) -> f64 {
 }
 
 fn same(a: f64, b: f64) -> bool {
-    a.to_bits() == b.to_bits() || (a == 0.0 && b == 0.0) || (!GOLDEN_PLATFORM && close(a, b))
+    same_within(a, b, TOL_REL, 1.0)
 }
 
-fn close(a: f64, b: f64) -> bool {
-    a == b || (a - b).abs() <= TOL_REL * a.abs().max(b.abs()).max(1.0)
+/// `same` for a figure, with the difference measured against `scale` too
+/// (|Z| for R and jX).
+fn same_figure(a: f64, b: f64, scale: f64) -> bool {
+    same_within(a, b, TOL_FIGURE_REL, scale)
+}
+
+fn same_within(a: f64, b: f64, tol: f64, scale: f64) -> bool {
+    a.to_bits() == b.to_bits() || (a == 0.0 && b == 0.0) || (!GOLDEN_PLATFORM && close(a, b, tol, scale))
+}
+
+fn close(a: f64, b: f64, tol: f64, scale: f64) -> bool {
+    a == b || (a - b).abs() <= tol * a.abs().max(b.abs()).max(scale).max(1.0)
 }
 
 struct Case {
@@ -300,20 +317,23 @@ fn run_case(name: &str) -> Vec<String> {
             c.elevation_deg as f64,
         ];
         let names = ["frequency", "R", "jX", "SWR", "gain", "F/B", "elevation"];
-        for ((a, name), b) in figures.iter().zip(names).zip(&g.as_array().unwrap()[1..8]) {
-            if !same(*a, f(b)) {
+        let z = f(&g[2]).hypot(f(&g[3]));
+        for (((a, name), b), scale) in
+            figures.iter().zip(names).zip(&g.as_array().unwrap()[1..8]).zip([1.0, z, z, 1.0, 1.0, 1.0, 1.0])
+        {
+            if !same_figure(*a, f(b), scale) {
                 problems.push(format!("calculation {}: {name} {a} != original {}", k + 1, f(b)));
             }
         }
         if let Some(cur) = c.current
-            && !same(cur as f64, f(&g[8]))
+            && !same_figure(cur as f64, f(&g[8]), 1.0)
         {
             problems.push(format!("calculation {}: current {cur} != original {}", k + 1, f(&g[8])));
         }
         if let Some(v) = c.score {
             let gv = f(&g[9]);
             if v.to_bits() != gv.to_bits() {
-                if !close(v, gv) || GOLDEN_PLATFORM {
+                if !close(v, gv, TOL_FIGURE_REL, 1.0) || GOLDEN_PLATFORM {
                     problems.push(format!("calculation {}: score {v} != original {gv}", k + 1));
                 }
                 near_tie = true;
@@ -337,7 +357,7 @@ fn run_case(name: &str) -> Vec<String> {
 
     // the best values and the remembered trials
     let best = out.best.as_ref().expect("a best trial");
-    if !same(best.score, f(&golden["vm"])) {
+    if !same_figure(best.score, f(&golden["vm"]), 1.0) {
         problems.push(format!("best score {} != original {}", best.score, f(&golden["vm"])));
     }
     let gad: Vec<f64> = golden["ad"].as_array().unwrap().iter().map(f).collect();
@@ -354,10 +374,15 @@ fn run_case(name: &str) -> Vec<String> {
         let figures =
             [t.impedance.re, t.impedance.im, t.swr as f64, t.gain_dbi as f64, t.fb_db as f64, t.elevation_deg as f64];
         let gfig = ["r", "jx", "swr", "gain", "fb", "elv"].map(|n| f(&g[n]));
+        let z = gfig[0].hypot(gfig[1]);
         if t.values.iter().zip(&gvalues).any(|(a, b)| a.to_bits() != b.to_bits())
-            || !same(t.score, f(&g["v"]))
+            || !same_figure(t.score, f(&g["v"]), 1.0)
             // (printed as `float` with 9 digits)
-            || figures.iter().zip(&gfig).any(|(a, b)| !same(*a as f32 as f64, *b as f32 as f64))
+            || figures
+                .iter()
+                .zip(&gfig)
+                .zip([z, z, 1.0, 1.0, 1.0, 1.0])
+                .any(|((a, b), scale)| !same_figure(*a as f32 as f64, *b as f32 as f64, scale))
         {
             problems.push(format!("trial {k}: {:?} {} {figures:?} != original {g}", t.values, t.score));
             break;
@@ -380,11 +405,7 @@ fn run_case(name: &str) -> Vec<String> {
     let ant = &out.project.antenna;
     for (i, (w, g)) in ant.wires.iter().zip(ga["wires"].as_array().unwrap()).enumerate() {
         let mine = [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z, w.radius];
-        if mine
-            .iter()
-            .zip(g.as_array().unwrap())
-            .any(|(a, b)| a.to_bits() != f(b).to_bits() && !(*a == 0.0 && f(b) == 0.0))
-        {
+        if mine.iter().zip(g.as_array().unwrap()).any(|(a, b)| !same(*a, f(b))) {
             problems.push(format!("wire {}: {mine:?} != original {g}", i + 1));
         }
     }

@@ -145,6 +145,11 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
           return;
         }
         // a refused edit changed nothing: drop it, so undo does not stop at it
+        notifications.show({
+          color: 'yellow',
+          message:
+            'この編集はできません。値が範囲外か、編集するとエレメントの形が崩れます（ワイヤが重なる、長さが 0 になる、表の寸法とワイヤが合わなくなる）。',
+        });
         let k = 0;
         const kept = steps.map((s) => s.filter(() => edit.applied[k++])).filter((s) => s.length > 0);
         setSteps(kept);
