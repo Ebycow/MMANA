@@ -541,6 +541,12 @@ proptest! {
             return Ok(());
         }
         let tol = (1e-5 * extent(&before.antenna.wires)).max(1e-5);
+        // the original makes an octagon of a new perimeter regular, so one
+        // that a width or height made irregular stays regular
+        let e = &before.elements[row];
+        if matches!(cell, Cell::Perimeter) && e.kind == ElementKind::VerticalOctagon && (e.width - e.height).abs() > tol {
+            return Ok(());
+        }
         let same = same_rows(&after.elements, &before.elements, tol)
             .and_then(|()| same_wires(&after.antenna.wires, &before.antenna.wires, tol));
         if let Err(e) = same {
