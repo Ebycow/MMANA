@@ -309,12 +309,12 @@ fn axis(name: &str, a: &AxisRange) -> Result<(), CalcError> {
         return Err(out_of_range(format!("{name} count"), "0 or more", a.count as f64));
     }
     // and so must the last sample (1e308 + 1e308 is not). Halved, so the
-    // product does not overflow where the sum would not: 1e308 - 2 × 1e308
-    // is the finite -1e308
+    // product does not overflow where the sum would not (1e308 - 2 × 1e308
+    // is the finite -1e308); doubled back, it overflows just where the last
+    // sample would
     let steps = if a.step == 0.0 { 0.0 } else { (a.count.max(1) - 1) as f64 };
     let half = 0.5 * a.start + 0.5 * a.step * steps;
-    let last = if half.abs() <= f64::MAX / 2.0 { 2.0 * half } else { half * f64::INFINITY };
-    finite(|| format!("{name} end"), last)
+    finite(|| format!("{name} end"), 2.0 * half)
 }
 
 fn field_points(axes: &[&AxisRange]) -> Result<(), CalcError> {
@@ -411,4 +411,55 @@ pub(crate) fn layout(l: &PulseLayout) -> Result<(), CalcError> {
     let pulses = l.wires.iter().flat_map(|w| w.pulses.iter().flat_map(|p| point(&p.position)));
     let placed = l.sources.iter().chain(&l.loads).flatten().flat_map(point);
     representable("pulse positions", pulses.chain(placed))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::calc::{calculate, pulse_layout, solve};
+    use crate::maa;
+
+    fn dp20() -> Project {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa/DP20.MAA");
+        maa::parse_bytes(&std::fs::read(path).unwrap()).project
+    }
+
+    fn refused(what: &'static str) -> Result<(), CalcError> {
+        Err(CalcError::NotRepresentable { what })
+    }
+
+    // Finite inputs have not been found to give these values; the checks
+    // are there in case they do.
+    #[test]
+    fn a_result_with_a_value_past_f64_is_refused() {
+        let o = CalcOptions::default();
+        let r = calculate(&dp20(), &o).unwrap();
+        assert_eq!(result(&r), Ok(()));
+        let mut bad = r.clone();
+        bad.impedance.im = f64::INFINITY;
+        assert_eq!(result(&bad), refused("calculated figures"));
+        let mut bad = r.clone();
+        bad.sources[0].current.re = f64::NAN;
+        assert_eq!(result(&bad), refused("source figures"));
+        let mut bad = r.clone();
+        bad.currents[3].position.z = f64::NAN;
+        assert_eq!(result(&bad), refused("currents"));
+        let mut bad = r;
+        bad.segmented_wires[0].end.y = f64::NEG_INFINITY;
+        assert_eq!(result(&bad), refused("segmented wires"));
+
+        let mut samples = solve(&dp20(), &o).unwrap().far_field((0.0, 10.0, 3), (0.0, 10.0, 3)).unwrap();
+        assert_eq!(far_samples(&samples), Ok(()));
+        samples[4].total_db = f64::NAN;
+        assert_eq!(far_samples(&samples), refused("far-field values"));
+
+        let l = pulse_layout(&dp20(), &o).unwrap();
+        assert_eq!(layout(&l), Ok(()));
+        let mut bad = l.clone();
+        bad.wires[0].pulses[2].position.x = f64::INFINITY;
+        assert_eq!(layout(&bad), refused("pulse positions"));
+        let mut bad = l;
+        bad.sources[0].as_mut().unwrap().y = f64::NAN;
+        assert_eq!(layout(&bad), refused("pulse positions"));
+    }
 }
