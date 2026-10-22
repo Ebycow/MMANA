@@ -74,6 +74,16 @@ range() { sed -n "$2,$3p" "$SRC/$1"; }
 	range ACalBox.cpp 1299 1328 # element links
 } > "$OUT/acalbox_extract.cpp"
 
-cp "$SRC/mininec3.cpp" "$OUT/mininec3.cpp"
+# The one change to the original's arithmetic: the distance ratio must pass
+# 1.1, 6 or 10 by a margin before the exact kernel or the full order of
+# integration is given up. On a regular grid the ratio lands on a threshold
+# and the rounding of the coordinates chose the side (|Z| up to 0.47 % apart
+# for coordinates an ulp apart); the port does the same (ORDER_MARGIN in
+# crates/mmana-core/src/engine/kernel.rs).
+sed -e 's/if( T > 1\.1 ) goto L165;/if( T > 1.1*(1.0+1e-9) ) goto L165;/' \
+	-e 's/if( T > 6 ) L=3;/if( T > 6*(1.0+1e-9) ) L=3;/' \
+	-e 's/if( T > 10 ) L=1;/if( T > 10*(1.0+1e-9) ) L=1;/' \
+	"$SRC/mininec3.cpp" > "$OUT/mininec3.cpp"
+[ "$(grep -c '(1.0+1e-9)' "$OUT/mininec3.cpp")" = 3 ] || { echo "mininec3.cpp: the integration-order patch did not apply" >&2; exit 1; }
 cp "$SRC/mininec3.h" "$OUT/mininec3.h"
 echo "extracted into $OUT"

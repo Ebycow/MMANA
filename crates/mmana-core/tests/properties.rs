@@ -407,6 +407,37 @@ fn an_end_an_ulp_off_the_ground_is_on_it() {
 }
 
 #[test]
+fn coordinates_an_ulp_apart_give_the_same_figures() {
+    // on these grids a distance ratio lands on 1.1, 6 or 10, where MININEC
+    // gives up the exact kernel or lowers the order of its integration; the
+    // rounding of a coordinate chose the side, which moved |Z| by up to
+    // 0.03 % for one coordinate an ulp off
+    for name in ["LAZY-H.MAA", "VERT58.MAA", "MULTDP.MAA"] {
+        let p = sample(name);
+        let z = calc(&p).impedance;
+        let coords = |w: &Wire| [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z];
+        let ulp = p.antenna.wires.iter().flat_map(coords).fold(0.0, |m: f64, c| m.max(c.abs())) * f64::EPSILON;
+        for (i, w) in p.antenna.wires.iter().enumerate() {
+            for (k, at) in
+                [w.start, w.end].into_iter().enumerate().flat_map(|(e, at)| (0..3).map(move |k| (e * 3 + k, at)))
+            {
+                for d in [-ulp, ulp] {
+                    // every end at that point, so that joined wires stay joined
+                    let mut q = p.clone();
+                    for e in q.antenna.wires.iter_mut().flat_map(|w| [&mut w.start, &mut w.end]) {
+                        if *e == at {
+                            *[&mut e.x, &mut e.y, &mut e.z][k % 3] += d;
+                        }
+                    }
+                    let off = rel(calc(&q).impedance, z);
+                    assert!(off < 1e-9, "{name}: wire {} coordinate {k} {d:+e}: |Z| {off:e} apart", i + 1);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn nothing_radiates_below_the_ground() {
     // a horizontal cut 10° below the horizon: none over ground, the mirror
     // of the cut 10° above in free space
