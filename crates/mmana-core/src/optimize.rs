@@ -1152,12 +1152,15 @@ fn overlaps(model: &Model, vars: &[Variable]) -> Vec<SetupIssue> {
     // (a step of its own for each, in no simple ratio to the others: two
     // sizes of one element set to the same value, or a dipole's length made
     // 1.01 times from one end and its other end 1.02 times, end up the same
-    // either way round)
+    // either way round. Square roots of distinct primes, since those of
+    // n + 1 are 1 and 2 for the first and fourth variables: an element's
+    // position at twice its interval, both 0.0137 of it further on, came out
+    // the same either way round)
     let probes: Vec<(usize, f64)> = (0..vars.len())
         .filter(|&n| vars[n].link == Link::Independent)
         .map(|n| {
             let d = model.value(&vars[n].target);
-            let k = 1.0 + 0.0137 * ((n + 1) as f64).sqrt();
+            let k = 1.0 + 0.0137 * (nth_prime(n) as f64).sqrt();
             (n, if d != 0.0 { d * k } else { 0.001 * k })
         })
         .collect();
@@ -1214,6 +1217,11 @@ fn overlaps(model: &Model, vars: &[Variable]) -> Vec<SetupIssue> {
         }
     }
     errors
+}
+
+/// The `n`-th prime (from 0: 2, 3, 5, …).
+fn nth_prime(n: usize) -> u64 {
+    (2u64..).filter(|&p| (2..).take_while(|d| d * d <= p).all(|d| p % d != 0)).nth(n).expect("primes go on")
 }
 
 /// The variables ready for the search.
@@ -2787,6 +2795,37 @@ mod tests {
         let sizes =
             [Element { element: 0, part: ElementPart::Width }, Element { element: 0, part: ElementPart::Height }];
         assert_eq!(errors_of("LOOP20.MAA", &sizes, &[]), vec![]);
+    }
+
+    #[test]
+    fn an_element_position_at_twice_its_interval_is_refused_with_it() {
+        // three dipoles 2 m apart: the last one's position is twice its
+        // interval, and as the first and fourth variables their probes were
+        // 1 and 2 times one step further on, which came out the same either
+        // way round (a listed trial 10 % off what its values gave)
+        use VariableTarget::*;
+        let mut project = sample("DP20.MAA");
+        let dipole = project.antenna.wires[0].clone();
+        project.antenna.wires = [0.0, 2.0, 4.0]
+            .map(|x| crate::model::Wire {
+                start: crate::model::Point3 { x, ..dipole.start },
+                end: crate::model::Point3 { x, ..dipole.end },
+                ..dipole.clone()
+            })
+            .to_vec();
+        let targets = [
+            Element { element: 2, part: ElementPart::Position },
+            Frequency,
+            Element { element: 2, part: ElementPart::Width },
+            Element { element: 2, part: ElementPart::Interval },
+        ];
+        let ops: Vec<SetupOp> =
+            targets.iter().enumerate().map(|(index, &target)| SetupOp::SetTarget { index, target }).collect();
+        let opts = CalcOptions::default();
+        let edit = edit_setup(&project, &opts, &OptimizerSetup::default(), &ops);
+        assert_eq!(edit.setup.variables.len(), 4);
+        let errors: Vec<_> = edit.errors.iter().map(|e| (e.code, e.variable, e.other)).collect();
+        assert_eq!(errors, vec![(IssueCode::Overlapping, Some(3), Some(0))]);
     }
 
     #[test]
