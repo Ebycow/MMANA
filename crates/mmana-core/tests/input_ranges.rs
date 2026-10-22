@@ -208,6 +208,16 @@ fn stacking() {
             },
             out_of_range("stack horizontal extent", "a finite number", INF),
         ),
+        // the extent is 1e308, still finite: laid out, but the copies are
+        // too far apart for the field between them
+        solve_only(
+            "2 up 1e308 apart",
+            |p, _| {
+                p.antenna.stack.vertical = 2;
+                p.antenna.stack.vertical_spacing = 1e308;
+            },
+            Err(CalcError::NoFiniteSolution),
+        ),
         case(
             "copies of an antenna that is mostly disabled wires",
             |p, _| {
@@ -560,6 +570,18 @@ fn far_field_scans() {
         out_of_range("zenith end", "a finite number", INF)
     );
     assert_eq!(scan(axis(1e308, -1e308, 3), axis(0.0, 0.0, 1)).unwrap().len(), 3);
+    // the last sample at the edge of f64 on either side
+    assert_eq!(scan(axis(f64::MAX, 0.0, 1), axis(0.0, 0.0, 1)).unwrap().len(), 1);
+    assert_eq!(scan(axis(0.0, f64::MAX, 2), axis(0.0, 0.0, 1)).unwrap().len(), 2);
+    assert_eq!(scan(axis(1e308, 7e307, 2), axis(0.0, 0.0, 1)).unwrap().len(), 2);
+    assert_eq!(
+        scan(axis(1e308, 8e307, 2), axis(0.0, 0.0, 1)).map(|_| ()),
+        out_of_range("zenith end", "a finite number", INF)
+    );
+    assert_eq!(
+        scan(axis(0.0, 1e308, 3), axis(0.0, 0.0, 1)).map(|_| ()),
+        out_of_range("zenith end", "a finite number", INF)
+    );
     // counts that wrap are in allocation.rs, whose allocator stops a test
     // that would take gigabytes
     let max = Err(CalcError::TooManyFieldPoints { max: MAX_FIELD_POINTS });
