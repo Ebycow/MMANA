@@ -364,37 +364,6 @@ fn same_to_rounding(a: &Project, b: &Project) -> bool {
     close(&mut x, &y)
 }
 
-/// The figures of `project` that come closest to `want`: as it is, or
-/// with its coordinates within 1e-12 of it. A trial reaches its antenna in
-/// steps, and coordinates an ulp apart can switch the order of MININEC's
-/// integration where a ratio of distances is exactly 1.1, 6 or 10 (as on
-/// the 0.03 m grid of a magnetic loop's coupling loop), which moves |Z| by
-/// up to 0.3 % (docs/guarantees.md, 既知の限界).
-fn reproduced(
-    project: &Project,
-    options: &CalcOptions,
-    frequency_mhz: f64,
-    want: &Figures,
-) -> Result<(Figures, bool), String> {
-    let exact = Figures::calculated(project, options, frequency_mhz)?;
-    if exact.0.close(want) {
-        return Ok(exact);
-    }
-    for k in [1e-13, -1e-13, 1e-12, -1e-12, 1e-14, -1e-14] {
-        let mut p = project.clone();
-        for w in &mut p.antenna.wires {
-            for e in [&mut w.start, &mut w.end] {
-                (e.x, e.y, e.z) = (e.x * (1.0 + k), e.y * (1.0 + k), e.z * (1.0 + k));
-            }
-        }
-        let near = Figures::calculated(&p, options, frequency_mhz)?;
-        if near.0.close(want) {
-            return Ok(near);
-        }
-    }
-    Ok(exact)
-}
-
 /// The reflection coefficient |Γ| of an SWR.
 fn gamma(swr: f32) -> f32 {
     (swr - 1.0) / (swr + 1.0)
@@ -470,7 +439,7 @@ fn keeps_its_best(case: &Case) -> Result<(), TestCaseError> {
         prop_assert!(same_to_rounding(&written, &out.project), "{written:?}\n{:?}", out.project);
         prop_assert_eq!(frequency, out.frequency_mhz);
         let (p, f) = band_one(case, &out.project, out.frequency_mhz);
-        let (got, takes_power) = reproduced(&p, &case.options, f, &Figures::of_trial(best))
+        let (got, takes_power) = Figures::calculated(&p, &case.options, f)
             .map_err(|e| TestCaseError::fail(format!("the optimised antenna does not calculate: {e}")))?;
         prop_assert!(
             got.close(&Figures::of_trial(best)),
@@ -488,7 +457,7 @@ fn keeps_its_best(case: &Case) -> Result<(), TestCaseError> {
                 .map_err(|e| TestCaseError::fail(e.to_string()))?;
             let (p, f) = band_one(case, &p, f);
             let want = Figures::of_trial(t);
-            let (got, takes_power) = reproduced(&p, &case.options, f, &want).map_err(|e| {
+            let (got, takes_power) = Figures::calculated(&p, &case.options, f).map_err(|e| {
                 TestCaseError::fail(format!("trial {:?} written back does not calculate: {e}", t.values))
             })?;
             // (an antenna that takes no power has figures of rounding; such
