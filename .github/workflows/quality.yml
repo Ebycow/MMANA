@@ -27,7 +27,12 @@ jobs:
 
   mutants:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # about 270 mutants of 30 s each: in one job they took past two hours
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -38,10 +43,10 @@ jobs:
       # one job at a time: a mutant that breaks a limit runs the inputs in
       # allocation.rs, which the test allocator stops at 256 MB
       - run: >
-          cargo mutants -p mmana-core -j 1 --timeout 120
+          cargo mutants -p mmana-core -j 1 --timeout 120 --shard ${{ matrix.shard }}/3
           -f crates/mmana-core/src/validate.rs -f crates/mmana-core/src/engine/pulse.rs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mutants.out
+          name: mutants.out-${{ matrix.shard }}
           path: mutants.out
