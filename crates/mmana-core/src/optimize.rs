@@ -990,6 +990,30 @@ fn last_in_chain(vars: &[Variable], n: usize) -> Result<usize, (IssueCode, Optio
     Err((IssueCode::LinkLoop, None))
 }
 
+/// The order in which a trial's values are set: each independent variable
+/// followed by the variables linked to it, as the search sets them
+/// (`SetPara(n)`). Set one by one instead (as the original writes the best
+/// values back), a follower comes apart from what it follows while the
+/// variables between them are set: a wire's X1 and X2 linked to one value,
+/// with its polar length between them, tilts the wire while the length is
+/// set and shortens it along Y. Variables whose links lead nowhere come in
+/// their own place.
+fn trial_order(vars: &[Variable]) -> Vec<usize> {
+    let leader = |i: usize| if vars[i].link == Link::Independent { Ok(i) } else { last_in_chain(vars, i) };
+    let mut order = Vec::with_capacity(vars.len());
+    for n in 0..vars.len() {
+        match leader(n) {
+            Ok(k) if k == n => {
+                order.push(n);
+                order.extend((0..vars.len()).filter(|&i| i != n && leader(i) == Ok(n)));
+            }
+            Ok(_) => {}
+            Err(_) => order.push(n),
+        }
+    }
+    order
+}
+
 /// The sources `SetBand` gives the antenna: up to the first blank pulse, at most four.
 fn band_sources(b: &Band) -> impl Iterator<Item = &Source> {
     b.sources.iter().take_while(|s| !s.pulse.trim().is_empty()).take(BAND_SOURCES)
@@ -1438,7 +1462,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         }
         // as `apply_trial` writes it
         let mut fresh = self.start.clone();
-        for i in 0..self.vars.len() {
+        for i in trial_order(&self.vars) {
             fresh.set(&self.vars[i].target, value(i));
         }
         let (a, b) = (m.list.wires().wires, fresh.list.wires().wires);
@@ -1861,7 +1885,7 @@ pub fn optimize(
             search.model.antenna.sources = project.antenna.sources.clone();
             search.model.frequency = start_frequency;
         }
-        for i in 0..search.vars.len() {
+        for i in trial_order(&search.vars) {
             let d = search.ad[i];
             search.set_para(i, d);
         }
@@ -1904,8 +1928,8 @@ pub fn apply_trial(
     if !missing.is_empty() {
         return Err(OptimizeError::Setup(missing));
     }
-    for (v, &d) in vars.iter().zip(values) {
-        model.set(&v.target, d);
+    for i in trial_order(vars) {
+        model.set(&vars[i].target, values[i]);
     }
     model.update_wires();
     Ok((model.project(), model.frequency))
@@ -2812,5 +2836,29 @@ mod tests {
         }
         let list = ElementList::new(&out.project.antenna.wires, SPEED_OF_LIGHT_MMANA / project.antenna.frequency_mhz);
         assert!(list.described().iter().all(|d| d[1]), "the widths are not those of the wires");
+    }
+
+    #[test]
+    fn a_trial_is_written_back_with_its_links_as_the_search_set_it() {
+        // X1 and X2 of the dipole linked to one value, its polar length in
+        // between: set one by one, X1 tilts the wire while the length is set
+        // (10.99 m along Y instead of 11)
+        let project = sample("DP20.MAA");
+        let opts = CalcOptions::default();
+        let x = |part| VariableTarget::Wire { wire: 0, part };
+        let length = VariableTarget::PolarWire { wire: 0, quantity: PolarQuantity::Length, anchor: PolarAnchor::Start };
+        let setup = OptimizerSetup {
+            variables: vec![
+                Variable { pitch: 0.1, min: -10.0, max: 10.0, ..Variable::new(x(WirePart::X1)) },
+                Variable { pitch: 0.1, min: 1.0, max: 20.0, ..Variable::new(length) },
+                Variable { link: Link::Same { variable: 0 }, ..Variable::new(x(WirePart::X2)) },
+            ],
+            absolute_pitch: true,
+            ..Default::default()
+        };
+        let (written, _) = apply_trial(&project, &opts, &setup, &[0.5, 11.0, 0.5]).unwrap();
+        let w = &written.antenna.wires[0];
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-12;
+        assert!(near(w.start.x, 0.5) && near(w.end.x, 0.5) && near(w.end.y - w.start.y, 11.0), "{w:?}");
     }
 }
