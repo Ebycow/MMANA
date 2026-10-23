@@ -60,7 +60,7 @@ export function commitWires(next: Wire[], selected?: number[]) {
 function commitSplit(split: Split, selected: number[], what: string) {
   const app = useApp.getState();
   const cut = split.pieces.filter((p) => p.length > 1).length;
-  app.edit((p) => void (p.antenna = structuredClone(split.antenna)));
+  app.edit((p) => void (p.antenna = structuredClone(split.antenna)), { label: `ワイヤー ${cut} 本を分けて接続` });
   app.setSelection(selected.flatMap((i) => split.pieces[i] ?? []));
   notifications.show({
     color: split.warnings.length ? 'yellow' : 'blue',
@@ -74,7 +74,7 @@ export function fixIssues(issues: JunctionIssue[]) {
   if (issues.length === 0 || !canEditWires()) return;
   const app = useApp.getState();
   const r = fixJunctions(app.project.antenna, issues);
-  app.edit((p) => void (p.antenna = structuredClone(r.antenna)));
+  app.edit((p) => void (p.antenna = structuredClone(r.antenna)), { label: `接続を ${issues.length} か所修正` });
   app.setSelection(app.selectedWires.flatMap((i) => r.pieces[i] ?? []));
   notifications.show({
     color: r.warnings.length ? 'yellow' : 'teal',
