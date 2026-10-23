@@ -58,6 +58,13 @@ describe('gathering the problems of an antenna', () => {
     expect(ds).toEqual([expect.objectContaining({ rule: 'too-many-segments', severity: 'warning', wires: [0, 1] })]);
   });
 
+  it('marks both wires of a point calculated as lying on the wire beside it', () => {
+    const r = result([{ code: 'closeWires', wires: [2, 3], message: '...' }]);
+    const ds = collectDiagnostics({ wires: loops().slice(0, 4), error: null, result: r });
+    expect(ds).toEqual([expect.objectContaining({ rule: 'close-wires', severity: 'warning', wires: [1, 2] })]);
+    expect(ds[0].message).toContain('ワイヤー 2、3');
+  });
+
   it('puts errors first, then warnings, then notes', () => {
     // wire 6 crosses the top side (a note from the connection check, found before the result's warning)
     const ws = [...loops(), w(p(0.5, 0, 0.5), p(0.5, 0, 2))];

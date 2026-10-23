@@ -787,3 +787,43 @@ fn segmentation_in_the_usable_range_barely_changes_the_impedance() {
     assert!(spread(|c| c.re) < 0.015 * z[0].re, "R: {z:?}");
     assert!(spread(|c| c.im) < 2.5, "X: {z:?}");
 }
+
+/// A folded dipole 10 cm wide, its long wires in `n` segments each.
+fn folded(n: i32) -> Project {
+    let (h, s) = (5.12, 0.1);
+    project(
+        vec![
+            wire((0.0, -h, 0.0), (0.0, h, 0.0), n),
+            wire((0.0, h, 0.0), (0.0, h, s), 1),
+            wire((0.0, h, s), (0.0, -h, s), n),
+            wire((0.0, -h, s), (0.0, -h, 0.0), 1),
+        ],
+        vec![source("w1c", 1.0, 0.0)],
+    )
+}
+
+#[test]
+fn a_point_calculated_as_lying_on_a_wire_beside_it_is_warned_about() {
+    // 51 cm segments 10 cm apart: the resonance moves by 9 % (folded-segments.md)
+    assert_eq!(warned_wires(&folded(20), WarningCode::CloseWires), Some(vec![1, 4]));
+    // 39 cm: calculates within 0.1 %
+    assert_eq!(warned_wires(&folded(26), WarningCode::CloseWires), None);
+    // a sharp V is taken the same way at its apex, while its segments are long for the wavelength
+    let v = |deg: f64, n: i32| {
+        let h = (deg / 2.0).to_radians();
+        let (y, z) = (5.12 * h.sin(), -5.12 * h.cos());
+        project(
+            vec![wire((0.0, 0.0, 0.0), (0.0, y, z), n), wire((0.0, 0.0, 0.0), (0.0, -y, z), n)],
+            vec![source("w1b", 1.0, 0.0)],
+        )
+    };
+    assert_eq!(warned_wires(&v(20.0, 20), WarningCode::CloseWires), Some(vec![1, 2]));
+    assert_eq!(warned_wires(&v(20.0, 80), WarningCode::CloseWires), None);
+    assert_eq!(warned_wires(&v(30.0, 20), WarningCode::CloseWires), None);
+    // and no sample holding up under twice the segments is warned (samples.md)
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa");
+    for name in ["HB9CVH.MAA", "DBLDP.MAA", "ZL20.MAA", "LPDA15.MAA", "MULTDP.MAA", "M2CQW.MAA"] {
+        assert!(dir.join(name).exists());
+        assert_eq!(warned_wires(&sample(name), WarningCode::CloseWires), None, "{name}");
+    }
+}

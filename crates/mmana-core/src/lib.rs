@@ -15,6 +15,7 @@
 //! ```
 
 mod calc;
+pub mod checks;
 pub mod contract;
 pub mod elements;
 pub mod engine;

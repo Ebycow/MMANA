@@ -7,7 +7,7 @@
 //! its ground image; `obs`/`src` are the observation/source pulses (`I`, `J`),
 //! needed for the same-wire test that selects the exact kernel.
 
-use super::{Mininec, int_};
+use super::{Mininec, Shortcut, int_};
 
 /// How far past 1.1, 6 or 10 the distance ratio must be before the exact
 /// kernel or the full order of integration is given up. The original
@@ -70,6 +70,48 @@ impl Mininec {
         *t4 = *t4 - b1.sin() / d;
     }
 
+    /// Records where the same-wire shortcut below is taken for an observation
+    /// point beside the source interval (off it, but not beyond its ends): the shortcut is meant for points on it
+    /// (the segment itself, or a joined wire continuing it), but the test only
+    /// asks whether the two wires share a junction and the point lies within
+    /// the ellipse `d0 + d3 <= 1.1 seg`. A point of a wire running alongside
+    /// a few tenths of a segment away passes both (a folded dipole's end, the
+    /// apex of a sharp V) and is calculated as if it lay on the segment.
+    fn note_shortcut(&self, sp: &Span, seg: f64, a: f64, obs_wire: usize, src_wire: usize) {
+        // distance from the observation point (the origin) to the interval U-V
+        let (u, v) = ([sp.x2, sp.y2, sp.z2], [sp.v1, sp.v2, sp.v3]);
+        let d = [v[0] - u[0], v[1] - u[1], v[2] - u[2]];
+        let dd = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        let t = if dd > 0.0 { -(u[0] * d[0] + u[1] * d[1] + u[2] * d[2]) / dd } else { 0.0 };
+        // beyond an end of the interval (a corner, a wire continuing it): the
+        // shortcut is close enough there (docs/measurements/folded-segments.md)
+        if !(t > 0.0 && t < 1.0) {
+            return;
+        }
+        let c = [u[0] + t * d[0], u[1] + t * d[1], u[2] + t * d[2]];
+        let distance = (c[0] * c[0] + c[1] * c[1] + c[2] * c[2]).sqrt();
+        // on the wire (within its radius): what the shortcut is for
+        if distance <= a {
+            return;
+        }
+        // close for its length: farther points come out right (folded-tapered.md)
+        if seg < crate::checks::SHORTCUT_RATIO * distance {
+            return;
+        }
+        // the matrix is filled in parallel, so ties (a symmetric antenna) are
+        // broken by the wires rather than by which thread gets here first
+        let mut worst = self.shortcut.lock().unwrap_or_else(|e| e.into_inner());
+        let worse = |w: &Shortcut| {
+            seg.total_cmp(&w.segment)
+                .then(w.distance.total_cmp(&distance))
+                .then((w.obs_wire, w.src_wire).cmp(&(obs_wire, src_wire)))
+                .is_gt()
+        };
+        if worst.is_none_or(|w| worse(&w)) {
+            *worst = Some(Shortcut { distance, segment: seg, obs_wire, src_wire });
+        }
+    }
+
     /// L135: Gaussian quadrature of the kernel over source segment `p4`.
     #[allow(clippy::too_many_arguments)]
     fn l135(&self, sp: Span, p2: f64, p3: f64, p4: usize, fvs: i32, k: i32, obs: usize, src: usize) -> (f64, f64) {
@@ -99,6 +141,9 @@ impl Mininec {
             let j = self.wi[src] as usize;
             let (ji, jj) = (self.j2[i], self.j2[j]);
             if ji[1] == jj[1] || ji[1] == jj[2] || ji[2] == jj[1] || ji[2] == jj[2] {
+                if k > 0 {
+                    self.note_shortcut(&sp, seg, a, i, j);
+                }
                 if a > self.srm {
                     f2 = 2.0 * (p3 - p2);
                     i6f = (1.0 - (s4 / f2 / 8.0 / a).ln()) / self.p / a;

@@ -98,6 +98,7 @@ impl Mininec {
             z: Vec::new(),
             ci: Vec::new(),
             wi: Vec::new(),
+            shortcut: std::sync::Mutex::new(None),
             sources: Vec::new(),
             loads: Vec::new(),
             swr_ro: cfg.swr_ro,

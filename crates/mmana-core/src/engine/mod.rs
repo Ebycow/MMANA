@@ -121,6 +121,20 @@ pub struct SourceSolution {
     pub swr: f64,
 }
 
+/// The worst place (the longest segment) the kernel treated an observation
+/// point as lying on a source segment of a joined wire though it lies beside
+/// it, closer than a quarter of the segment's length (see `note_shortcut`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Shortcut {
+    /// From the observation point to the source segment (m).
+    pub distance: f64,
+    /// The source segment's length (m).
+    pub segment: f64,
+    /// Expanded wires (1-based) of the observation and source pulses.
+    pub obs_wire: usize,
+    pub src_wire: usize,
+}
+
 /// Solver state for one geometry at one frequency.
 pub(crate) struct Mininec {
     // constants
@@ -167,6 +181,8 @@ pub(crate) struct Mininec {
     pub z: Vec<f64>,
     pub ci: Vec<[i32; 3]>,
     pub wi: Vec<i32>,
+    /// Set while the matrix is filled; read by `checks` (it changes no value).
+    pub shortcut: std::sync::Mutex<Option<Shortcut>>,
     // excitation and loads
     pub sources: Vec<SourceDef>,
     pub loads: Vec<LoadDef>,

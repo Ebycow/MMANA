@@ -172,6 +172,8 @@ pub enum WarningCode {
     NegligiblePower,
     /// One conductor is divided into more segments than the results stay steady with.
     TooManySegments,
+    /// A segment is long for its distance to another wire (`checks::CLOSE_WIRE_RATIO`).
+    CloseWires,
 }
 
 /// A calculated result that should not be trusted as it is.
@@ -186,7 +188,7 @@ pub struct CalcWarning {
 }
 
 impl CalcWarning {
-    fn new(code: WarningCode, wires: Vec<usize>, message: String) -> Self {
+    pub(crate) fn new(code: WarningCode, wires: Vec<usize>, message: String) -> Self {
         Self { code, wires, message }
     }
 }
@@ -300,6 +302,7 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         );
         warnings.push(CalcWarning::new(WarningCode::TooManySegments, wires, message));
     }
+    warnings.extend(crate::checks::misapplied_shortcut(&ap, &engine));
     Ok(Solved { ap, engine, warnings })
 }
 
@@ -361,6 +364,11 @@ fn most_divided_conductor(ap: &AntDef) -> Option<(Vec<usize>, i64)> {
 }
 
 impl Solved {
+    /// What makes the result doubtful (as `CalcResult::warnings`).
+    pub fn warnings(&self) -> &[CalcWarning] {
+        &self.warnings
+    }
+
     /// Impedance and SWR at the first source, without scanning the patterns.
     pub fn feed(&self) -> (Complex, f64) {
         let first = self.engine.solutions[0];

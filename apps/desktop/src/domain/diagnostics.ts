@@ -18,6 +18,7 @@ export type RuleId =
   | 'engine-error'
   | 'tee'
   | 'gap'
+  | 'close-wires'
   | 'too-many-segments'
   | 'below-ground'
   | 'cross';
@@ -43,6 +44,13 @@ export const RULES: Rule[] = [
     description: '端が別のワイヤーの途中に触れていますが、計算上はつながっていません。',
   },
   { id: 'gap', severity: 'warning', label: 'わずかにずれた端', description: '触れているように見える端どうしの座標がずれていて、計算上はつながっていません。' },
+  {
+    id: 'close-wires',
+    severity: 'warning',
+    label: 'つながったワイヤーの横を通る区間',
+    description:
+      '折り返しダイポールの端や鋭い V の頂点のように、つながったワイヤーが区間の横を通ると、その上の点が区間上の点として計算され、共振が数 % ずれます（区間が点までの距離の 4 倍以上で、λ/250 より長いとき）。',
+  },
   {
     id: 'too-many-segments',
     severity: 'warning',
@@ -105,22 +113,23 @@ export function errorDiagnostic(error: EngineError): Diagnostic | null {
   }
 }
 
-const WARNING_RULE: Partial<Record<CalcResult['warnings'][number]['code'], RuleId>> = {
-  tooManySegments: 'too-many-segments',
-  belowGround: 'below-ground',
+/** The rule of each calculation warning that names wires, and what to show for the wires (1-based, listed). */
+const WARNING_RULE: Partial<Record<CalcResult['warnings'][number]['code'], { rule: RuleId; message: (wires: string) => string }>> = {
+  closeWires: {
+    rule: 'close-wires',
+    message: (w) => `ワイヤー ${w}：横を通る点が区間上の点として計算されています（共振が数 % ずれることがあります）。この付近の区間を短くしてください`,
+  },
+  tooManySegments: { rule: 'too-many-segments', message: (w) => `ワイヤー ${w} がつながった導体の分割が多すぎます（約 250 を超えると結果が分割数で変わります）` },
+  belowGround: { rule: 'below-ground', message: (w) => `ワイヤー ${w} が地面より下にあります` },
 };
 
 /** The problems of a result that name wires (the others are about the whole antenna). */
 export function resultDiagnostics(result: CalcResult): Diagnostic[] {
   return result.warnings.flatMap((w) => {
-    const rule = WARNING_RULE[w.code];
-    if (!rule || w.wires.length === 0) return [];
+    const known = WARNING_RULE[w.code];
+    if (!known || w.wires.length === 0) return [];
     const wires = w.wires.map((n) => n - 1);
-    const message =
-      rule === 'too-many-segments'
-        ? `ワイヤー ${wireList(wires)} がつながった導体の分割が多すぎます（約 250 を超えると結果が分割数で変わります）`
-        : `ワイヤー ${wireList(wires)} が地面より下にあります`;
-    return [diagnostic(rule, wires, message)];
+    return [diagnostic(known.rule, wires, known.message(wireList(wires)))];
   });
 }
 
