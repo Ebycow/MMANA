@@ -31,6 +31,10 @@ export class EngineError extends Error {
     readonly type: string,
     readonly title: string,
     readonly detail: string,
+    /** For a calculation error: its kind, e.g. `overlapping-wires`. */
+    readonly code?: string,
+    /** For a calculation error: the 1-based numbers of the wires it is about. */
+    readonly wires: number[] = [],
   ) {
     super(detail || title);
   }
@@ -75,8 +79,8 @@ export interface Files {
 function toEngineError(e: unknown): EngineError {
   if (e instanceof EngineError) return e;
   if (e && typeof e === 'object' && 'type' in e && 'detail' in e) {
-    const p = e as { type: string; title?: string; detail: string };
-    return new EngineError(p.type, p.title ?? p.type, p.detail);
+    const p = e as { type: string; title?: string; detail: string; code?: string; wires?: number[] };
+    return new EngineError(p.type, p.title ?? p.type, p.detail, p.code, p.wires ?? []);
   }
   return new EngineError('internal', 'Unexpected error', String(e));
 }

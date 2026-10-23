@@ -103,6 +103,8 @@ export interface AppState {
   /** The project changed since `result` was computed. */
   resultStale: boolean;
   calcError: EngineError | null;
+  /** The project `calcError` came from, to tell whether it is still about the antenna as it is. */
+  calcErrorProject: Project | null;
   lastCalcMs: number | null;
 
   sweep: SweepState;
@@ -160,6 +162,7 @@ const freshDocument = (project: Project) => ({
   result: null,
   resultStale: false,
   calcError: null,
+  calcErrorProject: null,
   sweep: { ...sweepAround(project.antenna.frequencyMhz), points: 21, data: null, stale: false, running: false, progress: null, stopping: false },
   optimizer: freshOptimizer(),
 });
@@ -302,7 +305,7 @@ export const useApp = create<AppState>()((set, get) => {
           set({ result, calcError: null, resultStale: stale, lastCalcMs: performance.now() - t0 });
         }
       } catch (e) {
-        if (gen === generation) set({ calcError: toEngineError(e) });
+        if (gen === generation) set({ calcError: toEngineError(e), calcErrorProject: project });
       } finally {
         set({ calculating: false });
       }
@@ -353,7 +356,7 @@ export const useApp = create<AppState>()((set, get) => {
         }
       } catch (e) {
         if (request !== sweepRequest) return;
-        set({ sweep: { ...get().sweep, running: false, stopping: false }, calcError: toEngineError(e) });
+        set({ sweep: { ...get().sweep, running: false, stopping: false }, calcError: toEngineError(e), calcErrorProject: project });
       }
     },
 
