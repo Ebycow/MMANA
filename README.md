@@ -60,6 +60,9 @@ cargo test --release
 cargo run --release -p mmana-cli -- calc testdata/maa/3EL20.MAA
 cargo run --release -p mmana-cli -- sweep testdata/maa/3EL20.MAA --start 13.9 --stop 14.4 --points 6
 cargo run --release -p mmana-cli -- resonance testdata/maa/3EL20.MAA
+
+# 計算結果を信用できない形の測定（docs/measurements の表を作り直す）
+cargo run --release -p mmana-measure -- run --all --out docs/measurements
 cargo run --release -p mmana-cli -- optimize testdata/maa/3EL20.MAA --setup setup.json -o out.maa
 
 # API サーバー（http://127.0.0.1:8080）
