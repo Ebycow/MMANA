@@ -498,3 +498,20 @@ tr.selected .row-actions {
 .antenna-name:hover .antenna-name-pencil {
   opacity: 1;
 }
+
+/* a row of the status bar's problems, messages and history */
+.activity-row {
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+button.activity-row {
+  display: block;
+  width: 100%;
+}
+button.activity-row:hover {
+  background: var(--mantine-color-default-hover);
+}
+.activity-row.current,
+.activity-row.current:hover {
+  background: var(--mantine-primary-color-light);
+}
