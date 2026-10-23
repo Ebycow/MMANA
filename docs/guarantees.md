@@ -87,6 +87,7 @@ API は計算を始める前に、サーバーの設定（`mmana_api::Limits`）
 | `.maa` に書いて読み直したものは、もう一度書いて読み直しても変わらない（1 回目は小数点以下 6 桁に丸まる） | 任意のモデル、壊れた `.maa` | `a_maa_file_…`、`a_damaged_maa_file_…` |
 | プロジェクトの JSON は値を失わずに往復する | 任意のモデル | `project_json_…` |
 | 大地ありでは、地平線より下の遠方界は −999 dB（放射なし） | ダイポール・垂直ワイヤ、完全導体大地・実大地、golden の遠方界 | properties.rs の `nothing_radiates_below_the_ground` |
+| 共振周波数の探索：見つけた周波数では \|jX\| < 0.1 Ω（または jX が 0 をまたいで跳ぶ位置）で、計算は 60 回以内。半波長ダイポールでは X = 0 が 0.01 % 以内にあり、上下どちらから探しても同じ共振になる。範囲に共振がなければ「なし」を返す。直列 RLC の推測計算は、RLC 回路の 2 点から L・C・Q・共振周波数を復元する | ダイポール、サンプル（600 パルス以下の 79 件：76 件で収束、3 件は共振なし） | resonance.rs |
 | 1 つの導体が 250 分割を超える結果には警告が付く | 1 本・分割した 1 本・離れた 2 本・スタック、サンプル 81 件 | properties.rs の `a_conductor_divided_too_finely_is_warned_about` |
 | 計算エラーと警告は、種類（`code`）と対象のワイヤ番号（定義した番号。スタックのコピーはコピー元）を持つ。API・Tauri・wasm のエラー本文にも載る | 重なったワイヤ、長さ 0、分割しすぎた導体（離れたワイヤを含めない）、地面より下のワイヤ（スタックあり・なし） | validation.rs の `errors_name_the_wires_they_are_about`、properties.rs の `warnings_name_the_wires_they_are_about`、API・wasm の `calculation_errors_name_their_wires` |
 
