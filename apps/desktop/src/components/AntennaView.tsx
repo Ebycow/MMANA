@@ -1,6 +1,6 @@
 import { GizmoHelper, GizmoViewport, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
-import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
+import { ActionIcon, Group, Menu, Switch, Text, Tooltip, UnstyledButton, useComputedColorScheme } from '@mantine/core';
 import { IconArrowAutofitHeight, IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, MOUSE, Vector3 } from 'three';
@@ -90,7 +90,9 @@ export function AntennaView() {
   const box = useMemo(() => bounds(displayWires(antenna)), [antenna]);
   const autoStep = niceStep(box.radius / 25);
   const groundZ = environment.ground === 'freeSpace' ? null : -environment.height;
-  const grid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
+  const groundStep = useEditor((s) => s.groundStep);
+  const autoGrid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
+  const grid = useMemo(() => (groundStep == null ? autoGrid : sceneGrid(box, groundZ ?? 0, step ?? autoStep, groundStep)), [autoGrid, box, groundZ, step, autoStep, groundStep]);
   const frame = useMemo(() => (fitGround && groundZ != null ? reachingGround(box, groundZ) : box), [fitGround, groundZ, box]);
   const currents = useMemo(
     () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),
@@ -196,7 +198,7 @@ export function AntennaView() {
               編集後は再計算すると電流分布を表示します
             </Text>
           )}
-          <SceneLegend grid={grid} ground={environment.ground} box={box} />
+          <SceneLegend grid={grid} autoCell={autoGrid.cell} ground={environment.ground} box={box} />
         </div>
       </div>
     </Panel>
@@ -248,7 +250,7 @@ const GROUND_FILL: Record<GroundKind, string | null> = { freeSpace: null, perfec
 const metres = (v: number) => `${Number(v.toFixed(3))} m`;
 
 /** What the horizontal grid is, how far apart its lines are and how high the antenna stands. */
-function SceneLegend({ grid, ground, box }: { grid: SceneGrid; ground: GroundKind; box: Bounds }) {
+function SceneLegend({ grid, autoCell, ground, box }: { grid: SceneGrid; autoCell: number; ground: GroundKind; box: Bounds }) {
   const fill = GROUND_FILL[ground];
   // the height setting lifts Z = 0; the lowest wire may stand elsewhere
   const lowest = box.minZ - grid.z;
@@ -265,10 +267,38 @@ function SceneLegend({ grid, ground, box }: { grid: SceneGrid; ground: GroundKin
           ワイヤーが地面より {metres(-lowest)} 下にあります
         </Text>
       )}
-      <div>
-        グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
-      </div>
+      <GroundStepMenu grid={grid} autoCell={autoCell} />
     </div>
+  );
+}
+
+const GROUND_STEPS = [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10];
+
+/** The grid spacing in the legend, which opens a choice of spacings. */
+function GroundStepMenu({ grid, autoCell }: { grid: SceneGrid; autoCell: number }) {
+  const groundStep = useEditor((s) => s.groundStep);
+  const set = useEditor((s) => s.set);
+  return (
+    <Menu position="top-start" shadow="md" withinPortal>
+      <Menu.Target>
+        <UnstyledButton className="view3d-legend-button num" aria-label="グリッドの間隔を変える">
+          グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）▾
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>地面のグリッドの間隔</Menu.Label>
+        {[null, ...GROUND_STEPS].map((m) => (
+          <Menu.Item
+            key={String(m)}
+            className="num"
+            fw={m === groundStep ? 600 : undefined}
+            onClick={() => set({ groundStep: m })}
+          >
+            {m == null ? `自動（${stepLabel(autoCell)}）` : stepLabel(m)}
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
   );
 }
 

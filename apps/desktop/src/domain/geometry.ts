@@ -116,15 +116,17 @@ export interface SceneGrid {
 
 /**
  * Lays out the horizontal grid at height `z` (the ground, or Z = 0 in free
- * space). Lines are drawn on round world coordinates in the snap step, or a
- * power of ten times it so a large scene does not turn into a haze; the disc
- * covers the antenna's footprint and enough ground round it to read its
- * height.
+ * space). Lines are drawn on round world coordinates `cell` apart, or by
+ * default in the snap step, or a power of ten times it so a large scene does
+ * not turn into a haze; the disc covers the antenna's footprint and enough
+ * ground round it to read its height.
  */
-export function sceneGrid(box: Bounds, z: number, step: number): SceneGrid {
+export function sceneGrid(box: Bounds, z: number, step: number, cell: number | null = null): SceneGrid {
   const half = Math.max(box.radius * 3, (box.maxZ - z) * 1.2);
-  let cell = step;
-  while ((2 * half) / cell > 100) cell = Number((cell * 10).toPrecision(6));
+  if (cell == null) {
+    cell = step;
+    while ((2 * half) / cell > 100) cell = Number((cell * 10).toPrecision(6));
+  }
   const section = Number((cell * 10).toPrecision(6));
   return { center: { x: box.center.x, y: box.center.y }, z, half, cell, section };
 }

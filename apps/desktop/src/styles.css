@@ -343,6 +343,18 @@ tr.selected .row-actions {
   color: var(--text-secondary);
   pointer-events: none;
 }
+.view3d-legend-button {
+  pointer-events: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: -4px;
+}
+.view3d-legend-button:hover {
+  background: var(--panel-bg);
+  color: var(--text-primary);
+}
 .view3d-ground-swatch {
   display: inline-block;
   width: 10px;

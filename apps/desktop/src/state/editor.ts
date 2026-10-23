@@ -28,6 +28,8 @@ export interface EditorState {
   gridSnap: boolean;
   /** Grid step in metres; null picks one from the size of the antenna. */
   step: number | null;
+  /** Spacing of the ground (or Z = 0) grid in metres; null follows the grid step. */
+  groundStep: number | null;
   vertexSnap: boolean;
   /** Rotation in 15° steps, drawing directions with Shift. */
   angleSnap: boolean;
@@ -68,6 +70,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
   plane: 'auto',
   gridSnap: true,
   step: null,
+  groundStep: null,
   vertexSnap: true,
   angleSnap: true,
   follow: true,
