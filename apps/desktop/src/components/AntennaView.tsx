@@ -253,19 +253,19 @@ function SceneLegend({ grid, ground, box }: { grid: SceneGrid; ground: GroundKin
   const lowest = box.minZ - grid.z;
   return (
     <div className="num">
-      {fill && (
-        <div>
-          地上高 {metres(-grid.z)}（Z = 0 の高さ）{Math.abs(box.minZ) > 1e-9 && lowest >= 0 && ` ・ 最も低い点 ${metres(lowest)}`}
-        </div>
-      )}
+      <div>
+        {fill && <span className="view3d-ground-swatch" style={{ background: `var(${fill})` }} />}
+        {GROUND_LABEL[ground]}
+        {fill && ` ・ 地上高 ${metres(-grid.z)}`}
+      </div>
+      {fill && Math.abs(box.minZ) > 1e-9 && lowest >= 0 && <div>最も低い点 {metres(lowest)}</div>}
       {fill && lowest < -1e-9 && (
         <Text size="xs" c="red">
           ワイヤーが地面より {metres(-lowest)} 下にあります
         </Text>
       )}
       <div>
-        {fill && <span className="view3d-ground-swatch" style={{ background: `var(${fill})` }} />}
-        {GROUND_LABEL[ground]} ・ グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
+        グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
       </div>
     </div>
   );
