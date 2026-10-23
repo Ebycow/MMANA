@@ -7,10 +7,12 @@ import { Color, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
 import type { Point3, Project } from '../api/types';
+import { byWire, worst } from '../domain/diagnostics';
 import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
 import { bounds, currentPolylines, displayWires, reachingGround, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
 import { add, niceStep, sub } from '../domain/wireEdit';
+import { useDiagnostics } from '../state/diagnostics';
 import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
@@ -337,6 +339,8 @@ interface SceneProps {
 function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feeds, offset }: SceneProps) {
   const selected = useApp((s) => s.selectedWires);
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
+  const diagnostics = useDiagnostics();
+  const problems = useMemo(() => byWire(diagnostics), [diagnostics]);
   const controls = useRef<OrbitControlsImpl>(null);
   const { camera, invalidate, size } = useThree();
   const mouse = useInput((s) => s.mouse);
@@ -346,7 +350,16 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
   );
 
   const colors = useMemo(
-    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section'), dimension: cssVar('--view3d-dimension') }),
+    () => ({
+      wire: cssVar('--wire'),
+      selected: cssVar('--wire-selected'),
+      error: cssVar('--diag-error'),
+      warning: cssVar('--diag-warning'),
+      info: cssVar('--diag-info'),
+      grid: cssVar('--view3d-grid'),
+      section: cssVar('--view3d-grid-section'),
+      dimension: cssVar('--view3d-dimension'),
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scheme],
   );
@@ -413,7 +426,9 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
       {wires.map((w, i) => {
         const isSel = selected.includes(w.base);
         const isHover = hover === w.base;
-        const showPlain = !currents;
+        // a wire with a problem stays solid over the currents, in the colour of the worst one
+        const severity = worst(problems.get(w.base) ?? []);
+        const showPlain = !currents || severity != null;
         return (
           <Line
             key={i}
@@ -421,8 +436,8 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
               [w.start.x, w.start.y, w.start.z],
               [w.end.x, w.end.y, w.end.z],
             ]}
-            color={isSel ? colors.selected : colors.wire}
-            lineWidth={isSel ? 4 : isHover ? 3.5 : showPlain ? 2.2 : 1}
+            color={isSel ? colors.selected : severity ? colors[severity] : colors.wire}
+            lineWidth={isSel ? 4 : isHover ? 3.5 : severity ? 3 : showPlain ? 2.2 : 1}
             transparent={!showPlain && !isSel}
             opacity={!showPlain && !isSel ? 0.35 : 1}
             raycast={() => null}
