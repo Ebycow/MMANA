@@ -2,11 +2,11 @@
 
 use anyhow::{Result, bail};
 use mmana_core::resonance::{ResonanceRange, find_resonance};
-use mmana_core::{CalcOptions, GroundKind, Project, Segmentation, WireMaterial, solve};
+use mmana_core::{CalcOptions, GroundKind, Project, Segmentation, WarningCode, WireMaterial, solve};
 
 /// The figures of one antenna at its resonance (at the design frequency
 /// when it has none from half to twice it).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Metrics {
     pub resonance_mhz: Option<f64>,
     /// Feed resistance at the resonance.
@@ -17,6 +17,8 @@ pub struct Metrics {
     /// power, in dB (0 for a correct model). Only in free space with
     /// lossless wires and no loads, where nothing else takes power.
     pub agt_db: Option<f64>,
+    /// The warnings of the calculation there.
+    pub warnings: Vec<WarningCode>,
 }
 
 /// Angular step of the sphere the gain is integrated over (degrees).
@@ -55,16 +57,27 @@ pub fn measure(p: &Project, grid: Grid) -> Result<Metrics> {
     if !(r_ohm.is_finite() && gain_dbi.is_finite()) {
         bail!("the figures are not finite");
     }
-    Ok(Metrics { resonance_mhz, r_ohm, gain_dbi, agt_db })
+    let warnings = solved.warnings().iter().map(|w| w.code).collect();
+    Ok(Metrics { resonance_mhz, r_ohm, gain_dbi, agt_db, warnings })
 }
 
-/// The same antenna with every fixed segment count multiplied by `k` (the
-/// other segmentations are left as they are).
+/// The same antenna divided `k` times as finely: fixed segment counts and
+/// the DM values of the automatic and tapered segmentation are multiplied.
 pub fn refined(p: &Project, k: i32) -> Project {
     let mut q = p.clone();
+    let auto = &mut q.antenna.auto_segmentation;
+    auto.dm1 *= k;
+    auto.dm2 *= k;
     for w in &mut q.antenna.wires {
-        if let Segmentation::Fixed { count } = &mut w.segmentation {
-            *count *= k;
+        match &mut w.segmentation {
+            Segmentation::Fixed { count } => *count *= k,
+            Segmentation::TaperCustom { dm1, dm2 } => {
+                *dm1 *= k;
+                if let Some(d) = dm2 {
+                    *d *= k;
+                }
+            }
+            _ => {}
         }
     }
     q

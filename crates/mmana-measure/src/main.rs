@@ -82,9 +82,12 @@ fn main() -> Result<()> {
                 bail!("name experiments or pass --all");
             }
             let grid = if quick { Grid::COARSE } else { Grid::FINE };
+            let mut wrong = Vec::new();
             for e in chosen {
                 eprintln!("{} …", e.id);
-                let table = report::run(e, quick, grid)?;
+                let rows = report::measure_all(e, quick, grid);
+                wrong.extend(report::mismatches(e, &rows));
+                let table = report::table(e, &rows)?;
                 match &out {
                     Some(dir) => {
                         std::fs::create_dir_all(dir)?;
@@ -92,6 +95,12 @@ fn main() -> Result<()> {
                     }
                     None => println!("{table}"),
                 }
+            }
+            for w in &wrong {
+                eprintln!("mismatch: {w}");
+            }
+            if !wrong.is_empty() {
+                bail!("{} cases where the warnings disagree with the measurements", wrong.len());
             }
         }
     }
