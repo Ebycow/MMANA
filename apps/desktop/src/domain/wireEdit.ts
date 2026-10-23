@@ -208,16 +208,17 @@ export function followWire(pulse: string, moved: (number | null)[]): { pulse: st
   return { pulse: `${m[1]}${to + 1}${m[3]}`, keep: true };
 }
 
+export type FollowResult = ReturnType<typeof followWire>;
+
 /**
- * Replaces the wires and makes the pulse names of sources and loads follow
- * them (`moved[i]`: new index of old wire i, or null when it is gone); those
- * on a removed wire are removed. Returns notes for the user.
+ * Replaces the wires and renames the pulses of sources and loads with
+ * `rename`; those it does not keep are removed. Returns notes for the user.
  */
-function renumberWires(antenna: Antenna, wires: Wire[], moved: (number | null)[]): { antenna: Antenna; warnings: string[] } {
+export function renumberWires(antenna: Antenna, wires: Wire[], rename: (pulse: string) => FollowResult): { antenna: Antenna; warnings: string[] } {
   const warnings: string[] = [];
   const follow = <T extends { pulse: string }>(items: T[], what: string) =>
     items.flatMap((item) => {
-      const r = followWire(item.pulse, moved);
+      const r = rename(item.pulse);
       if (r.warning) warnings.push(`${what}: ${r.warning}`);
       return r.keep ? [{ ...item, pulse: r.pulse }] : [];
     });
@@ -235,14 +236,14 @@ export function removeWires(antenna: Antenna, selection: number[]): { antenna: A
   return renumberWires(
     antenna,
     antenna.wires.filter((_, i) => !del.has(i)),
-    moved,
+    (p) => followWire(p, moved),
   );
 }
 
 /** Inserts wires before index `at`, renumbering the sources and loads of the wires after it. */
 export function insertWires(antenna: Antenna, at: number, wires: Wire[]): { antenna: Antenna; warnings: string[] } {
   const moved = antenna.wires.map((_, i) => (i < at ? i : i + wires.length));
-  return renumberWires(antenna, [...antenna.wires.slice(0, at), ...wires, ...antenna.wires.slice(at)], moved);
+  return renumberWires(antenna, [...antenna.wires.slice(0, at), ...wires, ...antenna.wires.slice(at)], (p) => followWire(p, moved));
 }
 
 /** Radius and segmentation for a new wire: those of `like`, else MMANA's defaults. */

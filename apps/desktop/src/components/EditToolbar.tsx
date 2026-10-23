@@ -6,11 +6,13 @@ import {
   Checkbox,
   Divider,
   Group,
+  Indicator,
   Menu,
   Modal,
   NumberInput,
   Paper,
   Popover,
+  ScrollArea,
   SegmentedControl,
   Select,
   Stack,
@@ -22,11 +24,14 @@ import {
 import {
   IconAdjustments,
   IconArrowsMove,
+  IconCircleCheck,
   IconCopy,
   IconFlipVertical,
   IconHexagon,
   IconLayoutAlignCenter,
   IconLine,
+  IconLink,
+  IconLinkOff,
   IconMagnet,
   IconPlugConnected,
   IconPointer,
@@ -35,8 +40,9 @@ import {
   IconRotateClockwise2,
   IconTrash,
 } from '@tabler/icons-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { evaluate } from '../domain/expr';
+import { describeIssue, findJunctionIssues, fixable, isMistake, issuePoint, issueWires, type JunctionIssue } from '../domain/junctions';
 import { wavelength } from '../domain/project';
 import { AXES, type Axis } from '../domain/wireEdit';
 import { useEditor, type PlaneMode, type Tool } from '../state/editor';
@@ -46,6 +52,7 @@ import {
   alignSelected,
   deleteSelected,
   duplicateSelected,
+  fixIssues,
   flipSelected,
   mirrorCopySelected,
   rotateSelected,
@@ -123,6 +130,7 @@ export function EditToolbar({ autoStep, editable }: { autoStep: number; editable
         </ActionIcon.Group>
         <Divider orientation="vertical" mx={4} />
         <SnapSettings autoStep={autoStep} />
+        <JunctionCheck editable={editable} />
       </Paper>
       <SelectionBar editable={editable} />
     </div>
@@ -158,11 +166,20 @@ function SnapSettings({ autoStep }: { autoStep: number }) {
               comboboxProps={{ withinPortal: false }}
             />
           </Group>
-          <Switch label="端点・中点に吸着" checked={s.vertexSnap} onChange={(e) => s.set({ vertexSnap: e.currentTarget.checked })} />
+          <Switch label="端点・中点・ワイヤー上に吸着" checked={s.vertexSnap} onChange={(e) => s.set({ vertexSnap: e.currentTarget.checked })} />
           <Switch label="回転を 15° 刻みにする" checked={s.angleSnap} onChange={(e) => s.set({ angleSnap: e.currentTarget.checked })} />
           <Tooltip label={`動かした端点に接していたほかのワイヤーの端も一緒に動かします（${followKey} を押しながらドラッグで一時的に切り替え）`} multiline w={240}>
             <div>
               <Switch label="つながりを保つ" checked={s.follow} onChange={(e) => s.set({ follow: e.currentTarget.checked })} />
+            </div>
+          </Tooltip>
+          <Tooltip
+            label="描いたり動かしたりした端がワイヤーの途中に乗ったら、そのワイヤーをそこで分けて計算上もつなげます（計算では端点どうしが完全に一致しないとつながりません）"
+            multiline
+            w={240}
+          >
+            <div>
+              <Switch label="途中に付けたら分けてつなぐ" checked={s.autoJoin} onChange={(e) => s.set({ autoJoin: e.currentTarget.checked })} />
             </div>
           </Tooltip>
           <Divider />
@@ -194,6 +211,98 @@ function SnapSettings({ autoStep }: { autoStep: number }) {
             value={s.sides}
             onChange={(v) => typeof v === 'number' && v >= 3 && s.set({ sides: Math.round(v) })}
           />
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+const FIX_LABEL: Record<JunctionIssue['kind'], string> = { tee: 'つなぐ', gap: 'くっつける', cross: '交点でつなぐ', overlap: '重複を削除' };
+
+/**
+ * Lists the places where wires touch but the calculation does not join them,
+ * marks them in the view while open and fixes them one by one or all at once.
+ */
+function JunctionCheck({ editable }: { editable: boolean }) {
+  const wires = useApp((s) => s.project.antenna.wires);
+  const setSelection = useApp((s) => s.setSelection);
+  const set = useEditor((s) => s.set);
+  const [open, setOpen] = useState(false);
+  const issues = useMemo(() => findJunctionIssues(wires), [wires]);
+  const mistakes = issues.filter(isMistake);
+  const fixAll = mistakes.filter((i) => fixable(wires, i));
+  useEffect(() => set({ issueMarks: open ? issues.map((i) => issuePoint(wires, i)) : [], issueHot: null }), [open, issues, wires, set]);
+  return (
+    <Popover opened={open} onChange={setOpen} position="bottom-start" shadow="md" withinPortal>
+      <Popover.Target>
+        <Tooltip label={mistakes.length ? `つながっていない可能性のある箇所が ${mistakes.length} か所あります` : '接続チェック'}>
+          <Indicator label={mistakes.length} disabled={mistakes.length === 0} color="red" size={14} offset={4}>
+            <ActionIcon
+              aria-label="接続チェック"
+              variant={open || mistakes.length ? 'light' : 'subtle'}
+              color={mistakes.length ? 'red' : 'gray'}
+              onClick={() => setOpen((o) => !o)}
+            >
+              {mistakes.length ? <IconLinkOff size={15} /> : <IconLink size={15} />}
+            </ActionIcon>
+          </Indicator>
+        </Tooltip>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs" w={380}>
+          <Text size="sm" fw={600}>
+            接続チェック
+          </Text>
+          <Text size="xs" c="dimmed">
+            計算では、ワイヤーは端点の座標が完全に一致したときだけつながります。見た目は触れていても計算上は切れている箇所を探します（触れている = 半径の和より近い）。
+          </Text>
+          {issues.length === 0 ? (
+            <Group gap={6} wrap="nowrap">
+              <IconCircleCheck size={16} color="var(--mantine-color-teal-6)" />
+              <Text size="sm">問題は見つかりませんでした</Text>
+            </Group>
+          ) : (
+            <ScrollArea.Autosize mah={300} type="auto">
+              <Stack gap={4}>
+                {issues.slice(0, 200).map((issue, i) => (
+                  <Group
+                    key={i}
+                    gap="xs"
+                    wrap="nowrap"
+                    justify="space-between"
+                    className="issue-row"
+                    onMouseEnter={() => set({ issueHot: i })}
+                    onMouseLeave={() => set({ issueHot: null })}
+                  >
+                    <Text
+                      size="xs"
+                      c={isMistake(issue) ? undefined : 'dimmed'}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => setSelection(issueWires(issue))}
+                      title="クリックでワイヤーを選択"
+                    >
+                      {describeIssue(issue)}
+                    </Text>
+                    <Tooltip label="組み合わせワイヤーは分けられません" disabled={fixable(wires, issue)}>
+                      <Button size="compact-xs" variant="light" disabled={!editable || !fixable(wires, issue)} onClick={() => fixIssues([issue])}>
+                        {FIX_LABEL[issue.kind]}
+                      </Button>
+                    </Tooltip>
+                  </Group>
+                ))}
+              </Stack>
+            </ScrollArea.Autosize>
+          )}
+          {fixAll.length > 0 && (
+            <Button size="xs" color="red" disabled={!editable} onClick={() => fixIssues(fixAll)}>
+              すべて直す（{fixAll.length} か所）
+            </Button>
+          )}
+          {issues.length > mistakes.length && (
+            <Text size="xs" c="dimmed">
+              交差は「すべて直す」に含めません。たすき掛けの位相線（HB9CV・LPDA など）は交差させてつながない書き方が正しいためです。
+            </Text>
+          )}
         </Stack>
       </Popover.Dropdown>
     </Popover>

@@ -16,6 +16,7 @@ import type { Point3, PulsePoint, Wire } from '../api/types';
 import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
 import type { DisplayWire } from '../domain/geometry';
 import { isHeld } from '../domain/shortcuts';
+import { along } from '../domain/junctions';
 import {
   PLANE_NORMAL,
   add,
@@ -130,6 +131,7 @@ export function EditScene(props: EditSceneProps) {
       <SelectionGizmo {...props} gizmo={gizmo} />
       <DrawPreview offset={props.offset} step={props.step} radius={props.radius} />
       <PulseTicks wires={props.wires} offset={props.offset} layout={props.layout} />
+      <IssueMarks offset={props.offset} />
     </>
   );
 }
@@ -249,11 +251,15 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       return best && { wire: hit.wire, pulse: best };
     };
 
-    /** The nearest end or midpoint on screen (wire coordinates), skipping `except`. */
-    const snapTarget = (p: Pt2, except?: Point3): { point: Point3; snap: 'vertex' | 'midpoint' } | null => {
+    /**
+     * The nearest end or midpoint on screen (wire coordinates), else the
+     * nearest point along a wire (at a round distance from its start with
+     * the grid on), skipping `except` and the wires that end there.
+     */
+    const snapTarget = (p: Pt2, except?: Point3): { point: Point3; snap: 'vertex' | 'midpoint' | 'wire'; note?: string } | null => {
       const { wires } = latest.current;
       const ed = useEditor.getState();
-      let best: { point: Point3; snap: 'vertex' | 'midpoint' } | null = null;
+      let best: { point: Point3; snap: 'vertex' | 'midpoint' | 'wire'; note?: string } | null = null;
       let bestD = SNAP_PX;
       const consider = (q: Point3, snap: 'vertex' | 'midpoint') => {
         if (except && samePoint(q, except)) return;
@@ -272,7 +278,16 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
         consider(scale(add(w.start, w.end), 0.5), 'midpoint');
       }
       for (const q of ed.draft) consider(q, 'vertex');
-      return best;
+      if (best) return best;
+      const hit = pickWire(p, SNAP_PX);
+      const w = hit && wires[hit.wire];
+      if (!hit || !w || (except && (samePoint(w.start, except) || samePoint(w.end, except)))) return null;
+      const len = distance(w.start, w.end);
+      if (len < JOIN_EPS) return null;
+      const grab = toWire(sub(hit.grab, hit.shift));
+      let d = Math.min(len, Math.max(0, len * along(w, grab).t));
+      if (ed.gridSnap) d = Math.min(len, snapValue(d, latest.current.step));
+      return { point: cleanPoint(add(w.start, scale(sub(w.end, w.start), d / len))), snap: 'wire', note: `ワイヤー ${hit.wire + 1} 上・始点から ${fmt(d)} m` };
     };
 
     const drawPlane = (): Plane => {
@@ -286,7 +301,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       const last = ed.draft.at(-1);
       if (ed.vertexSnap && !(constrain && last)) {
         const s = snapTarget(p);
-        if (s) return { point: s.point, plane, snap: s.snap };
+        if (s) return { point: s.point, plane, snap: s.snap, note: s.note };
       }
       const q = onPlane(p, plane, toWorld(last ?? ORIGIN));
       if (!q) return null;
@@ -361,7 +376,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
         el.style.cursor = 'crosshair';
         const cursor = drawCursor(p, held('constrain', e));
         const last = ed.draft.at(-1);
-        let hud: string | null = null;
+        let hud: string | null = cursor?.note ?? null;
         if (cursor && last) {
           hud =
             ed.tool === 'wire'
@@ -372,6 +387,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
                     return `${fmt(Math.abs(cursor.point[u] - last[u]))} × ${fmt(Math.abs(cursor.point[v] - last[v]))} m`;
                   })()
                 : `半径 ${fmt(distance(last, cursor.point))} m`;
+          if (cursor.note) hud += `（${cursor.note}）`;
         }
         ed.set({ cursor, hud });
         return;
@@ -479,7 +495,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
           const s = snapTarget(p, drag.origin);
           if (s) {
             target = s.point;
-            snapped = s.snap === 'vertex' ? '（端点に吸着）' : '（中点に吸着）';
+            snapped = s.snap === 'vertex' ? '（端点に吸着）' : s.snap === 'midpoint' ? '（中点に吸着）' : `（${s.note}）`;
           }
         }
         if (!target) {
@@ -798,7 +814,7 @@ function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; r
     }
   }
   // the grid lies on the drawing plane through the point drawn from
-  const through = last ?? (cursor?.snap === 'vertex' || cursor?.snap === 'midpoint' ? cursor.point : ORIGIN);
+  const through = last ?? (cursor?.snap === 'vertex' || cursor?.snap === 'midpoint' || cursor?.snap === 'wire' ? cursor.point : ORIGIN);
   const normal = PLANE_NORMAL[plane];
   const center = { ...(cursor?.point ?? through), [normal]: through[normal] };
   const gridCenter = gridSnap ? snapToGrid(center, plane, step * 10) : center;
@@ -850,6 +866,23 @@ function PulseTicks({ wires, offset, layout }: { wires: Wire[]; offset: Point3; 
       {ticks.map((q) => (
         <Html key={q.pulse} position={[q.position.x + offset.x, q.position.y + offset.y, q.position.z + offset.z]} center zIndexRange={[5, 0]} style={{ pointerEvents: 'none' }}>
           <div className={`pulse-tick${q.pulse === target ? ' hot' : ''}`} />
+        </Html>
+      ))}
+    </>
+  );
+}
+
+/** The places the connection check lists, while its list is open. */
+function IssueMarks({ offset }: { offset: Point3 }) {
+  const marks = useEditor((s) => s.issueMarks);
+  const hot = useEditor((s) => s.issueHot);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => invalidate());
+  return (
+    <>
+      {marks.map((p, i) => (
+        <Html key={i} position={[p.x + offset.x, p.y + offset.y, p.z + offset.z]} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
+          <div className={`issue-mark${i === hot ? ' hot' : ''}`} />
         </Html>
       ))}
     </>

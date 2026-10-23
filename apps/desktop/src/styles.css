@@ -377,6 +377,33 @@ tr.selected .row-actions {
   transform: rotate(45deg);
   border-color: var(--series-3);
 }
+.snap-marker.wire {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border-color: var(--series-3);
+  background: color-mix(in srgb, var(--series-3) 25%, transparent);
+}
+.issue-row {
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.issue-row:hover {
+  background: color-mix(in srgb, #e03131 8%, transparent);
+}
+.issue-mark {
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 2px solid #e03131;
+  background: color-mix(in srgb, #e03131 15%, transparent);
+}
+.issue-mark.hot {
+  width: 28px;
+  height: 28px;
+  border-width: 3px;
+}
 .snap-marker.free {
   width: 8px;
   height: 8px;
