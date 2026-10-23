@@ -3,6 +3,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mmana_core::optimize::{self, OptimizerSetup, StopReason};
+use mmana_core::resonance::{self, ResonanceRange};
 use mmana_core::{CalcOptions, PatternResolution, Project, maa};
 use std::path::{Path, PathBuf};
 
@@ -37,6 +38,21 @@ enum Command {
         stop: f64,
         #[arg(long, default_value_t = 11)]
         points: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Find the resonant frequency nearest to a start frequency (X = 0, rising).
+    Resonance {
+        file: PathBuf,
+        /// Start frequency in MHz (default: design frequency).
+        #[arg(long)]
+        start: Option<f64>,
+        /// Lowest frequency searched (default: half the start).
+        #[arg(long)]
+        min: Option<f64>,
+        /// Highest frequency searched (default: twice the start).
+        #[arg(long)]
+        max: Option<f64>,
         #[arg(long)]
         json: bool,
     },
@@ -115,6 +131,35 @@ fn main() -> Result<()> {
                     "{:>10.4} {:>9.2} {:>9.2} {:>8.2} {:>8.2} {:>7.2}",
                     p.frequency_mhz, p.impedance.re, p.impedance.im, p.swr, p.gain_dbi, p.fb_db
                 );
+            }
+        }
+        Command::Resonance { file, start, min, max, json } => {
+            let project = load(&file)?;
+            let range = ResonanceRange { start_mhz: start, min_mhz: min, max_mhz: max };
+            let found = resonance::find_resonance(&project, &CalcOptions::default(), &range)?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&found)?);
+                return Ok(());
+            }
+            println!("{}", project.antenna.name);
+            let Some(r) = found.resonance else {
+                println!(
+                    "  no resonance from {:.4} to {:.4} MHz ({} calculations)",
+                    found.min_mhz, found.max_mhz, found.calculations
+                );
+                return Ok(());
+            };
+            println!("  resonance   {:.4} MHz   ({} calculations)", r.frequency_mhz, found.calculations);
+            println!("  impedance   {:.2} {:+.2}j Ω", r.impedance.re, r.impedance.im);
+            println!("  SWR         {:.2}  ({} Ω ref)", r.swr, project.environment.swr_reference.r);
+            if let Some(c) = r.circuit {
+                println!(
+                    "  series      L {:.4} µH   C {:.4} pF   Q {:.2}   bandwidth {:.1} kHz",
+                    c.inductance_uh, c.capacitance_pf, c.q, c.bandwidth_khz
+                );
+            }
+            if !r.converged {
+                println!("  warning: the reactance jumps across 0 here (the segmentation changes with the frequency)");
             }
         }
         Command::Optimize { file, setup, freq, limit, output } => {

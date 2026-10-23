@@ -8,11 +8,12 @@ use axum::http::header;
 use axum::response::IntoResponse;
 use mmana_core::contract::{
     self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
-    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, SweepRequest,
-    SweepResponse, field_points,
+    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, ResonanceRequest,
+    SweepRequest, SweepResponse, field_points,
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeOutcome, SetupEdit};
+use mmana_core::resonance::ResonanceSearch;
 use mmana_core::{CalcOptions, CalcResult, Project, PulseLayout, maa};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -149,6 +150,23 @@ pub async fn sweep(
     }
     let req = SweepRequest { options: checked_options(req.options, &state.limits), ..req };
     Ok(ApiJson(blocking(move || Ok(contract::sweep(&req)?)).await?))
+}
+
+/// The resonant frequency nearest to a start frequency (where the reactance at
+/// the first source crosses 0, rising), and the series R-L-C circuit there.
+#[utoipa::path(
+    post,
+    path = "/v1/resonance",
+    tag = "calculations",
+    request_body = ResonanceRequest,
+    responses((status = 200, body = ResonanceSearch), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn find_resonance(
+    State(state): State<AppState>,
+    ApiJson(req): ApiJson<ResonanceRequest>,
+) -> Result<ApiJson<ResonanceSearch>, ApiError> {
+    let req = ResonanceRequest { options: checked_options(req.options, &state.limits), ..req };
+    Ok(ApiJson(blocking(move || Ok(contract::find_resonance(&req)?)).await?))
 }
 
 /// Far-field gain on an arbitrary zenith × azimuth grid.

@@ -79,6 +79,7 @@ pub fn dispatch(op: &str, request: &str) -> Result<String, Problem> {
         "calculate" => json(request, contract::calculate),
         "pulseLayout" => json(request, contract::pulse_layout),
         "sweep" => json(request, contract::sweep),
+        "findResonance" => json(request, contract::find_resonance),
         "farField" => json(request, contract::far_field),
         "nearField" => json(request, contract::near_field),
         "editElements" => json(request, |r| Ok::<_, Infallible>(contract::edit_elements(r))),
@@ -157,6 +158,13 @@ mod tests {
         project["antenna"]["wires"] = j!([]);
         let req = j!({ "project": project }).to_string();
         assert_eq!(dispatch("calculate", &req).unwrap_err().kind, "calculation-failed");
+    }
+
+    #[test]
+    fn finds_the_resonance() {
+        let req = j!({ "project": dipole() }).to_string();
+        let found: Value = serde_json::from_str(&dispatch("findResonance", &req).unwrap()).unwrap();
+        assert!(found["resonance"]["impedance"]["im"].as_f64().unwrap().abs() < 0.1, "{found}");
     }
 
     #[test]

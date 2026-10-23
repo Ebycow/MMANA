@@ -20,6 +20,7 @@ pub fn run() {
             commands::calculate,
             commands::pulse_layout,
             commands::sweep,
+            commands::find_resonance,
             commands::far_field,
             commands::near_field,
             commands::edit_elements,

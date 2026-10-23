@@ -19,6 +19,8 @@ import type {
   Progress,
   Project,
   PulseLayout,
+  ResonanceRequest,
+  ResonanceSearch,
   SetupEdit,
   SweepRequest,
   SweepResponse,
@@ -47,6 +49,8 @@ export interface Transport {
   /** Where the pulses lie, without solving (for placing sources and loads). */
   pulseLayout(req: CalculationRequest): Promise<PulseLayout>;
   sweep(req: SweepRequest): Promise<SweepResponse>;
+  /** The resonance nearest to a start frequency, and the series circuit there. */
+  findResonance(req: ResonanceRequest): Promise<ResonanceSearch>;
   farField(req: FarFieldRequest): Promise<FarFieldResponse>;
   nearField(req: NearFieldRequest): Promise<NearFieldResponse>;
   editElements(req: ElementEditRequest): Promise<ElementEdit>;
@@ -104,6 +108,7 @@ export const tauriTransport: Transport = {
   calculate: (request) => tauriInvoke('calculate', { request }),
   pulseLayout: (request) => tauriInvoke('pulse_layout', { request }),
   sweep: (request) => tauriInvoke('sweep', { request }),
+  findResonance: (request) => tauriInvoke('find_resonance', { request }),
   farField: (request) => tauriInvoke('far_field', { request }),
   nearField: (request) => tauriInvoke('near_field', { request }),
   editElements: (request) => tauriInvoke('edit_elements', { request }),
@@ -176,6 +181,7 @@ export function httpTransport(baseUrl: string): Transport {
     calculate: (req) => json('/v1/calculations', req),
     pulseLayout: (req) => json('/v1/pulses', req),
     sweep: (req) => json('/v1/sweeps', req),
+    findResonance: (req) => json('/v1/resonance', req),
     farField: (req) => json('/v1/far-field', req),
     nearField: (req) => json('/v1/near-field', req),
     editElements: (req) => json('/v1/elements', req),
@@ -273,6 +279,7 @@ export const wasmTransport: Transport = {
   calculate: (req) => wasmCall('calculate', req),
   pulseLayout: (req) => wasmCall('pulseLayout', req),
   sweep: (req) => wasmCall('sweep', req),
+  findResonance: (req) => wasmCall('findResonance', req),
   farField: (req) => wasmCall('farField', req),
   nearField: (req) => wasmCall('nearField', req),
   editElements: (req) => wasmCall('editElements', req),

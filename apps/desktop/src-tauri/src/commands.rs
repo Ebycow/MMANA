@@ -4,11 +4,12 @@
 
 use mmana_core::contract::{
     self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
-    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, SweepRequest,
-    SweepResponse,
+    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, ResonanceRequest,
+    SweepRequest, SweepResponse,
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeError, OptimizeOutcome, Progress, SetupEdit};
+use mmana_core::resonance::ResonanceSearch;
 use mmana_core::{CalcError, CalcResult, Project, PulseLayout, maa};
 use serde::Serialize;
 use std::path::Path;
@@ -149,6 +150,11 @@ pub async fn pulse_layout(request: CalculationRequest) -> Result<PulseLayout, Co
 #[tauri::command]
 pub async fn sweep(request: SweepRequest) -> Result<SweepResponse, CommandError> {
     blocking(move || Ok(contract::sweep(&request)?)).await
+}
+
+#[tauri::command]
+pub async fn find_resonance(request: ResonanceRequest) -> Result<ResonanceSearch, CommandError> {
+    blocking(move || Ok(contract::find_resonance(&request)?)).await
 }
 
 #[tauri::command]

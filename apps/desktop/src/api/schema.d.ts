@@ -206,6 +206,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resonance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The resonant frequency nearest to a start frequency (where the reactance at
+         *     the first source crosses 0, rising), and the series R-L-C circuit there.
+         */
+        post: operations["find_resonance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sweeps": {
         parameters: {
             query?: never;
@@ -1074,6 +1094,56 @@ export interface components {
             media: components["schemas"]["Medium"][];
             screen?: components["schemas"]["GroundScreen"] | null;
         };
+        /** @description A resonance found. */
+        Resonance: {
+            circuit?: components["schemas"]["SeriesCircuit"] | null;
+            /**
+             * @description |X| < [`RESONANCE_REACTANCE`]. False when the reactance jumps across 0
+             *     instead (the automatic segmentation changes with the frequency, and a
+             *     segment more or less moves it): the frequency is then where it jumps.
+             */
+            converged: boolean;
+            /** Format: double */
+            frequencyMhz: number;
+            /** @description At the first source. */
+            impedance: components["schemas"]["Complex"];
+            /** Format: double */
+            swr: number;
+        };
+        ResonanceRange: {
+            /**
+             * Format: double
+             * @default null
+             */
+            maxMhz: number | null;
+            /**
+             * Format: double
+             * @description The search stays from `minMhz` to `maxMhz`; by default from half the
+             *     start frequency to twice it (the original's limit).
+             * @default null
+             */
+            minMhz: number | null;
+            /**
+             * Format: double
+             * @description Where the search starts (MHz); the calculation frequency by default.
+             * @default null
+             */
+            startMhz: number | null;
+        };
+        /** @description The resonance nearest to a start frequency, and the series circuit there. */
+        ResonanceRequest: {
+            options?: components["schemas"]["CalcOptions"];
+            project: components["schemas"]["Project"];
+            range?: components["schemas"]["ResonanceRange"];
+        };
+        ResonanceSearch: {
+            calculations: number;
+            /** Format: double */
+            maxMhz: number;
+            /** Format: double */
+            minMhz: number;
+            resonance?: components["schemas"]["Resonance"] | null;
+        };
         /** @description How a wire is divided into segments (MMANA's "SEG" column). */
         Segmentation: {
             /** Format: int32 */
@@ -1109,6 +1179,28 @@ export interface components {
             segments: number;
             start: components["schemas"]["Point3"];
             wire: number;
+        };
+        /**
+         * @description The antenna near a resonance as a series R-L-C circuit, fitted to the
+         *     reactance at two frequencies (MMANA's 推測計算).
+         */
+        SeriesCircuit: {
+            /**
+             * Format: double
+             * @description Resonance / Q (the bandwidth of the circuit between its −3 dB points).
+             */
+            bandwidthKhz: number;
+            /** Format: double */
+            capacitancePf: number;
+            /** Format: double */
+            inductanceUh: number;
+            /**
+             * Format: double
+             * @description sqrt(L / C) / R, with R at the frequency closer to resonance.
+             */
+            q: number;
+            /** Format: double */
+            resonanceMhz: number;
         };
         /** @description Result of [`edit_setup`]. */
         SetupEdit: {
@@ -1781,6 +1873,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PulseLayout"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    find_resonance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResonanceRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResonanceSearch"];
                 };
             };
             400: {

@@ -57,6 +57,7 @@ pub struct AppState {
         routes::calculate,
         routes::pulse_layout,
         routes::sweep,
+        routes::find_resonance,
         routes::far_field,
         routes::near_field,
         routes::edit_elements,
@@ -90,6 +91,7 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/calculations", post(routes::calculate))
         .route("/v1/pulses", post(routes::pulse_layout))
         .route("/v1/sweeps", post(routes::sweep))
+        .route("/v1/resonance", post(routes::find_resonance))
         .route("/v1/far-field", post(routes::far_field))
         .route("/v1/near-field", post(routes::near_field))
         .route("/v1/elements", post(routes::edit_elements))
