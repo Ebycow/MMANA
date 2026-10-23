@@ -230,7 +230,7 @@ export function ResultsPanel() {
             </Tabs>
             {r.warnings.length > 0 && (
               <Text size="xs" c="orange" px="sm" pb={6}>
-                {r.warnings.join(' / ')}
+                {r.warnings.map((w) => w.message).join(' / ')}
               </Text>
             )}
           </>

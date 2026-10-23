@@ -9,8 +9,8 @@
 //! within tolerances stated with each test.
 
 use mmana_core::{
-    CalcOptions, CalcResult, Complex, GroundKind, Load, LoadKind, Point3, Project, Segmentation, Source, Wire,
-    calculate, maa, pulse_layout, solve, sweep_at,
+    CalcOptions, CalcResult, Complex, GroundKind, Load, LoadKind, Point3, Project, Segmentation, Source, WarningCode,
+    Wire, calculate, maa, pulse_layout, solve, sweep_at,
 };
 use std::f64::consts::PI;
 use std::path::Path;
@@ -595,7 +595,7 @@ fn a_result_that_takes_no_power_says_so() {
     let p = broken_down();
     let r = calc(&p);
     assert!(r.total_power_w < 0.0, "the case no longer breaks down: {}", r.total_power_w);
-    assert!(r.warnings.iter().any(|w| w.starts_with("the input power is not positive")), "{:?}", r.warnings);
+    assert!(r.warnings.iter().any(|w| w.message.starts_with("the input power is not positive")), "{:?}", r.warnings);
     // the near field is scaled by the input power: an error, not NaN
     let solved = solve(&p, &CalcOptions::default()).unwrap();
     let axis = mmana_core::AxisRange { start: 0.0, step: 0.0, count: 1 };
@@ -612,7 +612,37 @@ fn a_result_that_takes_no_power_says_so() {
 }
 
 fn drift_warned(p: &Project) -> bool {
-    calc(p).warnings.iter().any(|w| w.contains("segments: beyond about 250 on one conductor"))
+    calc(p).warnings.iter().any(|w| w.message.contains("segments: beyond about 250 on one conductor"))
+}
+
+/// The wires a warning of this kind names, if the result has one.
+fn warned_wires(p: &Project, code: WarningCode) -> Option<Vec<usize>> {
+    calc(p).warnings.into_iter().find(|w| w.code == code).map(|w| w.wires)
+}
+
+#[test]
+fn warnings_name_the_wires_they_are_about() {
+    // every wire of the conductor, and none of a separate one
+    let halves = project(
+        vec![
+            wire((0.0, -5.2, 0.0), (0.0, 0.0, 0.0), 160),
+            wire((5.0, -5.2, 0.0), (5.0, 5.2, 0.0), 20),
+            wire((0.0, 0.0, 0.0), (0.0, 5.2, 0.0), 160),
+        ],
+        vec![source("160", 1.0, 0.0)],
+    );
+    assert_eq!(warned_wires(&halves, WarningCode::TooManySegments), Some(vec![1, 3]));
+    // a stacked copy counts as the wire it copies
+    let mut low = project(
+        vec![wire((0.0, -5.2, 1.0), (0.0, 5.2, 1.0), 20), wire((3.0, -1.0, 1.0), (3.0, 1.0, -0.5), 10)],
+        vec![source("w1c", 1.0, 0.0)],
+    );
+    low.environment.ground = GroundKind::Perfect;
+    low.environment.height = 0.0;
+    assert_eq!(warned_wires(&low, WarningCode::BelowGround), Some(vec![2]));
+    low.antenna.stack.horizontal = 2;
+    low.antenna.stack.horizontal_spacing = 8.0;
+    assert_eq!(warned_wires(&low, WarningCode::BelowGround), Some(vec![2]));
 }
 
 #[test]
@@ -647,7 +677,7 @@ fn a_conductor_divided_too_finely_is_warned_about() {
         .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
         .filter(|name| {
             calculate(&sample(name), &CalcOptions::default())
-                .is_ok_and(|r| r.warnings.iter().any(|w| w.contains("on one conductor")))
+                .is_ok_and(|r| r.warnings.iter().any(|w| w.message.contains("on one conductor")))
         })
         .collect();
     warned.sort();

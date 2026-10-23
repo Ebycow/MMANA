@@ -342,7 +342,7 @@ fn holds_together(p: &Project, o: &CalcOptions, r: &CalcResult) -> Result<(), Te
     prop_assert!((r.total_power_w - sum).abs() <= 1e-9 * sum.abs().max(1e-30));
     // a result that takes no power is flagged
     if r.total_power_w <= 0.0 {
-        prop_assert!(r.warnings.iter().any(|w| w.starts_with("the input power is not positive")));
+        prop_assert!(r.warnings.iter().any(|w| w.message.starts_with("the input power is not positive")));
     }
     let (nh, nv) = match o.pattern_resolution {
         PatternResolution::Fine => (360, 181),
