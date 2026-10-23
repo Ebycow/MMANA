@@ -241,7 +241,7 @@ function EditOverlay() {
 }
 
 type GroundKind = Project['environment']['ground'];
-const GROUND_LABEL: Record<GroundKind, string> = { freeSpace: '自由空間（Z = 0 の面）', perfect: '完全導体の大地', real: '実在大地' };
+const GROUND_LABEL: Record<GroundKind, string> = { freeSpace: '自由空間（Z = 0 の面）', perfect: '完全大地', real: 'リアルグランド' };
 const GROUND_FILL: Record<GroundKind, string | null> = { freeSpace: null, perfect: '--view3d-perfect-ground', real: '--view3d-real-ground' };
 
 const metres = (v: number) => `${Number(v.toFixed(3))} m`;
