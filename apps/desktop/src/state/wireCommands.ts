@@ -19,6 +19,7 @@ import {
   type Edited,
 } from '../domain/wireEdit';
 import type { FeedRef } from '../domain/feed';
+import { fixJunctions, joinTouched, type JunctionIssue, type Split } from '../domain/junctions';
 import { useEditor } from './editor';
 import { useApp } from './store';
 
@@ -35,12 +36,51 @@ const selection = () => useApp.getState().selectedWires;
 const wires = () => useApp.getState().project.antenna.wires;
 const follow = () => useEditor.getState().follow;
 
-/** Replaces the wires as one undoable step and selects `selected` (the same wires by default). */
+const exactly = (a: Point3, b: Point3) => a.x === b.x && a.y === b.y && a.z === b.z;
+
+/**
+ * Replaces the wires as one undoable step and selects `selected` (the same
+ * wires by default). With automatic joining, new or moved ends that land on
+ * the middle of a wire cut it there.
+ */
 export function commitWires(next: Wire[], selected?: number[]) {
   const app = useApp.getState();
-  if (next === app.project.antenna.wires) return;
+  const prev = app.project.antenna.wires;
+  if (next === prev) return;
+  if (useEditor.getState().autoJoin) {
+    const touched = next.flatMap((w, i) => (prev[i] && exactly(prev[i].start, w.start) && exactly(prev[i].end, w.end) ? [] : [i]));
+    const split = joinTouched({ ...app.project.antenna, wires: next }, touched);
+    if (split.pieces.some((p) => p.length > 1)) return commitSplit(split, selected ?? app.selectedWires, '分けてつなぎました');
+  }
   app.edit((p) => void (p.antenna.wires = structuredClone(next)));
   if (selected) app.setSelection(selected);
+}
+
+/** Puts a split antenna in place, selecting the pieces of `selected`, and tells the user about it. */
+function commitSplit(split: Split, selected: number[], what: string) {
+  const app = useApp.getState();
+  const cut = split.pieces.filter((p) => p.length > 1).length;
+  app.edit((p) => void (p.antenna = structuredClone(split.antenna)));
+  app.setSelection(selected.flatMap((i) => split.pieces[i] ?? []));
+  notifications.show({
+    color: split.warnings.length ? 'yellow' : 'blue',
+    title: `ワイヤー ${cut} 本を${what}`,
+    message: split.warnings.length ? split.warnings.join('\n') : '途中に端が触れたワイヤーを、そこで分けて計算上もつながるようにしました。',
+  });
+}
+
+/** Fixes connection problems as one undoable step. */
+export function fixIssues(issues: JunctionIssue[]) {
+  if (issues.length === 0 || !canEditWires()) return;
+  const app = useApp.getState();
+  const r = fixJunctions(app.project.antenna, issues);
+  app.edit((p) => void (p.antenna = structuredClone(r.antenna)));
+  app.setSelection(app.selectedWires.flatMap((i) => r.pieces[i] ?? []));
+  notifications.show({
+    color: r.warnings.length ? 'yellow' : 'teal',
+    title: `接続を ${issues.length} か所直しました`,
+    message: r.warnings.length ? r.warnings.join('\n') : '計算上もつながるようになりました。',
+  });
 }
 
 /** Puts a source or load on the pulse with this name, as one undoable step. */

@@ -19,7 +19,9 @@ export type Hover = { kind: 'wire'; wire: number } | { kind: 'end'; wire: number
 export interface DrawCursor {
   point: Point3;
   plane: Plane;
-  snap: 'vertex' | 'midpoint' | 'grid' | 'free';
+  snap: 'vertex' | 'midpoint' | 'wire' | 'grid' | 'free';
+  /** Where along a wire the point is, when it snapped to one. */
+  note?: string;
 }
 
 export interface EditorState {
@@ -33,6 +35,8 @@ export interface EditorState {
   angleSnap: boolean;
   /** Ends of other wires that meet a moved end move with it. */
   follow: boolean;
+  /** A new or moved end on the middle of a wire cuts it there, so they join. */
+  autoJoin: boolean;
   /** Corners of the polygon tool. */
   sides: number;
 
@@ -56,6 +60,9 @@ export interface EditorState {
   /** The box being dragged for selection, in canvas pixels. */
   box: { x0: number; y0: number; x1: number; y1: number } | null;
   transformOpen: boolean;
+  /** Places the connection check marks in the view, and the one pointed at in its list. */
+  issueMarks: Point3[];
+  issueHot: number | null;
 
   set: (patch: Partial<EditorState>) => void;
   setTool: (tool: Tool) => void;
@@ -71,6 +78,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
   vertexSnap: true,
   angleSnap: true,
   follow: true,
+  autoJoin: true,
   sides: 8,
   clipboard: [],
   preview: null,
@@ -84,6 +92,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
   hud: null,
   box: null,
   transformOpen: false,
+  issueMarks: [],
+  issueHot: null,
 
   set: (patch) => set(patch),
   setTool: (tool) => set({ tool, draft: [], draftPlane: null, typed: '', cursor: null, hud: null, feedHover: null, feedDrag: null }),
