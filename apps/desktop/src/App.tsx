@@ -12,10 +12,12 @@ import { OptimizerDialog } from './components/OptimizerDialog';
 import { OptimizerResults } from './components/OptimizerResults';
 import { SamplesModal } from './components/SamplesModal';
 import { StatusBar } from './components/StatusBar';
+import { PrintView } from './components/print/PrintView';
 import { Workspace } from './components/Workspace';
 import { loadSampleBytes, samples as samplesList, type Sample } from './domain/samples';
 import { useEditor, type Tool } from './state/editor';
 import { useCommandKeys, useInput } from './state/input';
+import { usePrint } from './state/print';
 import { useApp } from './state/store';
 import { canEditWires, copySelected, cutSelected, deleteSelected, duplicateSelected, paste, selectAll } from './state/wireCommands';
 
@@ -119,6 +121,7 @@ export function App() {
       openSample: actions.openSample,
       save: actions.save,
       saveAs: actions.saveAs,
+      print: () => usePrint.getState().setOpen(true),
       undo: historyKey(() => s.getState().undo()),
       redo: historyKey(() => s.getState().redo()),
       copy: copySelected,
@@ -212,6 +215,7 @@ export function App() {
       <OptimizerResults />
       <InputSettings />
       <ChecksSettings />
+      <PrintView />
     </AppShell>
   );
 }

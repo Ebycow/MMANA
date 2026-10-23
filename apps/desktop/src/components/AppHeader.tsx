@@ -16,6 +16,7 @@ import {
   IconListDetails,
   IconMoon,
   IconPencil,
+  IconPrinter,
   IconPlayerPlay,
   IconSun,
   IconTarget,
@@ -24,6 +25,7 @@ import { useRef, useState } from 'react';
 import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
+import { usePrint } from '../state/print';
 import { useApp } from '../state/store';
 import { AboutModal } from './AboutModal';
 import { ReportModal } from './ReportModal';
@@ -154,6 +156,10 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Menu.Item>
           <Menu.Item rightSection={<KeyHint id="saveAs" />} onClick={actions.saveAs}>
             名前を付けて保存…
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item leftSection={<IconPrinter size={14} />} rightSection={<KeyHint id="print" />} onClick={() => usePrint.getState().setOpen(true)}>
+            印刷…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
