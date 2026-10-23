@@ -1,7 +1,8 @@
 name: Pages
 
 # The browser version (wasm engine) at https://<owner>.github.io/<repo>/,
-# published with each release so it matches the desktop downloads.
+# published with each release and run by hand to put out main between releases.
+# The app shows which commit it was built from (Help > About).
 on:
   push:
     tags: ['v*']
@@ -24,6 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        # the tags, for the version shown in the app (git describe)
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
