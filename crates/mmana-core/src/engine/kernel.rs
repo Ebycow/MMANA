@@ -98,8 +98,16 @@ impl Mininec {
         if seg < crate::checks::SHORTCUT_RATIO * distance {
             return;
         }
+        // the matrix is filled in parallel, so ties (a symmetric antenna) are
+        // broken by the wires rather than by which thread gets here first
         let mut worst = self.shortcut.lock().unwrap_or_else(|e| e.into_inner());
-        if worst.is_none_or(|w| w.segment < seg) {
+        let worse = |w: &Shortcut| {
+            seg.total_cmp(&w.segment)
+                .then(w.distance.total_cmp(&distance))
+                .then((w.obs_wire, w.src_wire).cmp(&(obs_wire, src_wire)))
+                .is_gt()
+        };
+        if worst.is_none_or(|w| worse(&w)) {
             *worst = Some(Shortcut { distance, segment: seg, obs_wire, src_wire });
         }
     }

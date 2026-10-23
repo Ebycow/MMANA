@@ -805,7 +805,7 @@ fn folded(n: i32) -> Project {
 #[test]
 fn a_point_calculated_as_lying_on_a_wire_beside_it_is_warned_about() {
     // 51 cm segments 10 cm apart: the resonance moves by 9 % (folded-segments.md)
-    assert_eq!(warned_wires(&folded(20), WarningCode::CloseWires), Some(vec![2, 3]));
+    assert_eq!(warned_wires(&folded(20), WarningCode::CloseWires), Some(vec![1, 4]));
     // 39 cm: calculates within 0.1 %
     assert_eq!(warned_wires(&folded(26), WarningCode::CloseWires), None);
     // a sharp V is taken the same way at its apex, while its segments are long for the wavelength
