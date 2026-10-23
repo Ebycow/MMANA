@@ -13,6 +13,22 @@ export type Plane = 'xy' | 'xz' | 'yz';
 export const PLANE_NORMAL: Record<Plane, Axis> = { xy: 'z', xz: 'y', yz: 'x' };
 export const PLANE_AXES: Record<Plane, [Axis, Axis]> = { xy: ['x', 'y'], xz: ['x', 'z'], yz: ['y', 'z'] };
 
+/**
+ * The plane that faces a camera looking along `dir` (a unit vector): the
+ * ground plane (XY) unless the camera looks within about 20° of horizontal,
+ * then the vertical plane it looks most squarely at. Near a boundary the
+ * `current` plane is kept, so a slight turn of the view does not flip it.
+ */
+export function facingPlane(dir: Point3, current: Plane | null): Plane {
+  const down = Math.abs(dir.z);
+  if (current === 'xy' ? down > 0.28 : current ? down > 0.42 : down > 0.35) return 'xy';
+  const ax = Math.abs(dir.x);
+  const ay = Math.abs(dir.y);
+  if (current === 'xz' && ay * 1.3 >= ax) return 'xz';
+  if (current === 'yz' && ax * 1.3 >= ay) return 'yz';
+  return ay >= ax ? 'xz' : 'yz';
+}
+
 export const add = (a: Point3, b: Point3): Point3 => ({ x: a.x + b.x, y: a.y + b.y, z: a.z + b.z });
 export const sub = (a: Point3, b: Point3): Point3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
 export const scale = (a: Point3, k: number): Point3 => ({ x: a.x * k, y: a.y * k, z: a.z * k });

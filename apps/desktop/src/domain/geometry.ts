@@ -61,8 +61,15 @@ export function pulseLocation(name: string, wires: Wire[]): Point3 | null {
   return lerp(w.start, w.end, where === 'b' ? 0.04 : where === 'e' ? 0.96 : 0.5);
 }
 
-export function bounds(wires: DisplayWire[]): { center: Point3; radius: number; minZ: number } {
-  if (wires.length === 0) return { center: { x: 0, y: 0, z: 0 }, radius: 5, minZ: 0 };
+export interface Bounds {
+  center: Point3;
+  radius: number;
+  minZ: number;
+  maxZ: number;
+}
+
+export function bounds(wires: DisplayWire[]): Bounds {
+  if (wires.length === 0) return { center: { x: 0, y: 0, z: 0 }, radius: 5, minZ: 0, maxZ: 0 };
   const lo = { x: Infinity, y: Infinity, z: Infinity };
   const hi = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (const w of wires) {
@@ -77,7 +84,46 @@ export function bounds(wires: DisplayWire[]): { center: Point3; radius: number; 
   }
   const center = { x: (lo.x + hi.x) / 2, y: (lo.y + hi.y) / 2, z: (lo.z + hi.z) / 2 };
   const radius = Math.max(0.5, Math.hypot(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z) / 2);
-  return { center, radius, minZ: lo.z };
+  return { center, radius, minZ: lo.z, maxZ: hi.z };
+}
+
+/**
+ * `box` grown to take in the ground at height `z` below its middle, for
+ * framing the view. The antenna and the ground sit at the very ends of a tall
+ * frame, so the radius carries a margin to keep them off the edge of the view.
+ */
+export function reachingGround(box: Bounds, z: number): Bounds {
+  const across = Math.sqrt(Math.max(0, (2 * box.radius) ** 2 - (box.maxZ - box.minZ) ** 2));
+  const minZ = Math.min(box.minZ, z);
+  const maxZ = Math.max(box.maxZ, z);
+  return {
+    center: { ...box.center, z: (minZ + maxZ) / 2 },
+    radius: Math.max(0.5, (Math.hypot(across, maxZ - minZ) / 2) * 1.25),
+    minZ,
+    maxZ,
+  };
+}
+
+/** The horizontal grid of the 3D view: a disc of radius `half` round `center`, at height `z`. */
+export interface SceneGrid {
+  center: { x: number; y: number };
+  z: number;
+  half: number;
+  /** Line spacing; every tenth line is a section line, and every hundredth and thousandth stand out too. */
+  cell: number;
+  section: number;
+}
+
+/**
+ * Lays out the horizontal grid at height `z` (the ground, or Z = 0 in free
+ * space), its lines on round world coordinates `cell` apart; lines too close
+ * to tell apart on screen are left out where they are drawn. The disc covers
+ * the antenna's footprint and enough ground round it to read its height.
+ */
+export function sceneGrid(box: Bounds, z: number, cell: number): SceneGrid {
+  const half = Math.max(box.radius * 3, (box.maxZ - z) * 1.2);
+  const section = Number((cell * 10).toPrecision(6));
+  return { center: { x: box.center.x, y: box.center.y }, z, half, cell, section };
 }
 
 export interface CurrentPolyline {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { niceTicks } from '../charts/ticks';
 import { radiusFor, sampleAngle, sampleAt } from '../charts/polar';
 import { evaluate } from '../domain/expr';
-import { displayWires, normalizePulse, pulseLocation } from '../domain/geometry';
+import { bounds, displayWires, normalizePulse, pulseLocation, reachingGround, sceneGrid } from '../domain/geometry';
 import { newProject, newSource, setAutoVoltage } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
 import { sweepOrder } from '../domain/sweep';
@@ -107,6 +107,35 @@ describe('3D view geometry', () => {
   it('converts full-width pulse names to half-width', () => {
     expect(normalizePulse(' ｗ１ｃ　')).toBe('w1c');
     expect(normalizePulse('Ｗ３Ｂ－１')).toBe('W3B-1');
+  });
+  it('spaces the grid by the snap step under the antenna', () => {
+    // a 2 m dipole off the origin, in free space
+    const box = bounds([{ base: 0, start: { x: 0.33, y: -1, z: 0 }, end: { x: 0.33, y: 1, z: 0 }, radius: 0.001 }]);
+    expect(box.maxZ).toBe(0);
+    expect(sceneGrid(box, 0, 0.1)).toEqual({ center: { x: 0.33, y: 0 }, z: 0, half: 3, cell: 0.1, section: 1 });
+  });
+  it('frames the ground below the antenna', () => {
+    // a 6 m horizontal dipole 8 m up
+    const box = bounds([{ base: 0, start: { x: 0, y: -3, z: 0 }, end: { x: 0, y: 3, z: 0 }, radius: 0.001 }]);
+    const f = reachingGround(box, -8);
+    expect(f.center).toEqual({ x: 0, y: 0, z: -4 });
+    // 5 m to the corners, with the margin
+    expect(f.radius).toBeCloseTo(6.25);
+    expect([f.minZ, f.maxZ]).toEqual([-8, 0]);
+  });
+  it('keeps the spacing when the ground is far below', () => {
+    const box = bounds([{ base: 0, start: { x: 0, y: -1, z: 0 }, end: { x: 0, y: 1, z: 0 }, radius: 0.001 }]);
+    const g = sceneGrid(box, -10, 0.05);
+    // 480 cells of 5 cm across: the shader leaves out the ones too fine to see
+    expect(g.cell).toBe(0.05);
+    expect(g.section).toBe(0.5);
+    expect(g.half).toBe(12);
+    expect(g.z).toBe(-10);
+  });
+  it('keeps a grid spacing chosen by the viewer', () => {
+    const box = bounds([{ base: 0, start: { x: 0, y: -1, z: 0 }, end: { x: 0, y: 1, z: 0 }, radius: 0.001 }]);
+    const g = sceneGrid(box, -10, 0.1);
+    expect([g.cell, g.section]).toEqual([0.1, 1]);
   });
 });
 
