@@ -339,7 +339,7 @@ impl Figures {
             fb: r.fb_db,
             elevation: r.elevation_deg,
         };
-        Ok((figures, !r.warnings.iter().any(|w| w.starts_with("the input power"))))
+        Ok((figures, !r.warnings.iter().any(|w| w.message.starts_with("the input power"))))
     }
 }
 

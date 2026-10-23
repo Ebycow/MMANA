@@ -369,9 +369,19 @@ export interface components {
             swr: number;
             /** Format: double */
             totalPowerW: number;
-            warnings: string[];
+            warnings: components["schemas"]["CalcWarning"][];
             /** Format: double */
             wavelengthM: number;
+        };
+        /** @description A calculated result that should not be trusted as it is. */
+        CalcWarning: {
+            code: components["schemas"]["WarningCode"];
+            message: string;
+            /**
+             * @description The 1-based numbers of the wires it is about, as defined (a stacked
+             *     copy counts as the wire it copies); empty when it is about the whole antenna.
+             */
+            wires: number[];
         };
         CalculationRequest: {
             options?: components["schemas"]["CalcOptions"];
@@ -976,12 +986,19 @@ export interface components {
         PolarQuantity: "length" | "azimuth" | "zenith";
         /** @description RFC 9457 problem details. */
         Problem: {
+            /** @description For `calculation-failed`: the kind of error, e.g. `overlapping-wires`. */
+            code?: string | null;
             detail: string;
             /** Format: int32 */
             status: number;
             title: string;
             /** @description Stable identifier of the error kind, e.g. `calculation-failed`. */
             type: string;
+            /**
+             * @description For `calculation-failed`: the 1-based numbers of the wires the error
+             *     is about (none when it is not about particular wires).
+             */
+            wires?: number[];
         };
         /** @description One calculation of the search (a line of MMANA's optimisation log). */
         Progress: {
@@ -1313,6 +1330,8 @@ export interface components {
             kind: "stack";
             part: components["schemas"]["StackPart"];
         };
+        /** @enum {string} */
+        WarningCode: "belowGround" | "nonPositivePower" | "negligiblePower" | "tooManySegments";
         /**
          * @description How much each goal counts (評価の割合, 0-100 each). All zero counts every
          *     goal equally.

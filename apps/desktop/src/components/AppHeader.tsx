@@ -1,5 +1,6 @@
 import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, Tooltip, useMantineColorScheme } from '@mantine/core';
 import {
+  IconAlertTriangle,
   IconAntenna,
   IconArrowBackUp,
   IconArrowForwardUp,
@@ -16,6 +17,7 @@ import {
   IconSun,
   IconTarget,
 } from '@tabler/icons-react';
+import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
 import { useApp } from '../state/store';
@@ -53,6 +55,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const setShown = useLayout((s) => s.setShown);
   const shownCount = PANES.filter(([id]) => shown[id]).length;
   const openSettings = useInput((s) => s.setDialogOpen);
+  const openChecks = useChecks((s) => s.setDialogOpen);
   const undoKey = useKeyText('undo');
   const redoKey = useKeyText('redo');
   const { colorScheme, setColorScheme } = useMantineColorScheme();
@@ -121,6 +124,9 @@ export function AppHeader({ actions }: { actions: FileActions }) {
         <Menu.Dropdown>
           <Menu.Item leftSection={<IconKeyboard size={14} />} rightSection={<KeyHint id="settings" />} onClick={() => openSettings(true)}>
             キーボードとマウス…
+          </Menu.Item>
+          <Menu.Item leftSection={<IconAlertTriangle size={14} />} onClick={() => openChecks(true)}>
+            警告の表示…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>

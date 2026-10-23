@@ -128,6 +128,15 @@ fn rejects_wires_on_top_of_each_other() {
 }
 
 #[test]
+fn errors_name_the_wires_they_are_about() {
+    let overlap = CalcError::OverlappingWires { first: 2, second: 12 };
+    assert_eq!((overlap.code(), overlap.wires()), ("overlapping-wires", vec![2, 12]));
+    let zero = CalcError::ZeroLengthWire { wire: 3 };
+    assert_eq!((zero.code(), zero.wires()), ("zero-length-wire", vec![3]));
+    assert!(CalcError::NoSources.wires().is_empty());
+}
+
+#[test]
 fn rejects_sources_that_all_have_no_voltage() {
     let mut p = dp20();
     p.antenna.sources[0].voltage = 0.0;

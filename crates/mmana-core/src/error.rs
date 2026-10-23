@@ -52,3 +52,49 @@ pub enum CalcError {
     #[error("a sweep has 1 to {max} points")]
     InvalidSweepPoints { max: usize },
 }
+
+impl CalcError {
+    /// A stable name of the kind of error, so a client can tell them apart
+    /// without reading the message.
+    pub fn code(&self) -> &'static str {
+        match self {
+            CalcError::InvalidFrequency(_) => "invalid-frequency",
+            CalcError::NoWires => "no-wires",
+            CalcError::NoSources => "no-sources",
+            CalcError::NoExcitation => "no-excitation",
+            CalcError::ZeroLengthWire { .. } => "zero-length-wire",
+            CalcError::CombinedWireNotFound { .. } => "combined-wire-not-found",
+            CalcError::TooManySegmentWires { .. } => "too-many-segment-wires",
+            CalcError::TooManyPulses { .. } => "too-many-pulses",
+            CalcError::NoPulses => "no-pulses",
+            CalcError::InvalidAutoSegmentation(_) => "invalid-auto-segmentation",
+            CalcError::InvalidSegmentCount { .. } => "invalid-segment-count",
+            CalcError::InvalidWireSegmentation { .. } => "invalid-wire-segmentation",
+            CalcError::PulseOutOfRange { .. } => "pulse-out-of-range",
+            CalcError::DuplicateSource { .. } => "duplicate-source",
+            CalcError::OverlappingWires { .. } => "overlapping-wires",
+            CalcError::SweepPointOutOfRange { .. } => "sweep-point-out-of-range",
+            CalcError::NoFiniteSolution => "no-finite-solution",
+            CalcError::OutOfRange { .. } => "out-of-range",
+            CalcError::InvalidLoad { .. } => "invalid-load",
+            CalcError::NoGroundMedia => "no-ground-media",
+            CalcError::NonPositivePower { .. } => "non-positive-power",
+            CalcError::NotRepresentable { .. } => "not-representable",
+            CalcError::TooManyFieldPoints { .. } => "too-many-field-points",
+            CalcError::InvalidSweepPoints { .. } => "invalid-sweep-points",
+        }
+    }
+
+    /// The 1-based numbers of the wires the error is about (as defined, not
+    /// as stacked); empty when it is not about particular wires.
+    pub fn wires(&self) -> Vec<usize> {
+        match *self {
+            CalcError::ZeroLengthWire { wire }
+            | CalcError::CombinedWireNotFound { wire, .. }
+            | CalcError::InvalidSegmentCount { wire, .. }
+            | CalcError::InvalidWireSegmentation { wire, .. } => vec![wire],
+            CalcError::OverlappingWires { first, second } => vec![first, second],
+            _ => Vec::new(),
+        }
+    }
+}

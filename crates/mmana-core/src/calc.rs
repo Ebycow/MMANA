@@ -157,14 +157,51 @@ pub struct CalcResult {
     /// 1.2345e-37. `currents` has every pulse.
     pub current_display: Vec<f32>,
     pub segmented_wires: Vec<SegmentedWire>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<CalcWarning>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub enum WarningCode {
+    /// Wires lie below the ground.
+    BelowGround,
+    /// The input power is 0 or less: the model is outside what MININEC can calculate.
+    NonPositivePower,
+    /// The input power is within the rounding of the calculation.
+    NegligiblePower,
+    /// One conductor is divided into more segments than the results stay steady with.
+    TooManySegments,
+}
+
+/// A calculated result that should not be trusted as it is.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct CalcWarning {
+    pub code: WarningCode,
+    /// The 1-based numbers of the wires it is about, as defined (a stacked
+    /// copy counts as the wire it copies); empty when it is about the whole antenna.
+    pub wires: Vec<usize>,
+    pub message: String,
+}
+
+impl CalcWarning {
+    fn new(code: WarningCode, wires: Vec<usize>, message: String) -> Self {
+        Self { code, wires, message }
+    }
+}
+
+impl std::fmt::Display for CalcWarning {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
 }
 
 /// A prepared and solved model; further scans reuse the solution.
 pub struct Solved {
     ap: AntDef,
     engine: Mininec,
-    warnings: Vec<String>,
+    warnings: Vec<CalcWarning>,
 }
 
 fn engine_config(project: &Project, opts: &CalcOptions) -> EngineConfig {
@@ -220,7 +257,9 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
     if project.environment.ground != GroundKind::FreeSpace
         && ap.min_z + project.environment.height < -crate::engine::GROUND_CONTACT * longest
     {
-        warnings.push("some wires are below ground".to_owned());
+        let below = |z: f64| z + project.environment.height < -crate::engine::GROUND_CONTACT * longest;
+        let wires = defined_wires(&ap, ap.wz.iter().filter(|w| below(w.z1) || below(w.z2)).map(|w| w.wno));
+        warnings.push(CalcWarning::new(WarningCode::BelowGround, wires, "some wires are below ground".to_owned()));
     }
     // a passive antenna always takes power; less than none means the method
     // has broken down (each source alone may still take some), and every
@@ -229,27 +268,37 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         engine.solutions.iter().map(|s| s.voltage.0.hypot(s.voltage.1) * s.current.0.hypot(s.current.1) / 2.0);
     let apparent: f64 = apparent.sum();
     if engine.pwr <= 0.0 {
-        warnings.push(format!(
-            "the input power is not positive ({:e} W): the model is outside what MININEC can calculate, \
-             such as wires meeting at a sharp angle or with very different radii",
-            engine.pwr
+        warnings.push(CalcWarning::new(
+            WarningCode::NonPositivePower,
+            Vec::new(),
+            format!(
+                "the input power is not positive ({:e} W): the model is outside what MININEC can calculate, \
+                 such as wires meeting at a sharp angle or with very different radii",
+                engine.pwr
+            ),
         ));
     } else if !takes_power(engine.pwr, apparent) {
         // the matrix is f32: a feed resistance under a millionth of |Z| is
         // rounding, and so is the gain divided by the power it gives
-        warnings.push(format!(
-            "the input power is negligible ({:e} W of {apparent:e} VA): the feed resistance is within the \
-             rounding of the calculation, so the gain and the other figures that depend on the power are not \
-             reliable",
-            engine.pwr
+        warnings.push(CalcWarning::new(
+            WarningCode::NegligiblePower,
+            Vec::new(),
+            format!(
+                "the input power is negligible ({:e} W of {apparent:e} VA): the feed resistance is within the \
+                 rounding of the calculation, so the gain and the other figures that depend on the power are not \
+                 reliable",
+                engine.pwr
+            ),
         ));
     }
-    if let Some((wire, segments)) = most_divided_conductor(&ap) {
-        warnings.push(format!(
-            "wire {wire} and the wires joined to it are divided into {segments} segments: beyond about \
+    if let Some((wires, segments)) = most_divided_conductor(&ap) {
+        let message = format!(
+            "wire {} and the wires joined to it are divided into {segments} segments: beyond about \
              {MAX_STEADY_SEGMENTS} on one conductor the results drift as segments are added (the reactance \
-             by several ohms), so compare with fewer segments"
-        ));
+             by several ohms), so compare with fewer segments",
+            wires[0]
+        );
+        warnings.push(CalcWarning::new(WarningCode::TooManySegments, wires, message));
     }
     Ok(Solved { ap, engine, warnings })
 }
@@ -267,11 +316,19 @@ pub(crate) fn takes_power(power: f64, apparent: f64) -> bool {
 /// in 640 about 25 Ω. Separate conductors do not add up.
 const MAX_STEADY_SEGMENTS: i64 = 250;
 
+/// The 1-based numbers, in order, of the wires as defined that segment wires
+/// `wno` (0-based, stacked copies included) come from.
+fn defined_wires(ap: &AntDef, wno: impl Iterator<Item = usize>) -> Vec<usize> {
+    let mut wires: Vec<usize> = wno.map(|w| w % ap.base_wires.max(1) + 1).collect();
+    wires.sort_unstable();
+    wires.dedup();
+    wires
+}
+
 /// The conductor (segment wires joined end to end, as `connect` joins them)
 /// with the most segments, when it has more than [`MAX_STEADY_SEGMENTS`]:
-/// the 1-based number of a wire of it as defined (in a stacked copy, the
-/// wire it copies) and its segment count.
-fn most_divided_conductor(ap: &AntDef) -> Option<(usize, i64)> {
+/// the wires of it as defined ([`defined_wires`]) and its segment count.
+fn most_divided_conductor(ap: &AntDef) -> Option<(Vec<usize>, i64)> {
     let wz = &ap.wz;
     let mut root: Vec<usize> = (0..wz.len()).collect();
     fn find(root: &mut [usize], mut i: usize) -> usize {
@@ -298,8 +355,8 @@ fn most_divided_conductor(ap: &AntDef) -> Option<(usize, i64)> {
     }
     let (r, &most) = segments.iter().enumerate().max_by_key(|(_, s)| **s)?;
     (most > MAX_STEADY_SEGMENTS).then(|| {
-        let first = (0..wz.len()).find(|&i| find(&mut root, i) == r).unwrap_or(r);
-        (wz[first].wno % ap.base_wires.max(1) + 1, most)
+        let members: Vec<usize> = (0..wz.len()).filter(|&i| find(&mut root, i) == r).map(|i| wz[i].wno).collect();
+        (defined_wires(ap, members.into_iter()), most)
     })
 }
 
