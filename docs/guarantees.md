@@ -88,6 +88,7 @@ API は計算を始める前に、サーバーの設定（`mmana_api::Limits`）
 | プロジェクトの JSON は値を失わずに往復する | 任意のモデル | `project_json_…` |
 | 大地ありでは、地平線より下の遠方界は −999 dB（放射なし） | ダイポール・垂直ワイヤ、完全導体大地・実大地、golden の遠方界 | properties.rs の `nothing_radiates_below_the_ground` |
 | 1 つの導体が 250 分割を超える結果には警告が付く | 1 本・分割した 1 本・離れた 2 本・スタック、サンプル 81 件 | properties.rs の `a_conductor_divided_too_finely_is_warned_about` |
+| 計算エラーと警告は、種類（`code`）と対象のワイヤ番号（定義した番号。スタックのコピーはコピー元）を持つ。API・Tauri・wasm のエラー本文にも載る | 重なったワイヤ、長さ 0、分割しすぎた導体（離れたワイヤを含めない）、地面より下のワイヤ（スタックあり・なし） | validation.rs の `errors_name_the_wires_they_are_about`、properties.rs の `warnings_name_the_wires_they_are_about`、API・wasm の `calculation_errors_name_their_wires` |
 
 **任意のモデル**は、ワイヤ 1〜5 本（端点は 70 % が格子点で接続が起きやすい、R = 0 と組み合わせワイヤを含む、6 種の分割方法）、
 任意の書き方の給電点 0〜3 個と負荷 0〜2 個（存在しない名前・番号、全角を含む）、スタック、3 種の大地、7 種の材質です。
