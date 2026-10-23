@@ -92,7 +92,7 @@ export function AntennaView() {
   const groundZ = environment.ground === 'freeSpace' ? null : -environment.height;
   const groundStep = useEditor((s) => s.groundStep);
   const autoGrid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
-  const grid = useMemo(() => (groundStep == null ? autoGrid : sceneGrid(box, groundZ ?? 0, step ?? autoStep, groundStep)), [autoGrid, box, groundZ, step, autoStep, groundStep]);
+  const grid = useMemo(() => (groundStep == null ? autoGrid : sceneGrid(box, groundZ ?? 0, groundStep)), [autoGrid, box, groundZ, groundStep]);
   const frame = useMemo(() => (fitGround && groundZ != null ? reachingGround(box, groundZ) : box), [fitGround, groundZ, box]);
   const currents = useMemo(
     () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),

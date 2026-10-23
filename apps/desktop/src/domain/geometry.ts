@@ -109,24 +109,19 @@ export interface SceneGrid {
   center: { x: number; y: number };
   z: number;
   half: number;
-  /** Line spacing; every tenth line is a section line. */
+  /** Line spacing; every tenth line is a section line, and every hundredth and thousandth stand out too. */
   cell: number;
   section: number;
 }
 
 /**
  * Lays out the horizontal grid at height `z` (the ground, or Z = 0 in free
- * space). Lines are drawn on round world coordinates `cell` apart, or by
- * default in the snap step, or a power of ten times it so a large scene does
- * not turn into a haze; the disc covers the antenna's footprint and enough
- * ground round it to read its height.
+ * space), its lines on round world coordinates `cell` apart; lines too close
+ * to tell apart on screen are left out where they are drawn. The disc covers
+ * the antenna's footprint and enough ground round it to read its height.
  */
-export function sceneGrid(box: Bounds, z: number, step: number, cell: number | null = null): SceneGrid {
+export function sceneGrid(box: Bounds, z: number, cell: number): SceneGrid {
   const half = Math.max(box.radius * 3, (box.maxZ - z) * 1.2);
-  if (cell == null) {
-    cell = step;
-    while ((2 * half) / cell > 100) cell = Number((cell * 10).toPrecision(6));
-  }
   const section = Number((cell * 10).toPrecision(6));
   return { center: { x: box.center.x, y: box.center.y }, z, half, cell, section };
 }

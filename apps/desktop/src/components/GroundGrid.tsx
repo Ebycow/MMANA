@@ -1,6 +1,8 @@
 // The horizontal plane of the 3D view, the ground or Z = 0 in free space,
-// drawn by one shader: the ground's tint, lines on round world coordinates,
-// and a fade towards the edge of a disc so the plane has no hard border.
+// drawn by one shader: the ground's tint, lines on round world coordinates
+// at the cell, ten, a hundred and a thousand times it, the finer ones fading
+// out where they crowd together on screen, and a fade towards the edge of a
+// disc so the plane has no hard border.
 import { useEffect, useMemo } from 'react';
 import { Color, DoubleSide, ShaderMaterial, Vector2 } from 'three';
 import type { SceneGrid } from '../domain/geometry';
@@ -32,7 +34,7 @@ const fragmentShader = /* glsl */ `
     vec2 d = fwidth(r);
     vec2 g = abs(fract(r - 0.5) - 0.5) / d;
     float on = 1.0 - min(min(g.x, g.y) + 1.0 - width, 1.0);
-    return on * (1.0 - smoothstep(0.15, 0.35, max(d.x, d.y)));
+    return on * (1.0 - smoothstep(0.1, 0.2, max(d.x, d.y)));
   }
 
   vec4 over(vec4 src, vec4 dst) {
@@ -45,6 +47,8 @@ const fragmentShader = /* glsl */ `
     vec4 c = vec4(fillColor, fillOpacity);
     c = over(vec4(cellColor, 0.75 * lines(cell, 0.7)), c);
     c = over(vec4(sectionColor, lines(section, 1.1)), c);
+    c = over(vec4(sectionColor, lines(section * 10.0, 1.3)), c);
+    c = over(vec4(sectionColor, lines(section * 100.0, 1.3)), c);
     c.a *= fade;
     if (c.a <= 0.002) discard;
     gl_FragColor = c;

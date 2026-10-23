@@ -123,18 +123,18 @@ describe('3D view geometry', () => {
     expect(f.radius).toBeCloseTo(6.25);
     expect([f.minZ, f.maxZ]).toEqual([-8, 0]);
   });
-  it('coarsens the grid when the ground is far below', () => {
+  it('keeps the spacing when the ground is far below', () => {
     const box = bounds([{ base: 0, start: { x: 0, y: -1, z: 0 }, end: { x: 0, y: 1, z: 0 }, radius: 0.001 }]);
     const g = sceneGrid(box, -10, 0.05);
-    // 12 m of ground either side would be 480 cells of 5 cm
-    expect(g.cell).toBe(0.5);
-    expect(g.section).toBe(5);
+    // 480 cells of 5 cm across: the shader leaves out the ones too fine to see
+    expect(g.cell).toBe(0.05);
+    expect(g.section).toBe(0.5);
     expect(g.half).toBe(12);
     expect(g.z).toBe(-10);
   });
   it('keeps a grid spacing chosen by the viewer', () => {
     const box = bounds([{ base: 0, start: { x: 0, y: -1, z: 0 }, end: { x: 0, y: 1, z: 0 }, radius: 0.001 }]);
-    const g = sceneGrid(box, -10, 0.05, 0.1);
+    const g = sceneGrid(box, -10, 0.1);
     expect([g.cell, g.section]).toEqual([0.1, 1]);
   });
 });
