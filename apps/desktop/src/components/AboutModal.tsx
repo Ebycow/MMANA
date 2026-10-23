@@ -1,6 +1,6 @@
 import { Button, CopyButton, Group, Modal, Stack, Table, Text } from '@mantine/core';
 import { IconAntenna, IconCheck, IconCopy } from '@tabler/icons-react';
-import { BUILT_AT, PLATFORM, VERSION, formatBuiltAt, versionLine } from '../version';
+import { BUILT_AT, PLATFORM, REPOSITORY_URL, VERSION, formatBuiltAt, versionLine } from '../version';
 
 export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   return (
@@ -41,7 +41,7 @@ export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () =
             </Table.Tr>
             <Table.Tr>
               <Table.Td c="dimmed">ソースコード</Table.Td>
-              <Table.Td style={{ userSelect: 'text' }}>github.com/Ebycow/MMMANA</Table.Td>
+              <Table.Td style={{ userSelect: 'text' }}>{REPOSITORY_URL}</Table.Td>
             </Table.Tr>
           </Table.Tbody>
         </Table>

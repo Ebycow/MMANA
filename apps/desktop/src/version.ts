@@ -4,9 +4,12 @@ import { isTauri } from './api/transport';
 declare const __MMANA_VERSION__: string;
 declare const __MMANA_BUILT_AT__: string;
 declare const __MMANA_BUILD_PLATFORM__: string;
+declare const __MMANA_REPOSITORY__: string;
 
 export const VERSION = __MMANA_VERSION__;
 export const BUILT_AT = new Date(__MMANA_BUILT_AT__);
+export const REPOSITORY_URL = `https://github.com/${__MMANA_REPOSITORY__}`;
+export const NEW_ISSUE_URL = `${REPOSITORY_URL}/issues/new`;
 
 /** Where this copy runs: the desktop app's OS, the browser version, or the UI against the HTTP API. */
 export const PLATFORM = isTauri() ? __MMANA_BUILD_PLATFORM__ : import.meta.env.MODE === 'web' ? 'Web' : 'HTTP API';

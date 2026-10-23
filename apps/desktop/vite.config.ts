@@ -38,6 +38,8 @@ export default defineConfig(({ mode }) => ({
     __MMANA_VERSION__: JSON.stringify(describe()),
     __MMANA_BUILT_AT__: JSON.stringify(new Date().toISOString()),
     __MMANA_BUILD_PLATFORM__: JSON.stringify(BUILD_PLATFORMS[process.platform] ?? process.platform),
+    // a fork's CI builds point their reports at the fork
+    __MMANA_REPOSITORY__: JSON.stringify(process.env.GITHUB_REPOSITORY || 'Ebycow/MMMANA'),
   },
   build: {
     target: 'es2022',
