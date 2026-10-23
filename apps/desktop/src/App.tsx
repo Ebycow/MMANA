@@ -16,14 +16,12 @@ import { Workspace } from './components/Workspace';
 import { loadSampleBytes, samples as samplesList, type Sample } from './domain/samples';
 import { useEditor, type Tool } from './state/editor';
 import { useCommandKeys, useInput } from './state/input';
-import { recordError } from './state/errorLog';
 import { useApp } from './state/store';
 import { canEditWires, copySelected, cutSelected, deleteSelected, duplicateSelected, paste, selectAll } from './state/wireCommands';
 
 function reportError(e: unknown) {
   const err = e instanceof EngineError ? e : new EngineError('internal', 'エラー', String(e));
   notifications.show({ color: 'red', title: err.title, message: err.detail });
-  recordError(err.title, err.detail);
 }
 
 /** Asks before discarding unsaved changes. */

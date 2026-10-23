@@ -2,7 +2,7 @@
 // the window (and the unsaved antenna) stays usable.
 import { Button, Stack, Text } from '@mantine/core';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { recordError } from '../state/errorLog';
+import { recordError } from '../state/messageLog';
 import { Panel } from './Panel';
 
 interface Props {

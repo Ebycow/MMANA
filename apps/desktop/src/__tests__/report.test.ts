@@ -24,7 +24,7 @@ const sources = (patch: Partial<ReportSources> = {}): ReportSources => ({
   resultStale: false,
   calcError: null,
   diagnostics: [],
-  errors: [],
+  messages: [],
   includeAntenna: true,
   ...patch,
 });
@@ -63,9 +63,14 @@ describe('the bug report', () => {
     expect(text).toContain('### 警告\n\n- 警告：ワイヤー 1 と 2 の端がずれています');
   });
 
-  it('keeps each error on one line', () => {
-    const errors = [{ at: new Date(2026, 9, 23, 9, 5, 7), title: '保存できません', detail: 'line one\n  line two' }];
-    expect(bugReport(sources({ errors }))).toContain('### 直近のエラー\n\n- 09:05:07 保存できません：line one line two');
+  it('keeps each message on one line, with its level', () => {
+    const messages = [
+      { at: new Date(2026, 9, 23, 9, 5, 7), level: 'error' as const, title: '保存できません', detail: 'line one\n  line two' },
+      { at: new Date(2026, 9, 23, 9, 6, 0), level: 'info' as const, title: '', detail: '3 件を置換しました' },
+    ];
+    expect(bugReport(sources({ messages }))).toContain(
+      '### 直近のメッセージ\n\n- 09:05:07 [エラー] 保存できません：line one line two\n- 09:06:00 [お知らせ] 3 件を置換しました',
+    );
   });
 
   it('includes the antenna only when asked, as JSON the app opens', () => {
@@ -80,7 +85,7 @@ describe('the bug report', () => {
     const text = bugReport(sources());
     expect(text).toContain('### 計算結果\n\nまだ計算していません');
     expect(text).toContain('### 警告\n\nなし');
-    expect(text).toContain('### 直近のエラー\n\nなし');
+    expect(text).toContain('### 直近のメッセージ\n\nなし');
   });
 
   it('puts each innermost object or array of the antenna on one line', () => {

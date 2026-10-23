@@ -4,7 +4,7 @@
 // shows.
 import type { CalcResult, Project } from '../api/types';
 import type { EngineError } from '../api/transport';
-import type { LoggedError } from '../state/errorLog';
+import type { LoggedMessage, MessageLevel } from '../state/messageLog';
 import type { Diagnostic, Severity } from './diagnostics';
 
 export interface ReportSources {
@@ -19,11 +19,13 @@ export interface ReportSources {
   calcError: EngineError | null;
   /** Every problem found, hidden ones too. */
   diagnostics: Diagnostic[];
-  errors: readonly LoggedError[];
+  /** The messages shown lately, oldest first. */
+  messages: readonly LoggedMessage[];
   includeAntenna: boolean;
 }
 
 const SEVERITY: Record<Severity, string> = { error: 'エラー', warning: '警告', info: '情報' };
+const LEVEL: Record<MessageLevel, string> = { error: 'エラー', warning: '注意', info: 'お知らせ' };
 
 const z = (re: number, im: number) => `${re.toFixed(2)} ${im < 0 ? '−' : '+'} j${Math.abs(im).toFixed(2)}`;
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -65,7 +67,7 @@ export function bugReport(s: ReportSources): string {
     `### 環境\n\n${list([s.version, s.userAgent])}`,
     `### 計算結果\n\n${resultLines(s)}`,
     `### 警告\n\n${list(s.diagnostics.map((d) => `${SEVERITY[d.severity]}：${d.message}`))}`,
-    `### 直近のエラー\n\n${list(s.errors.map((e) => `${time(e.at)} ${e.title}：${e.detail.replace(/\s*\n\s*/g, ' ')}`))}`,
+    `### 直近のメッセージ\n\n${list(s.messages.map((m) => `${time(m.at)} [${LEVEL[m.level]}] ${[m.title, m.detail.replace(/\s*\n\s*/g, ' ')].filter(Boolean).join('：')}`))}`,
   ];
   if (s.includeAntenna) {
     sections.push(

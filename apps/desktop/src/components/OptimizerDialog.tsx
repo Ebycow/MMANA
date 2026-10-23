@@ -75,14 +75,12 @@ import {
   type PartContext,
   type TargetKind,
 } from '../domain/optimize';
-import { recordError } from '../state/errorLog';
 import { useApp } from '../state/store';
 import { NumCell, TextCell } from './Cells';
 
 function reportError(e: unknown) {
   const err = e instanceof EngineError ? e : new EngineError('internal', 'エラー', String(e));
   notifications.show({ color: 'red', title: err.title, message: err.detail });
-  recordError(err.title, err.detail);
 }
 
 /** The 箇所 labels need to know whether an element's perimeter is an X width, and a load's kind. */

@@ -8,10 +8,10 @@ import { Notifications } from '@mantine/notifications';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
-import { recordUncaughtErrors } from './state/errorLog';
+import { recordMessages } from './state/messageLog';
 import { theme } from './theme';
 
-recordUncaughtErrors();
+recordMessages();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

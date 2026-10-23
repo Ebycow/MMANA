@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { isTauri } from '../api/transport';
 import { collectDiagnostics } from '../domain/diagnostics';
 import { bugReport } from '../domain/report';
-import { recentErrors } from '../state/errorLog';
+import { useMessageLog } from '../state/messageLog';
 import { useApp } from '../state/store';
 import { NEW_ISSUE_URL, versionLine } from '../version';
 
@@ -21,7 +21,7 @@ function snapshot() {
     resultStale: s.resultStale,
     calcError,
     diagnostics: collectDiagnostics({ wires: s.project.antenna.wires, error: calcError, result: current }),
-    errors: recentErrors(),
+    messages: useMessageLog.getState().messages,
   };
 }
 
