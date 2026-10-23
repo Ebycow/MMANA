@@ -1,9 +1,9 @@
-import { GizmoHelper, GizmoViewport, Grid, Html, Line, OrbitControls } from '@react-three/drei';
+import { GizmoHelper, GizmoViewport, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
 import { IconArrowAutofitHeight, IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Color, DoubleSide, MOUSE, Vector3 } from 'three';
+import { Color, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
 import type { Point3, Project } from '../api/types';
@@ -14,7 +14,8 @@ import { add, niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
-import { EditScene, gridBehindWires } from './EditController';
+import { EditScene } from './EditController';
+import { GroundGrid } from './GroundGrid';
 import { EditToolbar, stepLabel } from './EditToolbar';
 import { Panel } from './Panel';
 
@@ -321,14 +322,6 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
   const fill = GROUND_FILL[ground];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const groundColor = useMemo(() => (fill ? cssVar(fill) : null), [fill, scheme]);
-  const g = grid;
-  const groundEdge: [number, number, number][] = [
-    [g.center.x - g.half, g.center.y - g.half, g.z],
-    [g.center.x + g.half, g.center.y - g.half, g.z],
-    [g.center.x + g.half, g.center.y + g.half, g.z],
-    [g.center.x - g.half, g.center.y + g.half, g.z],
-    [g.center.x - g.half, g.center.y - g.half, g.z],
-  ];
 
   // camera framing
   useEffect(() => {
@@ -381,32 +374,8 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
       />
 
       {/* the ground (real / perfect ground) or the Z = 0 plane; lines on round coordinates, fixed in place */}
-      <Grid
-        ref={gridBehindWires}
-        position={[grid.center.x, grid.center.y, grid.z]}
-        rotation={[Math.PI / 2, 0, 0]}
-        args={[grid.half * 2, grid.half * 2]}
-        cellSize={grid.cell}
-        sectionSize={grid.section}
-        cellColor={colors.grid}
-        sectionColor={colors.section}
-        cellThickness={0.7}
-        sectionThickness={1.1}
-        fadeDistance={1e12}
-        fadeStrength={0}
-        side={DoubleSide}
-      />
-      {groundColor && (
-        <>
-          {/* the ground itself: a tinted surface under the grid, so it reads as solid */}
-          <mesh position={[g.center.x, g.center.y, g.z]} renderOrder={-1} raycast={() => null}>
-            <planeGeometry args={[g.half * 2, g.half * 2]} />
-            <meshBasicMaterial color={groundColor} transparent opacity={0.28} depthWrite={false} side={DoubleSide} />
-          </mesh>
-          <Line points={groundEdge} color={colors.section} lineWidth={1.2} raycast={() => null} />
-          <HeightDimension at={box.center} groundZ={g.z} near={box.radius * 0.5} color={colors.dimension} />
-        </>
-      )}
+      <GroundGrid grid={grid} cellColor={colors.grid} sectionColor={colors.section} fill={groundColor} />
+      {groundColor && <HeightDimension at={box.center} groundZ={grid.z} near={box.radius * 0.5} color={colors.dimension} />}
 
       {/* picking is done in screen space by EditScene */}
       {wires.map((w, i) => {

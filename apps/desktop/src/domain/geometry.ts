@@ -104,7 +104,7 @@ export function reachingGround(box: Bounds, z: number): Bounds {
   };
 }
 
-/** The horizontal grid of the 3D view: a square of `half` either side of `center`, at height `z`. */
+/** The horizontal grid of the 3D view: a disc of radius `half` round `center`, at height `z`. */
 export interface SceneGrid {
   center: { x: number; y: number };
   z: number;
@@ -116,19 +116,17 @@ export interface SceneGrid {
 
 /**
  * Lays out the horizontal grid at height `z` (the ground, or Z = 0 in free
- * space). Lines fall on round coordinates in the snap step, or a power of ten
- * times it so a large scene does not turn into a haze, and the square covers
- * the antenna's footprint and enough ground around it to read its height. The
- * layout only changes when the antenna grows past a section or moves by one.
+ * space). Lines are drawn on round world coordinates in the snap step, or a
+ * power of ten times it so a large scene does not turn into a haze; the disc
+ * covers the antenna's footprint and enough ground round it to read its
+ * height.
  */
 export function sceneGrid(box: Bounds, z: number, step: number): SceneGrid {
-  const want = Math.max(box.radius * 2, (box.maxZ - z) * 0.6);
+  const half = Math.max(box.radius * 3, (box.maxZ - z) * 1.2);
   let cell = step;
-  while ((2 * want) / cell > 100) cell = Number((cell * 10).toPrecision(6));
+  while ((2 * half) / cell > 100) cell = Number((cell * 10).toPrecision(6));
   const section = Number((cell * 10).toPrecision(6));
-  const half = Math.max(1, Math.ceil(want / section - 1e-9)) * section;
-  const snap = (v: number) => Number((Math.round(v / section) * section).toPrecision(12)) + 0;
-  return { center: { x: snap(box.center.x), y: snap(box.center.y) }, z, half, cell, section };
+  return { center: { x: box.center.x, y: box.center.y }, z, half, cell, section };
 }
 
 export interface CurrentPolyline {
