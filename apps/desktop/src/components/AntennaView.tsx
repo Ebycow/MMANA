@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, DoubleSide, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
-import type { Point3 } from '../api/types';
+import type { Point3, Project } from '../api/types';
 import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
 import { bounds, currentPolylines, displayWires, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
@@ -151,6 +151,7 @@ export function AntennaView() {
             preset={preset}
             scheme={scheme}
             grid={grid}
+            ground={environment.ground}
             feeds={feeds}
             offset={offset}
           />
@@ -175,7 +176,7 @@ export function AntennaView() {
               編集後は再計算すると電流分布を表示します
             </Text>
           )}
-          <SceneLegend grid={grid} ground={groundZ != null} />
+          <SceneLegend grid={grid} ground={environment.ground} />
         </div>
       </div>
     </Panel>
@@ -220,11 +221,17 @@ function EditOverlay() {
   );
 }
 
+type GroundKind = Project['environment']['ground'];
+const GROUND_LABEL: Record<GroundKind, string> = { freeSpace: '自由空間（Z = 0 の面）', perfect: '完全導体の大地', real: '実在大地' };
+const GROUND_FILL: Record<GroundKind, string | null> = { freeSpace: null, perfect: '--view3d-perfect-ground', real: '--view3d-real-ground' };
+
 /** What the horizontal grid is and how far apart its lines are. */
-function SceneLegend({ grid, ground }: { grid: SceneGrid; ground: boolean }) {
+function SceneLegend({ grid, ground }: { grid: SceneGrid; ground: GroundKind }) {
+  const fill = GROUND_FILL[ground];
   return (
     <div className="num">
-      {ground ? '地面' : 'Z = 0 の面'} ・ グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
+      {fill && <span className="view3d-ground-swatch" style={{ background: `var(${fill})` }} />}
+      {GROUND_LABEL[ground]} ・ グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
     </div>
   );
 }
@@ -250,13 +257,14 @@ interface SceneProps {
   scheme: 'light' | 'dark';
   /** The ground, or the Z = 0 plane in free space. */
   grid: SceneGrid;
+  ground: GroundKind;
   /** Source and load markers in wire coordinates. */
   feeds: FeedPositions;
   /** Where the first stacked copy is drawn: world = wire + offset. */
   offset: Point3;
 }
 
-function Scene({ wires, box, currents, preset, scheme, grid, feeds, offset }: SceneProps) {
+function Scene({ wires, box, currents, preset, scheme, grid, ground, feeds, offset }: SceneProps) {
   const selected = useApp((s) => s.selectedWires);
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
@@ -273,6 +281,17 @@ function Scene({ wires, box, currents, preset, scheme, grid, feeds, offset }: Sc
     [scheme],
   );
   const ramp = scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT;
+  const fill = GROUND_FILL[ground];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const groundColor = useMemo(() => (fill ? cssVar(fill) : null), [fill, scheme]);
+  const g = grid;
+  const groundEdge: [number, number, number][] = [
+    [g.center.x - g.half, g.center.y - g.half, g.z],
+    [g.center.x + g.half, g.center.y - g.half, g.z],
+    [g.center.x + g.half, g.center.y + g.half, g.z],
+    [g.center.x - g.half, g.center.y + g.half, g.z],
+    [g.center.x - g.half, g.center.y - g.half, g.z],
+  ];
 
   // camera framing
   useEffect(() => {
@@ -339,6 +358,16 @@ function Scene({ wires, box, currents, preset, scheme, grid, feeds, offset }: Sc
         fadeStrength={0}
         side={DoubleSide}
       />
+      {groundColor && (
+        <>
+          {/* the ground itself: a tinted surface under the grid, so it reads as solid */}
+          <mesh position={[g.center.x, g.center.y, g.z]} renderOrder={-1} raycast={() => null}>
+            <planeGeometry args={[g.half * 2, g.half * 2]} />
+            <meshBasicMaterial color={groundColor} transparent opacity={0.28} depthWrite={false} side={DoubleSide} />
+          </mesh>
+          <Line points={groundEdge} color={colors.section} lineWidth={1.2} raycast={() => null} />
+        </>
+      )}
 
       {/* picking is done in screen space by EditScene */}
       {wires.map((w, i) => {

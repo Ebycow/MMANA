@@ -17,6 +17,8 @@
   --view3d-bg: #f7f8fa;
   --view3d-grid: #d6d5d0;
   --view3d-grid-section: #a6a59e;
+  --view3d-real-ground: #c4a678;
+  --view3d-perfect-ground: #93a8c0;
   --wire: #3d4451;
   --wire-selected: #eb6834;
 }
@@ -36,6 +38,8 @@
   --view3d-bg: #171716;
   --view3d-grid: #393936;
   --view3d-grid-section: #64645d;
+  --view3d-real-ground: #8a7148;
+  --view3d-perfect-ground: #4f6884;
   --wire: #c9ccd2;
   --wire-selected: #d95926;
 }
@@ -336,6 +340,15 @@ tr.selected .row-actions {
   font-size: 11px;
   color: var(--text-secondary);
   pointer-events: none;
+}
+.view3d-ground-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  opacity: 0.8;
 }
 .view3d-box {
   position: absolute;
