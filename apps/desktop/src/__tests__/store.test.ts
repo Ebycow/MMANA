@@ -233,6 +233,16 @@ describe('saving', () => {
     await saving;
     expect(useApp.getState()).toMatchObject({ dirty: true, fileName: 'B.maa', filePath: '/tmp/B.maa' });
   });
+
+  it('offers an untitled antenna under its name, and an opened file under the file name', async () => {
+    const spy = vi.spyOn(files, 'save').mockResolvedValue(null);
+    useApp.getState().edit((p) => void (p.antenna.name = '3el 20m: test'));
+    await useApp.getState().save(true);
+    expect(spy.mock.calls[0][2]).toBe('3el 20m_ test.maa');
+    useApp.getState().load(parsed('Other name'), 'B.maa', null);
+    await useApp.getState().save(true);
+    expect(spy.mock.calls[1][2]).toBe('B.maa');
+  });
 });
 
 describe('wire selection', () => {

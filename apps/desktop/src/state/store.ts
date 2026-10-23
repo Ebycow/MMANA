@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, ResonanceSearch, SweepPoint } from '../api/types';
 import { EngineError, files, transport } from '../api/transport';
 import { defaultSetup } from '../domain/optimize';
-import { defaultOptions, newProject } from '../domain/project';
+import { UNTITLED, defaultOptions, newProject, suggestedFileName } from '../domain/project';
 import { OUTLINE_POINTS, sweepOrder } from '../domain/sweep';
 
 const HISTORY_LIMIT = 200;
@@ -226,7 +226,7 @@ export const useApp = create<AppState>()((set, get) => {
 
   return {
     ...freshDocument(initialProject),
-    fileName: '無題.maa',
+    fileName: UNTITLED,
     filePath: null,
     options: defaultOptions(),
     autoCalc: false,
@@ -279,7 +279,7 @@ export const useApp = create<AppState>()((set, get) => {
       });
     },
     load: (parsed, name, path) => openDocument(parsed.project, name, path),
-    reset: () => openDocument(newProject(), '無題.maa', null),
+    reset: () => openDocument(newProject(), UNTITLED, null),
     selectWire: (index) => set({ selectedWires: index == null ? [] : [index], selectedWire: index }),
     setSelection: (indices, active) => {
       const unique = [...new Set(indices)];
@@ -397,7 +397,9 @@ export const useApp = create<AppState>()((set, get) => {
     save: async (saveAs) => {
       const { project, filePath, fileName } = get();
       const gen = generation;
-      const saved = await files.save(project, saveAs ? null : filePath, fileName);
+      // an untitled antenna is offered under its own name
+      const suggested = filePath == null && fileName === UNTITLED ? suggestedFileName(project.antenna.name) : fileName;
+      const saved = await files.save(project, saveAs ? null : filePath, suggested);
       if (!saved) return false;
       // a document opened while saving keeps its own name and state
       if (gen !== generation) return true;

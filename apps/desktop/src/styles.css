@@ -481,3 +481,20 @@ tr.selected .row-actions {
   width: 8px;
   height: 8px;
 }
+
+/* the antenna name in the header: renamed by clicking it */
+.antenna-name {
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.antenna-name:hover {
+  background: var(--mantine-color-default-hover);
+}
+.antenna-name-pencil {
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--mantine-color-dimmed);
+}
+.antenna-name:hover .antenna-name-pencil {
+  opacity: 1;
+}

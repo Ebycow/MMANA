@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, TextInput, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconAntenna,
@@ -15,11 +15,12 @@ import {
   IconKeyboard,
   IconListDetails,
   IconMoon,
+  IconPencil,
   IconPlayerPlay,
   IconSun,
   IconTarget,
 } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
@@ -41,6 +42,60 @@ const PANES: [PaneId, string][] = [
   ['view', 'アンテナ形状（3D）'],
   ['results', '計算結果'],
 ];
+
+/** The antenna's name (saved in the file), renamed in place; the file keeps its own name. */
+function AntennaName() {
+  const name = useApp((s) => s.project.antenna.name);
+  const edit = useApp((s) => s.edit);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(name);
+  // Escape leaves without the blur that follows committing
+  const cancelled = useRef(false);
+
+  const start = () => {
+    cancelled.current = false;
+    setText(name);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    if (!cancelled.current && text !== name) edit((p) => void (p.antenna.name = text));
+  };
+
+  if (editing) {
+    return (
+      <TextInput
+        size="xs"
+        w={280}
+        value={text}
+        aria-label="アンテナ名"
+        autoFocus
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setText(e.currentTarget.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          else if (e.key === 'Escape') {
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <Tooltip label="クリックでアンテナ名を変更">
+      <UnstyledButton className="antenna-name" onClick={start} style={{ minWidth: 0 }}>
+        <Group gap={4} wrap="nowrap">
+          <Text size="sm" fw={600} truncate>
+            {name || '（名前なし）'}
+          </Text>
+          <IconPencil size={13} className="antenna-name-pencil" />
+        </Group>
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
 
 export function AppHeader({ actions }: { actions: FileActions }) {
   const fileName = useApp((s) => s.fileName);
@@ -165,14 +220,17 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </ActionIcon>
         </Tooltip>
       </Group>
-      <Text size="sm" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }} ta="center">
-        {fileName}
-        {dirty && (
-          <Text span c="dimmed" ml={6} title="未保存の変更があります">
-            ● 未保存
-          </Text>
-        )}
-      </Text>
+      <Group gap={8} wrap="nowrap" justify="center" style={{ flex: 1, minWidth: 0 }}>
+        <AntennaName />
+        <Text size="xs" c="dimmed" truncate style={{ flexShrink: 1 }} title={fileName}>
+          {fileName}
+          {dirty && (
+            <Text span inherit ml={6} title="未保存の変更があります">
+              ● 未保存
+            </Text>
+          )}
+        </Text>
+      </Group>
       <Group gap={2} wrap="nowrap">
         <Tooltip label="寸法・集中定数・地上高などを変えながら、利得・F/B・SWR などの目標に近づけます">
           <Button
