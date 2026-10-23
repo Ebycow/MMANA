@@ -3,7 +3,7 @@ import { niceTicks } from '../charts/ticks';
 import { radiusFor, sampleAngle, sampleAt } from '../charts/polar';
 import { evaluate } from '../domain/expr';
 import { bounds, displayWires, normalizePulse, pulseLocation, reachingGround, sceneGrid } from '../domain/geometry';
-import { newProject, newSource, setAutoVoltage } from '../domain/project';
+import { UNTITLED, newProject, newSource, setAutoVoltage, suggestedFileName } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
 import { sweepOrder } from '../domain/sweep';
 
@@ -168,5 +168,19 @@ describe('automatic source voltage (SetAutoVol)', () => {
     const antenna = withSources(0, true);
     setAutoVoltage(antenna);
     expect(antenna.sources).toEqual([]);
+  });
+});
+
+describe('the file name offered for an untitled antenna', () => {
+  it('replaces the characters file systems refuse', () => {
+    expect(suggestedFileName('3el 20m: 2/3λ "test"')).toBe('3el 20m_ 2_3λ _test_.maa');
+  });
+
+  it('drops trailing dots and spaces, which Windows strips', () => {
+    expect(suggestedFileName('  yagi.. ')).toBe('yagi.maa');
+  });
+
+  it('falls back to untitled for a blank name', () => {
+    expect(suggestedFileName(' . ')).toBe(UNTITLED);
   });
 });

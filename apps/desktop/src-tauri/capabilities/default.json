@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: core APIs and file dialogs (file contents are read/written by the app's own commands).",
+  "description": "Main window: core APIs, file dialogs and printing (file contents are read/written by the app's own commands; window.print goes through the webview on macOS).",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-destroy", "core:window:allow-set-title", "dialog:allow-open", "dialog:allow-save", "dialog:allow-message"]
+  "permissions": ["core:default", "core:window:allow-destroy", "core:window:allow-set-title", "core:webview:allow-print", "dialog:allow-open", "dialog:allow-save", "dialog:allow-message"]
 }

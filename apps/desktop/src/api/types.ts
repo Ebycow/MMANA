@@ -9,6 +9,7 @@ export type Antenna = S['Antenna'];
 export type Environment = S['Environment'];
 export type Wire = S['Wire'];
 export type Point3 = S['Point3'];
+export type Complex = S['Complex'];
 export type Segmentation = S['Segmentation'];
 export type Source = S['Source'];
 export type Load = S['Load'];

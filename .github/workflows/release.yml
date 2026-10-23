@@ -25,6 +25,9 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        # the tags, for the version shown in the app (git describe)
+        with:
+          fetch-depth: 0
       - name: Tauri system dependencies
         if: runner.os == 'Linux'
         run: |

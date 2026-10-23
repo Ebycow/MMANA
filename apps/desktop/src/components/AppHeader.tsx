@@ -1,7 +1,8 @@
-import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, Tooltip, useMantineColorScheme } from '@mantine/core';
+import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, TextInput, Tooltip, UnstyledButton, useMantineColorScheme } from '@mantine/core';
 import {
   IconAlertTriangle,
   IconAntenna,
+  IconBug,
   IconArrowBackUp,
   IconArrowForwardUp,
   IconCheck,
@@ -10,17 +11,24 @@ import {
   IconFile,
   IconFileImport,
   IconFolderOpen,
+  IconInfoCircle,
   IconKeyboard,
   IconListDetails,
   IconMoon,
+  IconPencil,
+  IconPrinter,
   IconPlayerPlay,
   IconSun,
   IconTarget,
 } from '@tabler/icons-react';
+import { useRef, useState } from 'react';
 import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
+import { usePrint } from '../state/print';
 import { useApp } from '../state/store';
+import { AboutModal } from './AboutModal';
+import { ReportModal } from './ReportModal';
 import { KeyHint } from './InputSettings';
 
 export interface FileActions {
@@ -36,6 +44,60 @@ const PANES: [PaneId, string][] = [
   ['view', 'アンテナ形状（3D）'],
   ['results', '計算結果'],
 ];
+
+/** The antenna's name (saved in the file), renamed in place; the file keeps its own name. */
+function AntennaName() {
+  const name = useApp((s) => s.project.antenna.name);
+  const edit = useApp((s) => s.edit);
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(name);
+  // Escape leaves without the blur that follows committing
+  const cancelled = useRef(false);
+
+  const start = () => {
+    cancelled.current = false;
+    setText(name);
+    setEditing(true);
+  };
+  const commit = () => {
+    setEditing(false);
+    if (!cancelled.current && text !== name) edit((p) => void (p.antenna.name = text));
+  };
+
+  if (editing) {
+    return (
+      <TextInput
+        size="xs"
+        w={280}
+        value={text}
+        aria-label="アンテナ名"
+        autoFocus
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => setText(e.currentTarget.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.currentTarget.blur();
+          else if (e.key === 'Escape') {
+            cancelled.current = true;
+            e.currentTarget.blur();
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <Tooltip label="クリックでアンテナ名を変更">
+      <UnstyledButton className="antenna-name" onClick={start} style={{ minWidth: 0 }}>
+        <Group gap={4} wrap="nowrap">
+          <Text size="sm" fw={600} truncate>
+            {name || '（名前なし）'}
+          </Text>
+          <IconPencil size={13} className="antenna-name-pencil" />
+        </Group>
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
 
 export function AppHeader({ actions }: { actions: FileActions }) {
   const fileName = useApp((s) => s.fileName);
@@ -60,6 +122,8 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const redoKey = useKeyText('redo');
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const dark = colorScheme === 'dark';
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   return (
     <Group h="100%" px="md" gap="sm" wrap="nowrap">
@@ -92,6 +156,10 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Menu.Item>
           <Menu.Item rightSection={<KeyHint id="saveAs" />} onClick={actions.saveAs}>
             名前を付けて保存…
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item leftSection={<IconPrinter size={14} />} rightSection={<KeyHint id="print" />} onClick={() => usePrint.getState().setOpen(true)}>
+            印刷…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
@@ -130,6 +198,22 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
+      <Menu position="bottom-start" shadow="md" width={240}>
+        <Menu.Target>
+          <Button variant="subtle" color="gray" rightSection={<IconChevronDown size={14} />}>
+            ヘルプ
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconBug size={14} />} onClick={() => setReportOpen(true)}>
+            不具合報告用の情報…
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item leftSection={<IconInfoCircle size={14} />} onClick={() => setAboutOpen(true)}>
+            MMANAについて…
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
       <Group gap={2} wrap="nowrap">
         <Tooltip label={undoKey ? `元に戻す (${undoKey})` : '元に戻す'}>
           <ActionIcon aria-label="元に戻す" disabled={!canUndo} onClick={undo}>
@@ -142,14 +226,17 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </ActionIcon>
         </Tooltip>
       </Group>
-      <Text size="sm" c="dimmed" truncate style={{ flex: 1, minWidth: 0 }} ta="center">
-        {fileName}
-        {dirty && (
-          <Text span c="dimmed" ml={6} title="未保存の変更があります">
-            ● 未保存
-          </Text>
-        )}
-      </Text>
+      <Group gap={8} wrap="nowrap" justify="center" style={{ flex: 1, minWidth: 0 }}>
+        <AntennaName />
+        <Text size="xs" c="dimmed" truncate style={{ flexShrink: 1 }} title={fileName}>
+          {fileName}
+          {dirty && (
+            <Text span inherit ml={6} title="未保存の変更があります">
+              ● 未保存
+            </Text>
+          )}
+        </Text>
+      </Group>
       <Group gap={2} wrap="nowrap">
         <Tooltip label="寸法・集中定数・地上高などを変えながら、利得・F/B・SWR などの目標に近づけます">
           <Button
@@ -179,6 +266,8 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           {dark ? <IconSun size={17} /> : <IconMoon size={17} />}
         </ActionIcon>
       </Tooltip>
+      <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ReportModal opened={reportOpen} onClose={() => setReportOpen(false)} />
     </Group>
   );
 }

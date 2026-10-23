@@ -196,7 +196,7 @@ function ElementEditorDialog({ onDone }: { onDone: () => void }) {
       notifications.show({ color: 'red', title: 'エレメント編集を反映できません', message: '編集中にアンテナが変更されました。' });
       return onDone();
     }
-    app.edit((p) => void (p.antenna = structuredClone(edit.antenna)));
+    app.edit((p) => void (p.antenna = structuredClone(edit.antenna)), { label: 'エレメント編集を反映' });
     app.selectWire(null);
     if (edit.warnings.length) {
       notifications.show({ color: 'yellow', title: '給電点・負荷を更新しました', message: edit.warnings.join('\n') });

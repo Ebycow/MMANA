@@ -74,3 +74,12 @@ export function wireOfPulse(name: string): number | null {
   const m = /^w(\d+)/i.exec(name.trim());
   return m ? Number(m[1]) : null;
 }
+
+/** The name of a document not yet saved. */
+export const UNTITLED = '無題.maa';
+
+/** A file name for saving an untitled antenna: its name without the characters file systems refuse. */
+export function suggestedFileName(antennaName: string): string {
+  const base = antennaName.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim().replace(/[. ]+$/, '');
+  return base ? `${base}.maa` : UNTITLED;
+}

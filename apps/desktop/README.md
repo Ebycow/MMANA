@@ -23,7 +23,8 @@ npm run test:wasm        # 全サンプルで wasm とネイティブ（target/r
 ```
 
 `npm run build:wasm` が `web/engine/` に wasm を書き出し、`--mode web` のときだけそこが配信されます。
-公開は `.github/workflows/pages.yml` が `v*` タグで行います。
+公開は `.github/workflows/pages.yml` が `v*` タグで行い、リリースの間は手動実行で main を公開します。
+どのコミットからビルドしたかは「ヘルプ > MMANAについて」に `git describe` の形（例: `v0.2.0-43-g060248a`）で出ます。
 
 ### ブラウザ + HTTP API
 

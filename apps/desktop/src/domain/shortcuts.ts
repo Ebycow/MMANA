@@ -9,6 +9,7 @@ export type CommandId =
   | 'openSample'
   | 'save'
   | 'saveAs'
+  | 'print'
   | 'undo'
   | 'redo'
   | 'copy'
@@ -35,6 +36,7 @@ export const COMMANDS: Command[] = [
   { id: 'openSample', label: 'サンプルを開く', group: 'ファイル', keys: [] },
   { id: 'save', label: '保存', group: 'ファイル', keys: ['mod+S'] },
   { id: 'saveAs', label: '名前を付けて保存', group: 'ファイル', keys: ['mod+shift+S'] },
+  { id: 'print', label: '印刷', group: 'ファイル', keys: ['mod+P'] },
   { id: 'undo', label: '元に戻す', group: '編集', keys: ['mod+Z'] },
   { id: 'redo', label: 'やり直す', group: '編集', keys: ['mod+shift+Z'] },
   { id: 'copy', label: 'コピー', group: '編集', keys: ['mod+C'] },

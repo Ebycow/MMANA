@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, ResonanceSearch, SweepPoint } from '../api/types';
 import { EngineError, files, transport } from '../api/transport';
+import { describeChange } from '../domain/history';
 import { defaultSetup } from '../domain/optimize';
-import { defaultOptions, newProject } from '../domain/project';
+import { UNTITLED, defaultOptions, newProject, suggestedFileName } from '../domain/project';
 import { OUTLINE_POINTS, sweepOrder } from '../domain/sweep';
 
 const HISTORY_LIMIT = 200;
@@ -88,6 +89,14 @@ const freshOptimizer = (): OptimizerState => ({
 export interface HistoryEntry {
   project: Project;
   options?: CalcOptions;
+  /** What the step did, for the history list. */
+  label: string;
+}
+
+/** How an edit is recorded: its name when its difference does not say it, and options it changes with the project. */
+export interface EditStep {
+  label?: string;
+  options?: Partial<CalcOptions>;
 }
 
 export interface AppState {
@@ -97,6 +106,8 @@ export interface AppState {
   dirty: boolean;
   past: HistoryEntry[];
   future: HistoryEntry[];
+  /** Steps older than the history keeps were dropped. */
+  historyTrimmed: boolean;
 
   /** 0-based indices of the selected wires, in the order they were picked. */
   selectedWires: number[];
@@ -126,9 +137,11 @@ export interface AppState {
    * Applies an edit to a copy of the project and records it for undo; an
    * options patch is applied and undone with it.
    */
-  edit: (recipe: (draft: Project) => void, options?: Partial<CalcOptions>) => void;
+  edit: (recipe: (draft: Project) => void, step?: EditStep) => void;
   undo: () => void;
   redo: () => void;
+  /** Undoes (negative) or redoes (positive) that many steps, for picking a step in the history list. */
+  travel: (steps: number) => void;
   load: (parsed: ParsedProject, name: string, path: string | null) => void;
   reset: () => void;
   /** Selects only `index` (or nothing). */
@@ -168,6 +181,7 @@ const freshDocument = (project: Project) => ({
   project,
   past: [] as HistoryEntry[],
   future: [] as HistoryEntry[],
+  historyTrimmed: false,
   dirty: false,
   selectedWires: [] as number[],
   selectedWire: null,
@@ -206,7 +220,7 @@ export const useApp = create<AppState>()((set, get) => {
   });
 
   /** An optimised antenna and the calculation frequency it left, as one undoable step. */
-  const applyProject = (p: Project, mhz: number) => {
+  const applyProject = (p: Project, mhz: number, label: string) => {
     const { options, project } = get();
     const moved = mhz !== (options.frequencyMhz ?? project.antenna.frequencyMhz);
     get().edit(
@@ -214,7 +228,7 @@ export const useApp = create<AppState>()((set, get) => {
         draft.antenna = structuredClone(p.antenna);
         draft.environment = structuredClone(p.environment);
       },
-      moved ? { frequencyMhz: mhz } : undefined,
+      { label, ...(moved && { options: { frequencyMhz: mhz } }) },
     );
   };
 
@@ -226,7 +240,7 @@ export const useApp = create<AppState>()((set, get) => {
 
   return {
     ...freshDocument(initialProject),
-    fileName: '無題.maa',
+    fileName: UNTITLED,
     filePath: null,
     options: defaultOptions(),
     autoCalc: false,
@@ -236,14 +250,18 @@ export const useApp = create<AppState>()((set, get) => {
     showCurrents: true,
     elementEditorOpen: false,
 
-    edit: (recipe, patch) => {
+    edit: (recipe, step = {}) => {
       const { project, past, options } = get();
       const draft = structuredClone(project);
       recipe(draft);
+      const label = step.label ?? describeChange(project, draft);
+      const patch = step.options;
+      const entries = [...past, patch ? { project, options, label } : { project, label }];
       set({
         project: draft,
         ...(patch && { options: { ...options, ...patch } }),
-        past: [...past, patch ? { project, options } : { project }].slice(-HISTORY_LIMIT),
+        past: entries.slice(-HISTORY_LIMIT),
+        historyTrimmed: get().historyTrimmed || entries.length > HISTORY_LIMIT,
         future: [],
         dirty: true,
         ...staleFlags(),
@@ -258,7 +276,7 @@ export const useApp = create<AppState>()((set, get) => {
         project: prev.project,
         ...(prev.options && { options: prev.options }),
         past: past.slice(0, -1),
-        future: [prev.options ? { project, options } : { project }, ...future],
+        future: [prev.options ? { project, options, label: prev.label } : { project, label: prev.label }, ...future],
         dirty: true,
         ...staleFlags(),
         ...keepSelection(prev.project),
@@ -271,15 +289,18 @@ export const useApp = create<AppState>()((set, get) => {
       set({
         project: next.project,
         ...(next.options && { options: next.options }),
-        past: [...past, next.options ? { project, options } : { project }],
+        past: [...past, next.options ? { project, options, label: next.label } : { project, label: next.label }],
         future: future.slice(1),
         dirty: true,
         ...staleFlags(),
         ...keepSelection(next.project),
       });
     },
+    travel: (steps) => {
+      for (let i = 0; i < Math.abs(steps); i++) (steps < 0 ? get().undo : get().redo)();
+    },
     load: (parsed, name, path) => openDocument(parsed.project, name, path),
-    reset: () => openDocument(newProject(), '無題.maa', null),
+    reset: () => openDocument(newProject(), UNTITLED, null),
     selectWire: (index) => set({ selectedWires: index == null ? [] : [index], selectedWire: index }),
     setSelection: (indices, active) => {
       const unique = [...new Set(indices)];
@@ -397,7 +418,9 @@ export const useApp = create<AppState>()((set, get) => {
     save: async (saveAs) => {
       const { project, filePath, fileName } = get();
       const gen = generation;
-      const saved = await files.save(project, saveAs ? null : filePath, fileName);
+      // an untitled antenna is offered under its own name
+      const suggested = filePath == null && fileName === UNTITLED ? suggestedFileName(project.antenna.name) : fileName;
+      const saved = await files.save(project, saveAs ? null : filePath, suggested);
       if (!saved) return false;
       // a document opened while saving keeps its own name and state
       if (gen !== generation) return true;
@@ -422,7 +445,7 @@ export const useApp = create<AppState>()((set, get) => {
           patch({ log: [...o.log.slice(1 - LOG_LIMIT), p], best: p.improved ? p : o.best });
         });
         if (gen !== generation) return;
-        if (outcome.best) applyProject(outcome.project, outcome.frequencyMhz);
+        if (outcome.best) applyProject(outcome.project, outcome.frequencyMhz, '最適化の結果を反映');
         patch({
           running: false,
           finishedAt: performance.now(),
@@ -445,7 +468,7 @@ export const useApp = create<AppState>()((set, get) => {
       const gen = generation;
       const applied = await transport.applyTrial({ ...start, setup, values });
       if (gen !== generation) return;
-      applyProject(applied.project, applied.frequencyMhz);
+      applyProject(applied.project, applied.frequencyMhz, '最適化の試行を反映');
       get().setOptimizer({ appliedValues: values });
       await get().calculate();
     },

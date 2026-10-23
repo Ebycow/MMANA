@@ -1,6 +1,7 @@
 import { Group, Text, Tooltip } from '@mantine/core';
 import { transport } from '../api/transport';
 import { useApp } from '../state/store';
+import { ActivityPanel } from './ActivityPanel';
 
 export function StatusBar() {
   const wires = useApp((s) => s.project.antenna.wires.length);
@@ -11,7 +12,8 @@ export function StatusBar() {
   const calculating = useApp((s) => s.calculating);
   const engine = { tauri: 'ローカルエンジン', wasm: 'ブラウザ内エンジン', http: 'HTTP API' }[transport.kind];
   return (
-    <Group h="100%" px="md" gap="lg" wrap="nowrap">
+    <Group h="100%" pl={6} pr="md" gap="lg" wrap="nowrap">
+      <ActivityPanel />
       <Text size="xs" c="dimmed">
         ワイヤー {wires} 本{count > 1 ? `（${count} 本を選択中）` : selected != null ? `（No.${selected + 1} を選択中）` : ''}
       </Text>

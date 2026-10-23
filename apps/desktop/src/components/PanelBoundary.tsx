@@ -2,6 +2,7 @@
 // the window (and the unsaved antenna) stays usable.
 import { Button, Stack, Text } from '@mantine/core';
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { recordError } from '../state/messageLog';
 import { Panel } from './Panel';
 
 interface Props {
@@ -24,6 +25,7 @@ export class PanelBoundary extends Component<Props, { error: Error | null; key: 
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error(error, info.componentStack);
+    recordError(`表示エラー（${this.props.title}）`, `${error.stack ?? error.message}${info.componentStack ?? ''}`);
   }
 
   render() {
