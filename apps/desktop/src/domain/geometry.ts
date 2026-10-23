@@ -87,6 +87,23 @@ export function bounds(wires: DisplayWire[]): Bounds {
   return { center, radius, minZ: lo.z, maxZ: hi.z };
 }
 
+/**
+ * `box` grown to take in the ground at height `z` below its middle, for
+ * framing the view. The antenna and the ground sit at the very ends of a tall
+ * frame, so the radius carries a margin to keep them off the edge of the view.
+ */
+export function reachingGround(box: Bounds, z: number): Bounds {
+  const across = Math.sqrt(Math.max(0, (2 * box.radius) ** 2 - (box.maxZ - box.minZ) ** 2));
+  const minZ = Math.min(box.minZ, z);
+  const maxZ = Math.max(box.maxZ, z);
+  return {
+    center: { ...box.center, z: (minZ + maxZ) / 2 },
+    radius: Math.max(0.5, (Math.hypot(across, maxZ - minZ) / 2) * 1.25),
+    minZ,
+    maxZ,
+  };
+}
+
 /** The horizontal grid of the 3D view: a square of `half` either side of `center`, at height `z`. */
 export interface SceneGrid {
   center: { x: number; y: number };

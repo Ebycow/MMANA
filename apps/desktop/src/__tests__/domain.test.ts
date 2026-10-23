@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { niceTicks } from '../charts/ticks';
 import { radiusFor, sampleAngle, sampleAt } from '../charts/polar';
 import { evaluate } from '../domain/expr';
-import { bounds, displayWires, normalizePulse, pulseLocation, sceneGrid } from '../domain/geometry';
+import { bounds, displayWires, normalizePulse, pulseLocation, reachingGround, sceneGrid } from '../domain/geometry';
 import { newProject, newSource, setAutoVoltage } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
 import { sweepOrder } from '../domain/sweep';
@@ -116,6 +116,15 @@ describe('3D view geometry', () => {
     expect(g).toEqual({ center: { x: 0.5, y: 0 }, z: 0, half: 2, cell: 0.05, section: 0.5 });
     // moving the antenna a little leaves the grid where it is
     expect(sceneGrid({ ...box, center: { x: 0.4, y: 0.1, z: 0 } }, 0, 0.05)).toEqual(g);
+  });
+  it('frames the ground below the antenna', () => {
+    // a 6 m horizontal dipole 8 m up
+    const box = bounds([{ base: 0, start: { x: 0, y: -3, z: 0 }, end: { x: 0, y: 3, z: 0 }, radius: 0.001 }]);
+    const f = reachingGround(box, -8);
+    expect(f.center).toEqual({ x: 0, y: 0, z: -4 });
+    // 5 m to the corners, with the margin
+    expect(f.radius).toBeCloseTo(6.25);
+    expect([f.minZ, f.maxZ]).toEqual([-8, 0]);
   });
   it('coarsens the grid when the ground is far below', () => {
     const box = bounds([{ base: 0, start: { x: 0, y: -1, z: 0 }, end: { x: 0, y: 1, z: 0 }, radius: 0.001 }]);

@@ -1,14 +1,14 @@
 import { GizmoHelper, GizmoViewport, Grid, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
-import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
+import { IconArrowAutofitHeight, IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, DoubleSide, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
 import type { Point3, Project } from '../api/types';
 import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
-import { bounds, currentPolylines, displayWires, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
+import { bounds, currentPolylines, displayWires, reachingGround, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
 import { add, niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
@@ -79,6 +79,8 @@ export function AntennaView() {
   const step = useEditor((s) => s.step);
   const scheme = useComputedColorScheme('light');
   const [preset, setPreset] = useState<{ p: Preset; n: number }>({ p: 'iso', n: 0 });
+  /** Framing takes in the ground as well as the antenna. */
+  const [fitGround, setFitGround] = useState(false);
 
   // a drag in progress shows its wires; the antenna changes when it ends
   const shown = useMemo(() => (preview ? { ...antenna, wires: preview } : antenna), [antenna, preview]);
@@ -88,6 +90,7 @@ export function AntennaView() {
   const autoStep = niceStep(box.radius / 25);
   const groundZ = environment.ground === 'freeSpace' ? null : -environment.height;
   const grid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
+  const frame = useMemo(() => (fitGround && groundZ != null ? reachingGround(box, groundZ) : box), [fitGround, groundZ, box]);
   const currents = useMemo(
     () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),
     [wires, result, showCurrents, stale, preview],
@@ -134,6 +137,20 @@ export function AntennaView() {
               <IconArrowsMaximize size={15} />
             </ActionIcon>
           </Tooltip>
+          <Tooltip label={groundZ == null ? '大地も画面に収める（自由空間では使えません）' : `大地も画面に収める（${fitGround ? 'オン' : 'オフ'}）`}>
+            <ActionIcon
+              aria-label="大地も画面に収める"
+              aria-pressed={fitGround}
+              variant={fitGround && groundZ != null ? 'light' : 'subtle'}
+              disabled={groundZ == null}
+              onClick={() => {
+                setFitGround(!fitGround);
+                go(preset.p);
+              }}
+            >
+              <IconArrowAutofitHeight size={15} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       }
     >
@@ -147,6 +164,7 @@ export function AntennaView() {
           <Scene
             wires={wires}
             box={box}
+            frame={frame}
             currents={currents}
             preset={preset}
             scheme={scheme}
@@ -268,6 +286,8 @@ function CurrentLegend({ maxMa, ramp }: { maxMa: number; ramp: string[] }) {
 interface SceneProps {
   wires: DisplayWire[];
   box: Bounds;
+  /** What the camera takes in when framing. */
+  frame: Bounds;
   currents: ReturnType<typeof currentPolylines> | null;
   preset: { p: Preset; n: number };
   scheme: 'light' | 'dark';
@@ -280,7 +300,7 @@ interface SceneProps {
   offset: Point3;
 }
 
-function Scene({ wires, box, currents, preset, scheme, grid, ground, feeds, offset }: SceneProps) {
+function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feeds, offset }: SceneProps) {
   const selected = useApp((s) => s.selectedWires);
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
@@ -311,11 +331,11 @@ function Scene({ wires, box, currents, preset, scheme, grid, ground, feeds, offs
 
   // camera framing
   useEffect(() => {
-    const c = box.center;
+    const c = frame.center;
     const dir = new Vector3(...PRESET_DIRS[preset.p]).normalize();
     const fov = ((camera as { fov?: number }).fov ?? 35) * (Math.PI / 180);
     const aspect = size.width / Math.max(1, size.height);
-    const fit = box.radius / Math.sin(Math.min(fov, fov * aspect) / 2);
+    const fit = frame.radius / Math.sin(Math.min(fov, fov * aspect) / 2);
     camera.position.set(c.x + dir.x * fit * 0.85, c.y + dir.y * fit * 0.85, c.z + dir.z * fit * 0.85);
     camera.up.set(0, 0, 1);
     controls.current?.target.set(c.x, c.y, c.z);
