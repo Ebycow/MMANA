@@ -11,31 +11,38 @@
                 │  elements  エレメント編集（CWGroup / CWGroupList の移植）        │
                 │  optimize  最適化（CACal の移植）                               │
                 │  engine    MININEC3 本体（mininec3.cpp の移植）                  │
-                └──────▲───────────────────▲──────────────────────▲───────────────┘
-                       │                   │                      │
-              mmana-api（axum）      mmana-cli（clap）     apps/desktop（Tauri 2）
-              REST + OpenAPI          バッチ・検証用        Tauri 2 のコマンドから直接呼ぶ
-                       ▲                                          ▲
-                       └──────── React/TypeScript の UI ──────────┘
-                                 （同じ型を使い、HTTP / Tauri IPC を切り替え）
+                └─────▲────────────────▲────────────────▲────────────────▲──────┘
+                      │                │                │                │
+             mmana-api（axum）  mmana-cli（clap）  mmana-wasm          apps/desktop（Tauri 2）
+             REST + OpenAPI     バッチ・検証用     （wasm-bindgen）     Tauri 2 のコマンドから直接呼ぶ
+                      ▲                            ブラウザ版の Worker            ▲
+                      │                                 ▲                         │
+                      └────────────── React/TypeScript の UI ─────────────────────┘
+                              （同じ型を使い、HTTP / wasm / Tauri IPC を切り替え）
 ```
 
 - **計算は `mmana-core` に閉じ込めます。** ファイルやネットワークに触れないので、
   API サーバー、CLI、Tauri から同じコードを呼び出せます。
-  `mmana-core` は WebAssembly でもビルドできますが、現在のブラウザ版 UI は HTTP API 経由で計算します。
   内部の並列計算（[性能](#性能)）は rayon で行い、WebAssembly 向けビルドでは逐次実行になります。
+- **ブラウザ版（GitHub Pages）は `mmana-wasm` で計算します。** `contract` の関数を名前で呼び分ける
+  `call(op, json)` が入口なので、`contract` に関数を足しても `dispatch` に 1 行足すだけで済みます。
+  計算は Web Worker で行い（最適化は別の Worker）、wasm は画面のバンドルに含めず `web/engine/` から読み込むので、
+  デスクトップ版のビルドに wasm のツールは要りません。結果はネイティブとビット単位で一致し、
+  CI（macOS）が全サンプルで確認します（`npm run test:wasm`）。
+  最適化の中止は、UI が Blob URL を無効にし、Worker がそれを同期読み込みで確かめる方式です
+  （SharedArrayBuffer に必要な COOP/COEP ヘッダーを GitHub Pages では設定できないため）。
 - **API は薄い層です。** JSON の入出力、制限（パルス数・点数・ボディサイズ）、エラー整形だけを担い、
   計算は `spawn_blocking` で別スレッドに逃がします。
 - **UI との契約は `mmana_core::contract` です。** リクエストとレスポンスの型を core に置き、
-  HTTP API と Tauri コマンドの両方がそれを受け渡します。OpenAPI 文書から TypeScript の型を生成するので
-  （`npm run gen:api`）、UI は `Transport` を差し替えるだけで、デスクトップ（Tauri IPC）でもブラウザ（HTTP）でも動きます。
+  HTTP API・Tauri コマンド・wasm のすべてがそれを受け渡します。OpenAPI 文書から TypeScript の型を生成するので
+  （`npm run gen:api`）、UI は `Transport` を差し替えるだけで、デスクトップ（Tauri IPC）でもブラウザ（wasm / HTTP）でも動きます。
 
 ## デスクトップアプリ（apps/desktop）
 
 | 層 | 技術 | 役割 |
 |---|---|---|
 | `src-tauri` | Tauri 2 | `contract` の関数を `spawn_blocking` で呼ぶコマンド、ファイルの読み書き、起動引数のファイル |
-| `src/api` | 生成型 + `Transport` | Tauri / HTTP の切り替え、エラーを problem+json の形にそろえる |
+| `src/api` | 生成型 + `Transport` | Tauri / wasm（Web Worker）/ HTTP の切り替え、エラーを problem+json の形にそろえる |
 | `src/state` | zustand | プロジェクト、元に戻す・やり直す（最大 200 手）、計算結果と「古い」状態、自動計算 |
 | `src/components` | React 19 + Mantine 9 | ワイヤー表（数式入力・Enter で下へ）、エレメント編集ダイアログ、各種フォーム、結果パネル |
 | `src/components/AntennaView` | three.js（react-three-fiber） | 3D 表示（Z 軸上向き）、電流分布の色分け、視点プリセット。別チャンクで遅延読み込み |
@@ -190,7 +197,7 @@ reference/oracle/bench.sh                            # オリジナルの C++ �
 - 3D ビューでの直接編集（複数・範囲選択、ワイヤー・ループ描画、移動・回転ギズモ、スナップ、複製・鏡像など）
 - エレメント編集（寸法・形式・間隔などの変更、波長表記、CSV 出力）
 - 長さの表示単位（座標・長さの m / mm 切り替え、ワイヤー表とエレメント編集で共通の波長表記）
-- 最適化（変数・目標・複数バンドの設定、結果一覧・試行の反映、Tauri での途中経過表示・中止）
+- 最適化（変数・目標・複数バンドの設定、結果一覧・試行の反映、Tauri とブラウザ版（wasm）での途中経過表示・中止）
 
 3D 編集の操作方法は [デスクトップアプリの README](../apps/desktop/README.md#3d-ビューでの編集) に記載しています。
 インストーラを生成する Tauri の設定とビルド手順も用意されています。OS のファイル関連付けは未設定です。

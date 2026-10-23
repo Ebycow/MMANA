@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "build:wasm": "cargo build -p mmana-wasm --target wasm32-unknown-unknown --release && wasm-bindgen ../../target/wasm32-unknown-unknown/release/mmana_wasm.wasm --target web --out-dir web/engine --no-typescript",
+    "dev:web": "npm run build:wasm && vite --mode web",
+    "build:web": "npm run build:wasm && tsc --noEmit && vite build --mode web --outDir dist-web",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:wasm": "node scripts/compare-engines.mjs",
     "tauri": "tauri",
     "gen:api": "cargo run -q -p mmana-api --bin openapi > openapi.json && openapi-typescript openapi.json -o src/api/schema.d.ts"
   },

@@ -9,7 +9,25 @@ npm install
 npm run tauri dev        # デスクトップアプリとして起動（ホットリロード）
 ```
 
-UI だけをブラウザで動かすこともできます。計算は HTTP API（`crates/mmana-api`）に送られます。
+### ブラウザ版（GitHub Pages）
+
+計算エンジンを WebAssembly（`crates/mmana-wasm`）にして、すべてをブラウザの中で動かします。
+`wasm-bindgen` の CLI（`Cargo.lock` の wasm-bindgen と同じ版）と `wasm32-unknown-unknown` ターゲットが必要です。
+
+```sh
+cargo install wasm-bindgen-cli --version 0.2.129
+rustup target add wasm32-unknown-unknown
+npm run dev:web          # wasm をビルドして http://localhost:1420/?sample=3EL20.MAA
+npm run build:web        # dist-web/ に静的ファイル一式（Pages では --base /<リポジトリ名>/ を付ける）
+npm run test:wasm        # 全サンプルで wasm とネイティブ（target/release/mmana）の結果を比較
+```
+
+`npm run build:wasm` が `web/engine/` に wasm を書き出し、`--mode web` のときだけそこが配信されます。
+公開は `.github/workflows/pages.yml` が `v*` タグで行います。
+
+### ブラウザ + HTTP API
+
+UI だけをブラウザで動かし、計算を HTTP API（`crates/mmana-api`）に送ることもできます。
 
 ```sh
 cargo run --release -p mmana-api          # リポジトリのルートで
@@ -41,7 +59,7 @@ npm run gen:api
 | パス | 内容 |
 |---|---|
 | `src-tauri/` | Tauri（Rust）。`mmana-core` を直接呼ぶコマンドとファイル入出力 |
-| `src/api/` | 生成した型と、Tauri / HTTP を切り替える `Transport` |
+| `src/api/` | 生成した型と、Tauri / wasm / HTTP を切り替える `Transport`、wasm を動かす Web Worker |
 | `src/state/store.ts` | アプリの状態（zustand）。元に戻す・やり直す、計算の実行 |
 | `src/domain/` | SEG 列の変換、数式入力、3D 用のジオメトリ、3D 編集の変形（`wireEdit.ts`）など（単体テストあり） |
 | `src/components/` | 画面部品（ワイヤー表、3D ビュー、結果パネルなど） |

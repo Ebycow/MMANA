@@ -1,7 +1,7 @@
 # MMMANA — MMANA の Rust 移植
 
 JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）の計算エンジンを Rust に移植し、
-デスクトップアプリ・HTTP API・CLI から使えるようにしたものです。
+デスクトップアプリ・ブラウザ・HTTP API・CLI から使えるようにしたものです。
 
 **移植した計算エンジンは、オリジナルの C++ エンジンとビット単位で同じ結果を返します**
 （サンプル 81 ファイルとその派生、計 149 ケースで検証済み。詳細は [docs/architecture.md](docs/architecture.md)）。
@@ -18,6 +18,7 @@ JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）
 | [crates/mmana-core](crates/mmana-core) | 計算エンジン本体。純 Rust、I/O なし（WebAssembly でもビルド可能） |
 | [crates/mmana-api](crates/mmana-api) | HTTP API（axum、OpenAPI 3 対応） |
 | [crates/mmana-cli](crates/mmana-cli) | コマンドラインツール `mmana` |
+| [crates/mmana-wasm](crates/mmana-wasm) | ブラウザ版の計算エンジン（WebAssembly） |
 | [apps/desktop](apps/desktop) | デスクトップアプリ（Tauri 2 + React/TypeScript） |
 | [reference/oracle](reference/oracle) | オリジナルの `mininec3.cpp` を無改変でビルドし、正解データを作るハーネス |
 | [testdata](testdata) | サンプル `.MAA` と正解データ（golden） |
@@ -36,6 +37,18 @@ npm run tauri dev
 ```
 
 詳しくは [apps/desktop/README.md](apps/desktop/README.md) を参照してください。
+
+### ブラウザ版
+
+同じ画面を、計算エンジンごとブラウザで動かせます（GitHub Pages で公開。リリースのタグを打つと更新されます）。
+計算は WebAssembly でブラウザの中だけで行い、結果はデスクトップ版と同じです。並列計算をしないので、大きなアンテナや最適化はデスクトップ版より遅くなります。
+
+```sh
+cargo install wasm-bindgen-cli --version 0.2.129   # Cargo.lock の wasm-bindgen と同じ版
+rustup target add wasm32-unknown-unknown
+cd apps/desktop
+npm run dev:web          # http://localhost:1420/
+```
 
 ### Rust（エンジン・API・CLI）
 
