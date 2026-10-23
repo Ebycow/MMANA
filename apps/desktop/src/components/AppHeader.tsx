@@ -2,6 +2,7 @@ import { ActionIcon, Button, Divider, Group, Menu, Switch, Text, Tooltip, useMan
 import {
   IconAlertTriangle,
   IconAntenna,
+  IconBug,
   IconArrowBackUp,
   IconArrowForwardUp,
   IconCheck,
@@ -24,6 +25,7 @@ import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
 import { useApp } from '../state/store';
 import { AboutModal } from './AboutModal';
+import { ReportModal } from './ReportModal';
 import { KeyHint } from './InputSettings';
 
 export interface FileActions {
@@ -64,6 +66,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const dark = colorScheme === 'dark';
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
 
   return (
     <Group h="100%" px="md" gap="sm" wrap="nowrap">
@@ -141,6 +144,10 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Button>
         </Menu.Target>
         <Menu.Dropdown>
+          <Menu.Item leftSection={<IconBug size={14} />} onClick={() => setReportOpen(true)}>
+            不具合報告用の情報…
+          </Menu.Item>
+          <Menu.Divider />
           <Menu.Item leftSection={<IconInfoCircle size={14} />} onClick={() => setAboutOpen(true)}>
             MMANAについて…
           </Menu.Item>
@@ -196,6 +203,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
         </ActionIcon>
       </Tooltip>
       <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ReportModal opened={reportOpen} onClose={() => setReportOpen(false)} />
     </Group>
   );
 }
