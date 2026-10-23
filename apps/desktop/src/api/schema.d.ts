@@ -976,12 +976,19 @@ export interface components {
         PolarQuantity: "length" | "azimuth" | "zenith";
         /** @description RFC 9457 problem details. */
         Problem: {
+            /** @description For `calculation-failed`: the kind of error, e.g. `overlapping-wires`. */
+            code?: string | null;
             detail: string;
             /** Format: int32 */
             status: number;
             title: string;
             /** @description Stable identifier of the error kind, e.g. `calculation-failed`. */
             type: string;
+            /**
+             * @description For `calculation-failed`: the 1-based numbers of the wires the error
+             *     is about (none when it is not about particular wires).
+             */
+            wires?: number[];
         };
         /** @description One calculation of the search (a line of MMANA's optimisation log). */
         Progress: {

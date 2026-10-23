@@ -20,17 +20,25 @@ pub struct Problem {
     pub kind: String,
     pub title: String,
     pub detail: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub wires: Vec<usize>,
 }
 
 impl Problem {
     fn new(kind: &str, title: &str, detail: impl ToString) -> Self {
-        Self { kind: kind.into(), title: title.into(), detail: detail.to_string() }
+        Self { kind: kind.into(), title: title.into(), detail: detail.to_string(), code: None, wires: Vec::new() }
     }
 }
 
 impl From<CalcError> for Problem {
     fn from(e: CalcError) -> Self {
-        Self::new("calculation-failed", "The antenna cannot be calculated", e)
+        Self {
+            code: Some(e.code().into()),
+            wires: e.wires(),
+            ..Self::new("calculation-failed", "The antenna cannot be calculated", &e)
+        }
     }
 }
 
@@ -149,6 +157,15 @@ mod tests {
         project["antenna"]["wires"] = j!([]);
         let req = j!({ "project": project }).to_string();
         assert_eq!(dispatch("calculate", &req).unwrap_err().kind, "calculation-failed");
+    }
+
+    #[test]
+    fn calculation_errors_name_their_wires() {
+        let mut project = dipole();
+        let wire = project["antenna"]["wires"][0].clone();
+        project["antenna"]["wires"].as_array_mut().unwrap().push(wire);
+        let e = dispatch("calculate", &j!({ "project": project }).to_string()).unwrap_err();
+        assert_eq!((e.code.as_deref(), e.wires), (Some("overlapping-wires"), vec![1, 2]));
     }
 
     #[test]

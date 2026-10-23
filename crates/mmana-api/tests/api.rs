@@ -222,6 +222,19 @@ async fn calculation_errors_are_422() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(v["type"], "calculation-failed");
     assert_eq!(v["detail"], "the antenna has no sources");
+    assert_eq!(v["code"], "no-sources");
+    assert!(v.get("wires").is_none(), "{v}");
+}
+
+#[tokio::test]
+async fn calculation_errors_name_their_wires() {
+    let mut parsed = parse("DP20.MAA").await;
+    let wire = parsed["project"]["antenna"]["wires"][0].clone();
+    parsed["project"]["antenna"]["wires"].as_array_mut().unwrap().push(wire);
+    let (status, _, v) = post_json("/v1/calculations", json!({ "project": parsed["project"] })).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(v["code"], "overlapping-wires");
+    assert_eq!(v["wires"], json!([1, 2]));
 }
 
 #[tokio::test]

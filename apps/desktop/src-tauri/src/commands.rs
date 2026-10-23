@@ -24,26 +24,40 @@ pub struct CommandError {
     kind: &'static str,
     title: &'static str,
     detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    wires: Vec<usize>,
+}
+
+impl CommandError {
+    fn new(kind: &'static str, title: &'static str, detail: String) -> Self {
+        Self { kind, title, detail, code: None, wires: Vec::new() }
+    }
 }
 
 impl From<CalcError> for CommandError {
     fn from(e: CalcError) -> Self {
-        Self { kind: "calculation-failed", title: "The antenna cannot be calculated", detail: e.to_string() }
+        Self {
+            code: Some(e.code()),
+            wires: e.wires(),
+            ..Self::new("calculation-failed", "The antenna cannot be calculated", e.to_string())
+        }
     }
 }
 
 impl From<OptimizeError> for CommandError {
     fn from(e: OptimizeError) -> Self {
-        Self { kind: "invalid-optimizer-setup", title: "The optimisation setup cannot run", detail: e.to_string() }
+        Self::new("invalid-optimizer-setup", "The optimisation setup cannot run", e.to_string())
     }
 }
 
 fn io_error(path: &Path, e: impl std::fmt::Display) -> CommandError {
-    CommandError { kind: "file-error", title: "File error", detail: format!("{}: {e}", path.display()) }
+    CommandError::new("file-error", "File error", format!("{}: {e}", path.display()))
 }
 
 fn internal(e: impl std::fmt::Display) -> CommandError {
-    CommandError { kind: "internal", title: "Internal error", detail: e.to_string() }
+    CommandError::new("internal", "Internal error", e.to_string())
 }
 
 async fn blocking<T: Send + 'static>(

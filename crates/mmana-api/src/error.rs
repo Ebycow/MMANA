@@ -17,6 +17,13 @@ pub struct Problem {
     pub title: String,
     pub status: u16,
     pub detail: String,
+    /// For `calculation-failed`: the kind of error, e.g. `overlapping-wires`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<&'static str>,
+    /// For `calculation-failed`: the 1-based numbers of the wires the error
+    /// is about (none when it is not about particular wires).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub wires: Vec<usize>,
 }
 
 #[derive(Debug)]
@@ -68,7 +75,11 @@ impl IntoResponse for ApiError {
         if status.is_server_error() {
             tracing::error!(%detail, "request failed");
         }
-        let body = Problem { kind: kind.into(), title: title.into(), status: status.as_u16(), detail };
+        let (code, wires) = match &self {
+            ApiError::Calculation(e) => (Some(e.code()), e.wires()),
+            _ => (None, Vec::new()),
+        };
+        let body = Problem { kind: kind.into(), title: title.into(), status: status.as_u16(), detail, code, wires };
         (status, [(header::CONTENT_TYPE, "application/problem+json")], serde_json::to_string(&body).unwrap_or_default())
             .into_response()
     }
