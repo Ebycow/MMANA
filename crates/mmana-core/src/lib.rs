@@ -26,6 +26,7 @@ pub mod model;
 pub mod optimize;
 mod par;
 mod pattern;
+pub mod resonance;
 mod validate;
 
 pub use calc::{

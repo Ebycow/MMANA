@@ -1,8 +1,9 @@
-import { Badge, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Tooltip } from '@mantine/core';
-import { IconAlertTriangle, IconPlayerPlay, IconPlayerStop } from '@tabler/icons-react';
+import { Alert, Badge, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { IconAlertTriangle, IconPlayerPlay, IconPlayerStop, IconTarget } from '@tabler/icons-react';
 import { useState } from 'react';
 import { LineChart } from '../charts/LineChart';
-import { useApp } from '../state/store';
+import type { ResonanceSearch } from '../api/types';
+import { sweepAround, useApp } from '../state/store';
 
 export function SweepPanel() {
   const sweep = useApp((s) => s.sweep);
@@ -10,6 +11,9 @@ export function SweepPanel() {
   const run = useApp((s) => s.runSweep);
   const stop = useApp((s) => s.stopSweep);
   const designFreq = useApp((s) => s.project.antenna.frequencyMhz);
+  const calcFreq = useApp((s) => s.options.frequencyMhz) ?? designFreq;
+  const resonance = useApp((s) => s.resonance);
+  const findResonance = useApp((s) => s.findResonance);
   const [hover, setHover] = useState<number | null>(null);
   const [view, setView] = useState<'chart' | 'table'>('chart');
   const data = sweep.data;
@@ -25,6 +29,11 @@ export function SweepPanel() {
         <Button leftSection={<IconPlayerPlay size={14} />} loading={sweep.running} onClick={run} disabled={!(sweep.stopMhz > sweep.startMhz)}>
           計算
         </Button>
+        <Tooltip label={`計算周波数 ${calcFreq} MHz から、リアクタンスが 0 になる最も近い周波数を探します（その半分〜2 倍の範囲）`} multiline w={260}>
+          <Button variant="default" leftSection={<IconTarget size={14} />} loading={resonance.running} onClick={findResonance}>
+            共振点
+          </Button>
+        </Tooltip>
         {sweep.running && (
           <Button variant="default" leftSection={<IconPlayerStop size={14} />} onClick={stop} disabled={sweep.stopping}>
             {sweep.stopping ? '中止中…' : '中止'}
@@ -54,6 +63,16 @@ export function SweepPanel() {
           />
         )}
       </Group>
+      {resonance.search && (
+        <ResonanceRow
+          search={resonance.search}
+          stale={resonance.stale}
+          onCenter={(mhz) => {
+            setRange(sweepAround(mhz));
+            run();
+          }}
+        />
+      )}
       {!data ? (
         <Text size="sm" c="dimmed" mt="md" ta="center">
           範囲を指定して「計算」を押すと、SWR・インピーダンス・利得・F/B 比の周波数特性を表示します（2° 分解能で計算）。
@@ -99,6 +118,51 @@ export function SweepPanel() {
             ))}
           </Table.Tbody>
         </Table>
+      )}
+    </Stack>
+  );
+}
+
+/** The resonance found: frequency, impedance, and the series circuit there (MMANA's 推測計算). */
+function ResonanceRow({ search, stale, onCenter }: { search: ResonanceSearch; stale: boolean; onCenter: (mhz: number) => void }) {
+  const r = search.resonance;
+  if (!r) {
+    return (
+      <Text size="sm" c="dimmed" style={{ opacity: stale ? 0.55 : 1 }}>
+        {search.minMhz.toFixed(3)}〜{search.maxMhz.toFixed(3)} MHz に共振点はありません（{search.calculations} 回計算）
+      </Text>
+    );
+  }
+  const c = r.circuit;
+  return (
+    <Stack gap={4} style={{ opacity: stale ? 0.55 : 1 }}>
+      <Group gap="md" wrap="wrap" className="num">
+        <Text size="sm" fw={600}>
+          共振 {r.frequencyMhz.toFixed(4)} MHz
+        </Text>
+        <Text size="sm">
+          R {r.impedance.re.toFixed(2)} Ω・jX {r.impedance.im.toFixed(2)} Ω・SWR {r.swr >= 99999 ? '∞' : r.swr.toFixed(2)}
+        </Text>
+        {c && (
+          <Tooltip label="共振点の近くを直列 RLC 回路とみなした値（MMANA の推測計算）。帯域幅は共振周波数 ÷ Q" multiline w={260}>
+            <Text size="sm" c="dimmed">
+              Q {c.q.toFixed(1)}・帯域幅 {c.bandwidthKhz.toFixed(0)} kHz・L {c.inductanceUh.toFixed(3)} µH・C {c.capacitancePf.toFixed(2)} pF
+            </Text>
+          </Tooltip>
+        )}
+        <Button size="compact-xs" variant="light" onClick={() => onCenter(r.frequencyMhz)}>
+          ここを中心に周波数特性
+        </Button>
+        {stale && (
+          <Badge color="yellow" variant="light" leftSection={<IconAlertTriangle size={12} />}>
+            再計算が必要
+          </Badge>
+        )}
+      </Group>
+      {!r.converged && (
+        <Alert color="yellow" variant="light" p={6} icon={<IconAlertTriangle size={14} />}>
+          <Text size="xs">リアクタンスがここで 0 をまたいで跳んでいます。周波数で自動分割の分割数が変わるためで、共振周波数はこの付近です。</Text>
+        </Alert>
       )}
     </Stack>
   );

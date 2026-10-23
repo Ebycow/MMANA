@@ -361,6 +361,12 @@ fn most_divided_conductor(ap: &AntDef) -> Option<(Vec<usize>, i64)> {
 }
 
 impl Solved {
+    /// Impedance and SWR at the first source, without scanning the patterns.
+    pub fn feed(&self) -> (Complex, f64) {
+        let first = self.engine.solutions[0];
+        (first.impedance.into(), first.swr)
+    }
+
     /// The standard MMANA result: impedance, gain, F/B, patterns, currents.
     /// Fails only when a value of it cannot be represented
     /// ([`CalcError::NotRepresentable`]).

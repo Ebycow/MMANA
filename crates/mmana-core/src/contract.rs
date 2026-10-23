@@ -10,6 +10,7 @@ use utoipa::ToSchema;
 
 use crate::elements::{ElementEdit, ElementOp};
 use crate::optimize::{OptimizeError, OptimizeOutcome, OptimizerSetup, Progress, SetupEdit, SetupOp};
+use crate::resonance::{ResonanceRange, ResonanceSearch};
 use crate::{
     Antenna, AxisRange, CalcError, CalcOptions, CalcResult, FarFieldSample, NearFieldSample, NearFieldSpec, Project,
     PulseLayout, SweepPoint, elements, maa, optimize,
@@ -86,6 +87,17 @@ pub struct NearFieldRequest {
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 pub struct NearFieldResponse {
     pub samples: Vec<NearFieldSample>,
+}
+
+/// The resonance nearest to a start frequency, and the series circuit there.
+#[derive(Debug, Clone, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+pub struct ResonanceRequest {
+    pub project: Project,
+    #[serde(default)]
+    pub options: CalcOptions,
+    #[serde(default)]
+    pub range: ResonanceRange,
 }
 
 /// Element editing: the edits so far, replayed on the antenna as it was when
@@ -197,6 +209,10 @@ pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(SweepResponse { points: crate::sweep_at(&req.project, &req.options, &frequencies)? })
+}
+
+pub fn find_resonance(req: &ResonanceRequest) -> Result<ResonanceSearch, CalcError> {
+    crate::resonance::find_resonance(&req.project, &req.options, &req.range)
 }
 
 pub fn far_field(req: &FarFieldRequest) -> Result<FarFieldResponse, CalcError> {

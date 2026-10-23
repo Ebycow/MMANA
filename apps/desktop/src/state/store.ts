@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, SweepPoint } from '../api/types';
+import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, ResonanceSearch, SweepPoint } from '../api/types';
 import { EngineError, files, transport } from '../api/transport';
 import { defaultSetup } from '../domain/optimize';
 import { defaultOptions, newProject } from '../domain/project';
@@ -20,6 +20,14 @@ export interface SweepState {
   progress: { done: number; total: number } | null;
   /** 中止 was pressed: the sweep ends when the points being calculated arrive. */
   stopping: boolean;
+}
+
+export interface ResonanceState {
+  /** The last search, from the calculation frequency. */
+  search: ResonanceSearch | null;
+  running: boolean;
+  /** The project or options changed since `search` was made. */
+  stale: boolean;
 }
 
 /** A sweep is sent in batches that take about this long, so its points appear as they are done. */
@@ -108,6 +116,7 @@ export interface AppState {
   lastCalcMs: number | null;
 
   sweep: SweepState;
+  resonance: ResonanceState;
   showCurrents: boolean;
   /** The element editor (エレメント編集) is open; it edits a copy of the antenna. */
   elementEditorOpen: boolean;
@@ -135,6 +144,8 @@ export interface AppState {
   setSweepRange: (patch: Partial<Pick<SweepState, 'startMhz' | 'stopMhz' | 'points'>>) => void;
   calculate: () => Promise<void>;
   runSweep: () => Promise<void>;
+  /** Finds the resonance nearest to the calculation frequency. */
+  findResonance: () => Promise<void>;
   stopSweep: () => void;
   save: (saveAs: boolean) => Promise<boolean>;
   setOptimizer: (patch: Partial<OptimizerState>) => void;
@@ -145,7 +156,8 @@ export interface AppState {
   applyTrial: (values: number[]) => Promise<void>;
 }
 
-const sweepAround = (mhz: number): Pick<SweepState, 'startMhz' | 'stopMhz'> => ({
+/** A sweep range of ±2 % around `mhz`, rounded to kHz. */
+export const sweepAround = (mhz: number): Pick<SweepState, 'startMhz' | 'stopMhz'> => ({
   startMhz: Math.round(mhz * 0.98 * 1000) / 1000,
   stopMhz: Math.round(mhz * 1.02 * 1000) / 1000,
 });
@@ -164,6 +176,7 @@ const freshDocument = (project: Project) => ({
   calcError: null,
   calcErrorProject: null,
   sweep: { ...sweepAround(project.antenna.frequencyMhz), points: 21, data: null, stale: false, running: false, progress: null, stopping: false },
+  resonance: { search: null, running: false, stale: false },
   optimizer: freshOptimizer(),
 });
 
@@ -189,6 +202,7 @@ export const useApp = create<AppState>()((set, get) => {
   const staleFlags = () => ({
     resultStale: get().result != null,
     sweep: { ...get().sweep, stale: get().sweep.data != null },
+    resonance: { ...get().resonance, stale: get().resonance.search != null },
   });
 
   /** An optimised antenna and the calculation frequency it left, as one undoable step. */
@@ -310,6 +324,22 @@ export const useApp = create<AppState>()((set, get) => {
         set({ calculating: false });
       }
       if (get().calcQueued) await get().calculate();
+    },
+
+    findResonance: async () => {
+      const { project, options } = get();
+      const gen = generation;
+      set({ resonance: { ...get().resonance, running: true } });
+      try {
+        const search = await transport.findResonance({ project, options });
+        if (gen !== generation) return;
+        // edits made while searching leave it marked stale
+        const stale = get().project !== project || get().options !== options;
+        set({ resonance: { search, running: false, stale }, calcError: null });
+      } catch (e) {
+        if (gen !== generation) return;
+        set({ resonance: { ...get().resonance, running: false }, calcError: toEngineError(e), calcErrorProject: project });
+      }
     },
 
     runSweep: async () => {

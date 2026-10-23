@@ -59,6 +59,7 @@ cargo test --release
 # CLI
 cargo run --release -p mmana-cli -- calc testdata/maa/3EL20.MAA
 cargo run --release -p mmana-cli -- sweep testdata/maa/3EL20.MAA --start 13.9 --stop 14.4 --points 6
+cargo run --release -p mmana-cli -- resonance testdata/maa/3EL20.MAA
 cargo run --release -p mmana-cli -- optimize testdata/maa/3EL20.MAA --setup setup.json -o out.maa
 
 # API サーバー（http://127.0.0.1:8080）
@@ -75,6 +76,7 @@ cargo run --release -p mmana-api
 | POST | `/v1/maa/export` | プロジェクト JSON → `.maa`（`?encoding=shift_jis` 既定 / `utf-8`） |
 | POST | `/v1/calculations` | インピーダンス・SWR・利得・F/B・パターン・電流分布 |
 | POST | `/v1/sweeps` | 周波数特性 |
+| POST | `/v1/resonance` | 共振周波数（給電点のリアクタンスが増えながら 0 になる周波数）と、そこでの直列 RLC の等価回路（L・C・Q・帯域幅） |
 | POST | `/v1/far-field` | 任意方向の遠方界 |
 | POST | `/v1/near-field` | 近傍界（電界・磁界） |
 | POST | `/v1/elements` | エレメント編集（つながったワイヤをエレメントとして、幅・全周・間隔などを変更） |

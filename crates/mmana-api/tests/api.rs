@@ -238,6 +238,18 @@ async fn calculation_errors_name_their_wires() {
 }
 
 #[tokio::test]
+async fn finds_the_resonance() {
+    let parsed = parse("DP20.MAA").await;
+    let (status, _, v) =
+        post_json("/v1/resonance", json!({ "project": parsed["project"], "range": { "startMhz": 13.0 } })).await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let f = v["resonance"]["frequencyMhz"].as_f64().unwrap();
+    assert!((13.5..15.0).contains(&f), "{v}");
+    assert!(v["resonance"]["impedance"]["im"].as_f64().unwrap().abs() < 0.1, "{v}");
+    assert_eq!(v["minMhz"], 6.5);
+}
+
+#[tokio::test]
 async fn field_point_limits_do_not_wrap() {
     let parsed = parse("DP20.MAA").await;
     let axis = |count: i32| json!({ "start": 0.0, "step": 1.0, "count": count });
