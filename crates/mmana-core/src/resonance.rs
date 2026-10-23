@@ -116,9 +116,9 @@ pub struct ResonanceSearch {
 pub struct ResonanceRange {
     /// Where the search starts (MHz); the calculation frequency by default.
     pub start_mhz: Option<f64>,
-    /// The search stays from `minMhz` to `maxMhz`; by default from half the
-    /// start frequency to twice it (the original's limit).
+    /// The lowest frequency searched (MHz); half the start by default (the original's limit).
     pub min_mhz: Option<f64>,
+    /// The highest frequency searched (MHz); twice the start by default (the original's limit).
     pub max_mhz: Option<f64>,
 }
 

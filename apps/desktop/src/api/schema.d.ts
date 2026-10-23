@@ -1113,13 +1113,13 @@ export interface components {
         ResonanceRange: {
             /**
              * Format: double
+             * @description The highest frequency searched (MHz); twice the start by default (the original's limit).
              * @default null
              */
             maxMhz: number | null;
             /**
              * Format: double
-             * @description The search stays from `minMhz` to `maxMhz`; by default from half the
-             *     start frequency to twice it (the original's limit).
+             * @description The lowest frequency searched (MHz); half the start by default (the original's limit).
              * @default null
              */
             minMhz: number | null;

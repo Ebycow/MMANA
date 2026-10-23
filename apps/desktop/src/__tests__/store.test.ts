@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CalcResult, ParsedProject, SweepRequest, SweepResponse } from '../api/types';
+import type { CalcResult, ParsedProject, ResonanceSearch, SweepRequest, SweepResponse } from '../api/types';
 import { files, transport } from '../api/transport';
 import { newProject } from '../domain/project';
 import { useApp } from '../state/store';
@@ -22,6 +22,30 @@ const moveWire = () => useApp.getState().edit((p) => void (p.antenna.wires[0].en
 
 beforeEach(() => useApp.getState().reset());
 afterEach(() => vi.restoreAllMocks());
+
+describe('resonance search', () => {
+  const found = { resonance: null, minMhz: 7, maxMhz: 28, calculations: 6 } as ResonanceSearch;
+
+  it('searches from the calculation frequency and goes stale with an edit', async () => {
+    const spy = vi.spyOn(transport, 'findResonance').mockResolvedValue(found);
+    useApp.getState().setOptions({ frequencyMhz: 14.2 });
+    await useApp.getState().findResonance();
+    expect(spy.mock.calls[0][0].options?.frequencyMhz).toBe(14.2);
+    expect(useApp.getState().resonance).toMatchObject({ search: found, running: false, stale: false });
+    moveWire();
+    expect(useApp.getState().resonance.stale).toBe(true);
+  });
+
+  it('drops a search of the previous document', async () => {
+    const d = deferred<ResonanceSearch>();
+    vi.spyOn(transport, 'findResonance').mockReturnValue(d.promise);
+    const run = useApp.getState().findResonance();
+    useApp.getState().load(parsed('other'), 'other.maa', null);
+    d.resolve(found);
+    await run;
+    expect(useApp.getState().resonance.search).toBeNull();
+  });
+});
 
 describe('sweep staleness', () => {
   it('marks the sweep stale when the antenna or options change', async () => {
