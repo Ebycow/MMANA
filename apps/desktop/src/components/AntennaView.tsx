@@ -16,7 +16,7 @@ import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { EditScene } from './EditController';
 import { GroundGrid } from './GroundGrid';
-import { EditToolbar, stepLabel } from './EditToolbar';
+import { EditToolbar, STEPS, stepLabel } from './EditToolbar';
 import { Panel } from './Panel';
 
 // an unassigned button does nothing in OrbitControls
@@ -90,9 +90,8 @@ export function AntennaView() {
   const box = useMemo(() => bounds(displayWires(antenna)), [antenna]);
   const autoStep = niceStep(box.radius / 25);
   const groundZ = environment.ground === 'freeSpace' ? null : -environment.height;
-  const groundStep = useEditor((s) => s.groundStep);
-  const autoGrid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
-  const grid = useMemo(() => (groundStep == null ? autoGrid : sceneGrid(box, groundZ ?? 0, groundStep)), [autoGrid, box, groundZ, groundStep]);
+  // the grid shows the step snapping uses
+  const grid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
   const frame = useMemo(() => (fitGround && groundZ != null ? reachingGround(box, groundZ) : box), [fitGround, groundZ, box]);
   const currents = useMemo(
     () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),
@@ -198,7 +197,7 @@ export function AntennaView() {
               編集後は再計算すると電流分布を表示します
             </Text>
           )}
-          <SceneLegend grid={grid} autoCell={autoGrid.cell} ground={environment.ground} box={box} />
+          <SceneLegend grid={grid} autoStep={autoStep} ground={environment.ground} box={box} />
         </div>
       </div>
     </Panel>
@@ -250,7 +249,7 @@ const GROUND_FILL: Record<GroundKind, string | null> = { freeSpace: null, perfec
 const metres = (v: number) => `${Number(v.toFixed(3))} m`;
 
 /** What the horizontal grid is, how far apart its lines are and how high the antenna stands. */
-function SceneLegend({ grid, autoCell, ground, box }: { grid: SceneGrid; autoCell: number; ground: GroundKind; box: Bounds }) {
+function SceneLegend({ grid, autoStep, ground, box }: { grid: SceneGrid; autoStep: number; ground: GroundKind; box: Bounds }) {
   const fill = GROUND_FILL[ground];
   // the height setting lifts Z = 0; the lowest wire may stand elsewhere
   const lowest = box.minZ - grid.z;
@@ -267,34 +266,37 @@ function SceneLegend({ grid, autoCell, ground, box }: { grid: SceneGrid; autoCel
           ワイヤーが地面より {metres(-lowest)} 下にあります
         </Text>
       )}
-      <GroundStepMenu grid={grid} autoCell={autoCell} />
+      <GridStepMenu grid={grid} autoStep={autoStep} />
     </div>
   );
 }
 
-const GROUND_STEPS = [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10];
-
-/** The grid spacing in the legend, which opens a choice of spacings. */
-function GroundStepMenu({ grid, autoCell }: { grid: SceneGrid; autoCell: number }) {
-  const groundStep = useEditor((s) => s.groundStep);
+/**
+ * The grid step in the legend, which opens the same choice as the snap
+ * settings: the grid shows the step snapping uses.
+ */
+function GridStepMenu({ grid, autoStep }: { grid: SceneGrid; autoStep: number }) {
+  const step = useEditor((s) => s.step);
+  const gridSnap = useEditor((s) => s.gridSnap);
   const set = useEditor((s) => s.set);
+  const big = Number((grid.section * 10).toPrecision(6));
   return (
     <Menu position="top-start" shadow="md" withinPortal>
       <Menu.Target>
-        <UnstyledButton className="view3d-legend-button num" aria-label="グリッドの間隔を変える">
-          グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）▾
+        <UnstyledButton
+          className="view3d-legend-button num"
+          aria-label="グリッドの間隔を変える"
+          title={`線は ${stepLabel(grid.cell)}・${stepLabel(grid.section)}・${stepLabel(big)} ごと。画面で細かすぎる段は省きます`}
+        >
+          グリッド {stepLabel(grid.cell)}
+          {gridSnap ? '' : '（スナップ オフ）'} ▾
         </UnstyledButton>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Label>地面のグリッドの間隔</Menu.Label>
-        {[null, ...GROUND_STEPS].map((m) => (
-          <Menu.Item
-            key={String(m)}
-            className="num"
-            fw={m === groundStep ? 600 : undefined}
-            onClick={() => set({ groundStep: m })}
-          >
-            {m == null ? `自動（${stepLabel(autoCell)}）` : stepLabel(m)}
+        <Menu.Label>グリッドとスナップの間隔</Menu.Label>
+        {[null, ...STEPS].map((m) => (
+          <Menu.Item key={String(m)} className="num" fw={m === step ? 600 : undefined} onClick={() => set({ step: m })}>
+            {m == null ? `自動（${stepLabel(autoStep)}）` : stepLabel(m)}
           </Menu.Item>
         ))}
       </Menu.Dropdown>
