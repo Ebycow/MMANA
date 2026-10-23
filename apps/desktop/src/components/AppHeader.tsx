@@ -10,6 +10,7 @@ import {
   IconFile,
   IconFileImport,
   IconFolderOpen,
+  IconInfoCircle,
   IconKeyboard,
   IconListDetails,
   IconMoon,
@@ -17,10 +18,12 @@ import {
   IconSun,
   IconTarget,
 } from '@tabler/icons-react';
+import { useState } from 'react';
 import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
 import { useApp } from '../state/store';
+import { AboutModal } from './AboutModal';
 import { KeyHint } from './InputSettings';
 
 export interface FileActions {
@@ -60,6 +63,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const redoKey = useKeyText('redo');
   const { colorScheme, setColorScheme } = useMantineColorScheme();
   const dark = colorScheme === 'dark';
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   return (
     <Group h="100%" px="md" gap="sm" wrap="nowrap">
@@ -130,6 +134,18 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
+      <Menu position="bottom-start" shadow="md" width={240}>
+        <Menu.Target>
+          <Button variant="subtle" color="gray" rightSection={<IconChevronDown size={14} />}>
+            ヘルプ
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconInfoCircle size={14} />} onClick={() => setAboutOpen(true)}>
+            MMANAについて…
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
       <Group gap={2} wrap="nowrap">
         <Tooltip label={undoKey ? `元に戻す (${undoKey})` : '元に戻す'}>
           <ActionIcon aria-label="元に戻す" disabled={!canUndo} onClick={undo}>
@@ -179,6 +195,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           {dark ? <IconSun size={17} /> : <IconMoon size={17} />}
         </ActionIcon>
       </Tooltip>
+      <AboutModal opened={aboutOpen} onClose={() => setAboutOpen(false)} />
     </Group>
   );
 }
