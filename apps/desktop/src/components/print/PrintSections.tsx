@@ -101,19 +101,6 @@ function Title({ d }: { d: PrintData }) {
 
 // -------------------------------------------------------------- summary ---
 
-function Tile({ label, value, unit, sub }: { label: string; value: string; unit?: string; sub?: string }) {
-  return (
-    <div className="p-tile">
-      <div className="p-tile-label">{label}</div>
-      <div className="p-tile-value">
-        {value}
-        {unit && <span className="p-tile-unit"> {unit}</span>}
-      </div>
-      {sub && <div className="p-tile-sub">{sub}</div>}
-    </div>
-  );
-}
-
 /** The lines MMANA printed under the vertical pattern (`CRes::DrawRes`). */
 function mmanaLines(r: CalcResult, p: Project): string[] {
   const env = p.environment;
@@ -137,60 +124,86 @@ function mmanaLines(r: CalcResult, p: Project): string[] {
   return lines;
 }
 
-function Conditions({ d }: { d: PrintData }) {
+/** A row of the summary: label and value pairs, or one pair across the row. */
+interface SummaryRow {
+  pairs: [string, string][];
+  /** A row of results, printed bolder than the conditions. */
+  result?: boolean;
+}
+
+/** One summary row, in mm. */
+const SUMMARY_ROW = 5.4;
+
+function summaryRows(d: PrintData): SummaryRow[] {
   const { antenna: a, environment: env } = d.project;
+  const r = d.result;
+  const ref = env.swrReference;
   const seg = a.autoSegmentation;
-  const stack = a.stack.horizontal * a.stack.vertical > 1 ? `横 ${a.stack.horizontal} × 縦 ${a.stack.vertical}` : null;
-  const rows: [string, string][] = [
-    ['大地', GROUNDS[env.ground]],
-    ...(env.ground === 'freeSpace' ? [] : ([['地上高', `${env.height} m`]] as [string, string][])),
-    ['線材', MATERIALS[env.wireMaterial]],
-    ['自動分割', `DM1 ${seg.dm1}・DM2 ${seg.dm2}・SC ${seg.sc}・EC ${seg.ec}`],
-    ['ワイヤー', `${a.wires.length} 本${d.result ? `・パルス ${d.result.pulseCount}` : ''}`],
-    ...(stack ? ([['スタック', stack]] as [string, string][]) : []),
-  ];
-  return (
-    <dl className="p-kv">
-      {rows.map(([k, v]) => (
-        <div key={k}>
-          <dt>{k}</dt>
-          <dd>{v}</dd>
-        </div>
-      ))}
-    </dl>
+  const res = d.resonance.stale ? null : d.resonance.search?.resonance;
+  const rows: SummaryRow[] = r
+    ? [
+        {
+          result: true,
+          pairs: [
+            ['利得', `${db(r.gainDbi)} dBi（${db(r.gainDbi - 2.15)} dBd）`],
+            ['F/B 比', `${r.fbDb.toFixed(2)} dB`],
+            ['打ち上げ角', `${r.elevationDeg.toFixed(1)}°`],
+          ],
+        },
+        {
+          result: true,
+          pairs: [
+            ['インピーダンス', `${z(r.impedance.re, r.impedance.im)} Ω`],
+            // the SWR against 600 Ω stays with MMANA's lines under the vertical pattern
+            ['SWR', `${swrText(r.swr)}（${ref.x === 0 ? ref.r : z(ref.r, ref.x)} Ω）`],
+            ['周波数', `${r.frequencyMhz.toFixed(3)} MHz`],
+          ],
+        },
+      ]
+    : [{ pairs: [['計算結果', d.calcError ? `計算できませんでした：${d.calcError.title}（${d.calcError.detail}）` : 'まだ計算していません']] }];
+  rows.push(
+    {
+      pairs: [
+        ['大地', GROUNDS[env.ground]],
+        ['地上高', env.ground === 'freeSpace' ? '—' : `${env.height} m`],
+        ['線材', MATERIALS[env.wireMaterial]],
+      ],
+    },
+    {
+      pairs: [
+        ['ワイヤー', `${a.wires.length} 本${r ? `・パルス ${r.pulseCount}` : ''}`],
+        ['スタック', a.stack.horizontal * a.stack.vertical > 1 ? `横 ${a.stack.horizontal} × 縦 ${a.stack.vertical}` : 'なし'],
+        ['自動分割', `DM1 ${seg.dm1}・DM2 ${seg.dm2}・SC ${seg.sc}・EC ${seg.ec}`],
+      ],
+    },
   );
+  if (res) {
+    const c = res.circuit;
+    const circuit = c ? `・Q ${c.q.toFixed(1)}・帯域幅 ${c.bandwidthKhz.toFixed(0)} kHz・L ${c.inductanceUh.toFixed(3)} µH・C ${c.capacitancePf.toFixed(2)} pF` : '';
+    rows.push({ pairs: [['共振', `${res.frequencyMhz.toFixed(4)} MHz・Z ${z(res.impedance.re, res.impedance.im)} Ω・SWR ${swrText(res.swr)}${circuit}`]] });
+  }
+  return rows;
 }
 
 function Summary({ d }: { d: PrintData }) {
-  const r = d.result;
-  const ref = d.project.environment.swrReference;
-  const search = d.resonance.search && !d.resonance.stale ? d.resonance.search : null;
-  const res = search?.resonance;
   return (
     <div>
-      <Heading note={d.resultStale && r ? 'アンテナを変更した後、再計算していません' : undefined}>計算結果</Heading>
-      {!r ? (
-        <div className="p-empty">{d.calcError ? `計算できませんでした：${d.calcError.title}（${d.calcError.detail}）` : 'まだ計算していません'}</div>
-      ) : (
-        <div className={d.resultStale ? 'p-stale' : undefined}>
-          <div className="p-tiles">
-            <Tile label="利得" value={db(r.gainDbi)} unit="dBi" sub={`${db(r.gainDbi - 2.15)} dBd`} />
-            <Tile label="F/B 比" value={r.fbDb.toFixed(2)} unit="dB" />
-            <Tile label={`SWR（${ref.x === 0 ? ref.r : z(ref.r, ref.x)} Ω）`} value={swrText(r.swr)} sub={`600 Ω で ${swrText(swrAgainst(r.impedance, 600))}`} />
-            <Tile label="インピーダンス" value={z(r.impedance.re, r.impedance.im)} unit="Ω" />
-            <Tile label="打ち上げ角" value={r.elevationDeg.toFixed(1)} unit="°" />
-            <Tile label="周波数" value={r.frequencyMhz.toFixed(3)} unit="MHz" sub={`λ = ${r.wavelengthM.toFixed(3)} m`} />
-          </div>
-        </div>
-      )}
-      <Conditions d={d} />
-      {res && (
-        <div className="p-resonance">
-          共振 {res.frequencyMhz.toFixed(4)} MHz・Z {z(res.impedance.re, res.impedance.im)} Ω・SWR {swrText(res.swr)}
-          {res.circuit &&
-            `・Q ${res.circuit.q.toFixed(1)}・帯域幅 ${res.circuit.bandwidthKhz.toFixed(0)} kHz・L ${res.circuit.inductanceUh.toFixed(3)} µH・C ${res.circuit.capacitancePf.toFixed(2)} pF`}
-        </div>
-      )}
+      <Heading note={d.resultStale && d.result ? 'アンテナを変更した後、再計算していません' : undefined}>計算結果</Heading>
+      <table className="p-summary">
+        <Widths shares={[11.5, 24.5, 7.5, 22, 8.5, 26]} />
+        <tbody>
+          {summaryRows(d).map((row, i) => (
+            <tr key={i} className={row.result ? `p-result${d.resultStale ? ' p-stale' : ''}` : undefined}>
+              {row.pairs.map(([k, v]) => [
+                <th key={`${k}-k`}>{k}</th>,
+                <td key={`${k}-v`} colSpan={row.pairs.length === 1 ? 5 : undefined}>
+                  {v}
+                </td>,
+              ])}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -199,9 +212,20 @@ function Summary({ d }: { d: PrintData }) {
 
 /** The horizontal pattern's diameter, in mm. */
 const POLAR = 84;
+/** What a half-circle pattern adds to half its width: the room for its labels. */
+const POLAR_PAD = 7;
+
+/** A line of MMANA's result under the vertical pattern, and the box's padding, in mm. */
+const MMANA_LINE = 3.55;
+const MMANA_PAD = 3;
 
 function Patterns({ d, r }: { d: PrintData; r: CalcResult }) {
   const p = r.patterns;
+  const lines = mmanaLines(r, d.project);
+  // the vertical pattern (half as high as wide, plus its label margins)
+  // gives way to the result lines below it, beside the horizontal pattern
+  const below = lines.length * MMANA_LINE + MMANA_PAD;
+  const verticalSize = Math.min(WIDTH - POLAR - 6, 2 * (POLAR - POLAR_PAD - 2 - below));
   return (
     <div>
       <Heading note={`最大利得 ${db(r.gainDbi)} dBi を 0 dB として表示・目盛 ${d.polarScale === 'mmana' ? 'MMANA' : 'dB リニア'}`}>指向性図</Heading>
@@ -223,10 +247,10 @@ function Patterns({ d, r }: { d: PrintData; r: CalcResult }) {
         <div className="p-patterns-side">
           <figure>
             <figcaption>垂直面（X–Z 面・右が前方）</figcaption>
-            <PolarSvg kind="vertical" cut={p.vertical} maxDb={r.gainDbi} scale={d.polarScale} size={WIDTH - POLAR - 6} />
+            <PolarSvg kind="vertical" cut={p.vertical} maxDb={r.gainDbi} scale={d.polarScale} size={verticalSize} />
           </figure>
           {/* where MMANA printed its result, under the vertical pattern */}
-          <pre className="p-mmana">{mmanaLines(r, d.project).join('\n')}</pre>
+          <pre className="p-mmana">{lines.join('\n')}</pre>
         </div>
       </div>
     </div>
@@ -582,8 +606,7 @@ export function unavailable(id: SectionId, d: PrintData): string | null {
 export function printSections(d: PrintData, chosen: Record<SectionId, boolean>): PrintSection[] {
   const on = (id: SectionId) => chosen[id] && unavailable(id, d) == null;
   const out: PrintSection[] = [{ block: { key: 'title', height: 18 + commentLines(d) * 4.2 }, render: () => <Title d={d} /> }];
-  const resonance = d.resonance.search?.resonance && !d.resonance.stale ? 6 : 0;
-  if (on('summary')) out.push({ block: { key: 'summary', height: HEADING + (d.result ? 18 : 7) + 6 + resonance }, render: () => <Summary d={d} /> });
+  if (on('summary')) out.push({ block: { key: 'summary', height: HEADING + summaryRows(d).length * SUMMARY_ROW + 1 }, render: () => <Summary d={d} /> });
   if (on('patterns')) out.push({ block: { key: 'patterns', height: HEADING + 5 + 4 + POLAR }, render: () => <Patterns d={d} r={d.result!} /> });
   if (on('shape')) out.push({ block: { key: 'shape', height: HEADING + shapeOf(d).layout.height }, render: () => <Shape d={d} /> });
   if (on('warnings')) {

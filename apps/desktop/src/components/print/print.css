@@ -147,39 +147,32 @@
 }
 
 /* summary */
-.p-tiles {
-  display: grid;
-  grid-template-columns: 0.9fr 0.9fr 1fr 1.6fr 0.9fr 1fr;
-  height: 16mm;
-  gap: 1.8mm;
+.p-summary {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 8pt;
 }
-.p-tile {
-  border: 0.25mm solid var(--p-grid);
-  border-radius: 1.5mm;
-  background: var(--p-fill);
-  padding: 1mm 2mm;
+.p-summary th,
+.p-summary td {
+  height: 5.4mm;
+  box-sizing: border-box;
+  padding: 0 1.5mm;
+  border-bottom: 0.15mm solid var(--p-rule);
+  text-align: left;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
-.p-tile-label {
-  font-size: 7pt;
+.p-summary th {
+  background: var(--p-fill);
   color: var(--p-muted);
-  white-space: nowrap;
-}
-.p-tile-value {
-  font-size: 12.5pt;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
-}
-.p-tile-unit {
-  font-size: 7.5pt;
   font-weight: 400;
-  color: var(--p-muted);
+  font-size: 7pt;
 }
-.p-tile-sub {
-  font-size: 6.5pt;
-  color: var(--p-muted);
-  white-space: nowrap;
+.p-summary .p-result td {
+  font-size: 9pt;
+  font-weight: 700;
 }
 .p-mmana {
   margin: 0;
@@ -192,33 +185,6 @@
   white-space: pre;
   overflow: hidden;
 }
-.p-kv {
-  margin: 2mm 0 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6mm 6mm;
-  font-size: 7.5pt;
-}
-.p-kv div {
-  display: flex;
-  gap: 2mm;
-  min-width: 0;
-}
-.p-kv dt {
-  color: var(--p-muted);
-  flex-shrink: 0;
-}
-.p-kv dd {
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.p-resonance {
-  margin-top: 1.5mm;
-  font-size: 8pt;
-}
-
 /* figures */
 .p-figure {
   display: block;
