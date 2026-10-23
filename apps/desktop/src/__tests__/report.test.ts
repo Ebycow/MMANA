@@ -25,6 +25,7 @@ const sources = (patch: Partial<ReportSources> = {}): ReportSources => ({
   calcError: null,
   diagnostics: [],
   messages: [],
+  history: [],
   includeAntenna: true,
   ...patch,
 });
@@ -79,6 +80,14 @@ describe('the bug report', () => {
     const json = text.match(/```json\n([\s\S]*?)\n```/)?.[1];
     expect(JSON.parse(json!) as Project).toEqual(project);
     expect(bugReport(sources({ includeAntenna: false }))).not.toContain('```json');
+  });
+
+  it('lists the last steps that led to the antenna', () => {
+    const history = Array.from({ length: 25 }, (_, i) => `step ${i + 1}`);
+    const text = bugReport(sources({ history }));
+    expect(text).toContain('### 操作の履歴（新しい 20 件まで）\n\n- step 6\n');
+    expect(text).toContain('- step 25\n');
+    expect(text).not.toContain('- step 5\n');
   });
 
   it('says none for empty sections', () => {

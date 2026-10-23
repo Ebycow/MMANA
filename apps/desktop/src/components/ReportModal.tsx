@@ -22,6 +22,7 @@ function snapshot() {
     calcError,
     diagnostics: collectDiagnostics({ wires: s.project.antenna.wires, error: calcError, result: current }),
     messages: useMessageLog.getState().messages,
+    history: s.past.map((e) => e.label),
   };
 }
 

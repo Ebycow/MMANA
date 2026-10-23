@@ -21,6 +21,8 @@ export interface ReportSources {
   diagnostics: Diagnostic[];
   /** The messages shown lately, oldest first. */
   messages: readonly LoggedMessage[];
+  /** The names of the steps that led to the antenna as it is, oldest first. */
+  history: readonly string[];
   includeAntenna: boolean;
 }
 
@@ -28,6 +30,9 @@ const SEVERITY: Record<Severity, string> = { error: 'エラー', warning: '警�
 const LEVEL: Record<MessageLevel, string> = { error: 'エラー', warning: '注意', info: 'お知らせ' };
 
 const z = (re: number, im: number) => `${re.toFixed(2)} ${im < 0 ? '−' : '+'} j${Math.abs(im).toFixed(2)}`;
+/** Enough steps to retrace what led to a problem, few enough to read. */
+const HISTORY_SHOWN = 20;
+
 const pad = (n: number) => String(n).padStart(2, '0');
 const time = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 /** Indented JSON with each innermost object or array on one line, so a wire takes a few lines, not twenty. */
@@ -67,6 +72,7 @@ export function bugReport(s: ReportSources): string {
     `### 環境\n\n${list([s.version, s.userAgent])}`,
     `### 計算結果\n\n${resultLines(s)}`,
     `### 警告\n\n${list(s.diagnostics.map((d) => `${SEVERITY[d.severity]}：${d.message}`))}`,
+    `### 操作の履歴（新しい ${HISTORY_SHOWN} 件まで）\n\n${list(s.history.slice(-HISTORY_SHOWN))}`,
     `### 直近のメッセージ\n\n${list(s.messages.map((m) => `${time(m.at)} [${LEVEL[m.level]}] ${[m.title, m.detail.replace(/\s*\n\s*/g, ' ')].filter(Boolean).join('：')}`))}`,
   ];
   if (s.includeAntenna) {
