@@ -1,4 +1,4 @@
-import { Group, Text } from '@mantine/core';
+import { Group, Text, Tooltip } from '@mantine/core';
 import { transport } from '../api/transport';
 import { useApp } from '../state/store';
 
@@ -9,7 +9,7 @@ export function StatusBar() {
   const result = useApp((s) => s.result);
   const ms = useApp((s) => s.lastCalcMs);
   const calculating = useApp((s) => s.calculating);
-  const engine = transport.kind === 'tauri' ? 'ローカルエンジン' : 'HTTP API';
+  const engine = { tauri: 'ローカルエンジン', wasm: 'ブラウザ内エンジン', http: 'HTTP API' }[transport.kind];
   return (
     <Group h="100%" px="md" gap="lg" wrap="nowrap">
       <Text size="xs" c="dimmed">
@@ -24,9 +24,16 @@ export function StatusBar() {
       <Text size="xs" c="dimmed" className="num">
         {calculating ? '計算中…' : ms != null ? `計算時間 ${(ms / 1000).toFixed(2)} 秒` : ''}
       </Text>
-      <Text size="xs" c="dimmed">
-        {engine}
-      </Text>
+      <Tooltip
+        label="計算はこのブラウザの中で行います。大きなアンテナや最適化は、複数のコアを使うデスクトップ版のほうが速く動きます"
+        multiline
+        w={300}
+        disabled={transport.kind !== 'wasm'}
+      >
+        <Text size="xs" c="dimmed">
+          {engine}
+        </Text>
+      </Tooltip>
     </Group>
   );
 }

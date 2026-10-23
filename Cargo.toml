@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/mmana-core", "crates/mmana-api", "crates/mmana-cli", "apps/desktop/src-tauri"]
+members = ["crates/mmana-core", "crates/mmana-api", "crates/mmana-cli", "crates/mmana-wasm", "apps/desktop/src-tauri"]
 # The desktop crate embeds apps/desktop/dist; build it with `npm run tauri build`
 # (or pass --workspace after `npm run build`).
-default-members = ["crates/mmana-core", "crates/mmana-api", "crates/mmana-cli"]
+default-members = ["crates/mmana-core", "crates/mmana-api", "crates/mmana-cli", "crates/mmana-wasm"]
 
 [workspace.package]
 version = "0.2.0"

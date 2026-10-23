@@ -3,3 +3,5 @@ dist
 openapi.json
 src-tauri/gen
 src-tauri/target
+web/engine
+dist-web

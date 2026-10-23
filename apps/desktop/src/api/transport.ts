@@ -1,5 +1,6 @@
-// One interface for both back ends: Tauri commands in the desktop app, the
-// HTTP API (crates/mmana-api) when the UI runs in a browser.
+// One interface for every back end: Tauri commands in the desktop app, the
+// wasm engine (crates/mmana-wasm) in the browser build, the HTTP API
+// (crates/mmana-api) when the UI is served by `npm run dev`.
 import type {
   AppliedTrial,
   ApplyTrialRequest,
@@ -22,6 +23,7 @@ import type {
   SweepRequest,
   SweepResponse,
 } from './types';
+import { EngineWorker } from './wasmEngine';
 
 /** Error raised by either back end; mirrors the API's problem+json body. */
 export class EngineError extends Error {
@@ -35,7 +37,7 @@ export class EngineError extends Error {
 }
 
 export interface Transport {
-  readonly kind: 'tauri' | 'http';
+  readonly kind: 'tauri' | 'http' | 'wasm';
   parseMaa(bytes: Uint8Array): Promise<ParsedProject>;
   calculate(req: CalculationRequest): Promise<CalcResult>;
   /** Where the pulses lie, without solving (for placing sources and loads). */
@@ -45,9 +47,9 @@ export interface Transport {
   nearField(req: NearFieldRequest): Promise<NearFieldResponse>;
   editElements(req: ElementEditRequest): Promise<ElementEdit>;
   /**
-   * Runs an optimisation. The desktop app reports calculations as they run
-   * (the improving ones always, the others now and then); over HTTP only the
-   * outcome arrives.
+   * Runs an optimisation. The desktop app and the wasm engine report
+   * calculations as they run (the improving ones always, the others now and
+   * then); over HTTP only the outcome arrives.
    */
   optimize(req: OptimizeRequest, onProgress: (p: Progress) => void): Promise<OptimizeOutcome>;
   /** Whether a running optimisation can be stopped (it then returns its best so far). */
@@ -189,7 +191,7 @@ function download(blob: Blob, name: string) {
   URL.revokeObjectURL(a.href);
 }
 
-export function browserFiles(transport: Transport, baseUrl: string): Files {
+export function browserFiles(transport: Transport, exportMaa: (project: Project) => Promise<Blob>): Files {
   return {
     open: () =>
       new Promise((resolve, reject) => {
@@ -213,18 +215,9 @@ export function browserFiles(transport: Transport, baseUrl: string): Files {
       }),
     async save(project, _path, suggestedName) {
       const asJson = suggestedName.toLowerCase().endsWith('.json');
-      let blob: Blob;
-      if (asJson) {
-        blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
-      } else {
-        const res = await fetch(`${baseUrl}/v1/maa/export`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify(project),
-        });
-        if (!res.ok) throw toEngineError(await res.json());
-        blob = await res.blob();
-      }
+      const blob = asJson
+        ? new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' })
+        : await exportMaa(project);
       download(blob, suggestedName);
       return { path: null };
     },
@@ -235,9 +228,103 @@ export function browserFiles(transport: Transport, baseUrl: string): Files {
   };
 }
 
+function httpExportMaa(baseUrl: string) {
+  return async (project: Project): Promise<Blob> => {
+    const res = await fetch(`${baseUrl}/v1/maa/export`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(project),
+    });
+    if (!res.ok) throw toEngineError(await res.json());
+    return res.blob();
+  };
+}
+
+// ----------------------------------------------------------------- wasm ---
+
+const engine = new EngineWorker();
+/** Optimisations get a worker of their own, so the UI can calculate meanwhile. */
+const optimizerEngine = new EngineWorker();
+let cancelOptimization: (() => void) | null = null;
+
+async function wasmCall<T>(op: string, request: unknown): Promise<T> {
+  try {
+    const r = await engine.send({ kind: 'call', op, request: JSON.stringify(request) });
+    return JSON.parse((r as { result: string }).result) as T;
+  } catch (e) {
+    throw toEngineError(e);
+  }
+}
+
+export const wasmTransport: Transport = {
+  kind: 'wasm',
+  async parseMaa(bytes) {
+    try {
+      const r = await engine.send({ kind: 'parseMaa', bytes });
+      return JSON.parse((r as { result: string }).result) as ParsedProject;
+    } catch (e) {
+      throw toEngineError(e);
+    }
+  },
+  calculate: (req) => wasmCall('calculate', req),
+  pulseLayout: (req) => wasmCall('pulseLayout', req),
+  sweep: (req) => wasmCall('sweep', req),
+  farField: (req) => wasmCall('farField', req),
+  nearField: (req) => wasmCall('nearField', req),
+  editElements: (req) => wasmCall('editElements', req),
+  async optimize(req, onProgress) {
+    // revoking this URL tells the worker to stop with its best so far; a
+    // browser where the worker cannot read it loses the run instead
+    const cancelUrl = URL.createObjectURL(new Blob());
+    let cancellable: boolean | null = null;
+    let cancelled = false;
+    const cancel = () => {
+      if (!cancelled || cancellable === null) return;
+      if (cancellable) URL.revokeObjectURL(cancelUrl);
+      else optimizerEngine.stop({ type: 'cancelled', title: '中止しました', detail: 'このブラウザでは途中の結果を残せません' });
+    };
+    cancelOptimization = () => {
+      cancelled = true;
+      cancel();
+    };
+    try {
+      const r = await optimizerEngine.send({ kind: 'optimize', request: JSON.stringify(req), cancelUrl }, (ev) => {
+        if ('progress' in ev) onProgress(JSON.parse(ev.progress) as Progress);
+        else if ('cancellable' in ev) {
+          cancellable = ev.cancellable;
+          cancel();
+        }
+      });
+      return JSON.parse((r as { result: string }).result) as OptimizeOutcome;
+    } catch (e) {
+      throw toEngineError(e);
+    } finally {
+      cancelOptimization = null;
+      URL.revokeObjectURL(cancelUrl);
+    }
+  },
+  canCancelOptimize: true,
+  cancelOptimize: async () => cancelOptimization?.(),
+  editOptimizerSetup: (req) => wasmCall('editOptimizerSetup', req),
+  applyTrial: (req) => wasmCall('applyTrial', req),
+};
+
+async function wasmExportMaa(project: Project): Promise<Blob> {
+  try {
+    const r = await engine.send({ kind: 'exportMaa', project: JSON.stringify(project) });
+    return new Blob([(r as { bytes: Uint8Array }).bytes as BlobPart], { type: 'application/octet-stream' });
+  } catch (e) {
+    throw toEngineError(e);
+  }
+}
+
 // ------------------------------------------------------------- selection ---
 
 const API_URL = (import.meta.env.VITE_MMANA_API as string | undefined) ?? 'http://127.0.0.1:8080';
+/** `vite --mode web`: the static build for GitHub Pages, with the engine in wasm. */
+const WEB = import.meta.env.MODE === 'web';
 
-export const transport: Transport = isTauri() ? tauriTransport : httpTransport(API_URL);
-export const files: Files = isTauri() ? tauriFiles : browserFiles(transport, API_URL);
+export const transport: Transport = isTauri() ? tauriTransport : WEB ? wasmTransport : httpTransport(API_URL);
+export const files: Files = isTauri()
+  ? tauriFiles
+  : browserFiles(transport, WEB ? wasmExportMaa : httpExportMaa(API_URL));

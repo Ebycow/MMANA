@@ -63,11 +63,33 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # The browser build (GitHub Pages). On the golden platform the wasm engine
+  # must give the native engine's results bit for bit.
   wasm:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo build -p mmana-core --target wasm32-unknown-unknown --release
+      - uses: Swatinem/rust-cache@v2
+      # the CLI must be the version of the wasm-bindgen crate in Cargo.lock
+      - id: wasm-bindgen
+        run: echo "version=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen@${{ steps.wasm-bindgen.outputs.version }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - name: Build the browser version
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npm run build:web
+      - run: cargo build --release -p mmana-cli
+      - name: Compare the wasm and native engines
+        working-directory: apps/desktop
+        run: npm run test:wasm
