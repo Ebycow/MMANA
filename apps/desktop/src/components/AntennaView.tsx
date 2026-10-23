@@ -1,4 +1,4 @@
-import { GizmoHelper, GizmoViewport, Grid, Line, OrbitControls } from '@react-three/drei';
+import { GizmoHelper, GizmoViewport, Grid, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
 import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
 import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
@@ -176,7 +176,7 @@ export function AntennaView() {
               編集後は再計算すると電流分布を表示します
             </Text>
           )}
-          <SceneLegend grid={grid} ground={environment.ground} />
+          <SceneLegend grid={grid} ground={environment.ground} box={box} />
         </div>
       </div>
     </Panel>
@@ -225,13 +225,29 @@ type GroundKind = Project['environment']['ground'];
 const GROUND_LABEL: Record<GroundKind, string> = { freeSpace: '自由空間（Z = 0 の面）', perfect: '完全導体の大地', real: '実在大地' };
 const GROUND_FILL: Record<GroundKind, string | null> = { freeSpace: null, perfect: '--view3d-perfect-ground', real: '--view3d-real-ground' };
 
-/** What the horizontal grid is and how far apart its lines are. */
-function SceneLegend({ grid, ground }: { grid: SceneGrid; ground: GroundKind }) {
+const metres = (v: number) => `${Number(v.toFixed(3))} m`;
+
+/** What the horizontal grid is, how far apart its lines are and how high the antenna stands. */
+function SceneLegend({ grid, ground, box }: { grid: SceneGrid; ground: GroundKind; box: Bounds }) {
   const fill = GROUND_FILL[ground];
+  // the height setting lifts Z = 0; the lowest wire may stand elsewhere
+  const lowest = box.minZ - grid.z;
   return (
     <div className="num">
-      {fill && <span className="view3d-ground-swatch" style={{ background: `var(${fill})` }} />}
-      {GROUND_LABEL[ground]} ・ グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
+      {fill && (
+        <div>
+          地上高 {metres(-grid.z)}（Z = 0 の高さ）{Math.abs(box.minZ) > 1e-9 && lowest >= 0 && ` ・ 最も低い点 ${metres(lowest)}`}
+        </div>
+      )}
+      {fill && lowest < -1e-9 && (
+        <Text size="xs" c="red">
+          ワイヤーが地面より {metres(-lowest)} 下にあります
+        </Text>
+      )}
+      <div>
+        {fill && <span className="view3d-ground-swatch" style={{ background: `var(${fill})` }} />}
+        {GROUND_LABEL[ground]} ・ グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
+      </div>
     </div>
   );
 }
@@ -276,7 +292,7 @@ function Scene({ wires, box, currents, preset, scheme, grid, ground, feeds, offs
   );
 
   const colors = useMemo(
-    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section') }),
+    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section'), dimension: cssVar('--text-secondary') }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scheme],
   );
@@ -366,6 +382,7 @@ function Scene({ wires, box, currents, preset, scheme, grid, ground, feeds, offs
             <meshBasicMaterial color={groundColor} transparent opacity={0.28} depthWrite={false} side={DoubleSide} />
           </mesh>
           <Line points={groundEdge} color={colors.section} lineWidth={1.2} raycast={() => null} />
+          <HeightDimension at={box.center} groundZ={g.z} tick={box.radius * 0.06} color={colors.dimension} />
         </>
       )}
 
@@ -416,6 +433,31 @@ function Scene({ wires, box, currents, preset, scheme, grid, ground, feeds, offs
       <GizmoHelper alignment="bottom-right" margin={[56, 56]} onUpdate={() => invalidate()}>
         <GizmoViewport axisColors={['#e34948', '#1baf7a', '#2a78d6']} labelColor="#ffffff" />
       </GizmoHelper>
+    </>
+  );
+}
+
+/** The height setting as a dimension from the ground up to Z = 0, below the middle of the antenna. */
+function HeightDimension({ at, groundZ, tick, color }: { at: Point3; groundZ: number; tick: number; color: string }) {
+  // the label stays near the antenna, where the view is usually framed
+  const label = tick * 8;
+  // a fixed parent: drei's default one changes once events connect, remounting the label mid-render
+  const gl = useThree((s) => s.gl);
+  const portal = useMemo(() => ({ current: gl.domElement.parentElement as HTMLElement }), [gl]);
+  if (groundZ >= 0) return null;
+  const { x, y } = at;
+  const bar = (z: number): [number, number, number][] => [
+    [x - tick, y, z],
+    [x + tick, y, z],
+  ];
+  return (
+    <>
+      <Line points={[[x, y, groundZ], [x, y, 0]]} color={color} lineWidth={1} dashed dashSize={-groundZ / 40} gapSize={-groundZ / 60} raycast={() => null} />
+      <Line points={bar(groundZ)} color={color} lineWidth={1.5} raycast={() => null} />
+      <Line points={bar(0)} color={color} lineWidth={1.5} raycast={() => null} />
+      <Html portal={portal} position={[x, y, Math.max(groundZ / 2, -label)]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
+        <div className="view3d-dim-label num">地上高 {metres(-groundZ)}</div>
+      </Html>
     </>
   );
 }

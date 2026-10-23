@@ -350,6 +350,15 @@ tr.selected .row-actions {
   vertical-align: -1px;
   opacity: 0.8;
 }
+.view3d-dim-label {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+}
 .view3d-box {
   position: absolute;
   border: 1px dashed var(--series-1);
