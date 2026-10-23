@@ -1,4 +1,4 @@
-# MMMANA — MMANA の Rust 移植
+# MMANA — Rust 移植
 
 JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）の計算エンジンを Rust に移植し、
 デスクトップアプリ・ブラウザ・HTTP API・CLI から使えるようにしたものです。
