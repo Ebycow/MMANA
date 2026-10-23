@@ -2205,6 +2205,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mmana-measure"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "mmana-core",
+]
+
+[[package]]
 name = "mmana-wasm"
 version = "0.2.0"
 dependencies = [
