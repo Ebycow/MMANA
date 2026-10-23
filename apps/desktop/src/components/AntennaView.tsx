@@ -2,8 +2,8 @@ import { GizmoHelper, GizmoViewport, Grid, Html, Line, OrbitControls } from '@re
 import { Canvas, useThree } from '@react-three/fiber';
 import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
 import { IconArrowAutofitHeight, IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Color, DoubleSide, MOUSE, Vector3, type Material, type Mesh } from 'three';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Color, DoubleSide, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
 import type { Point3, Project } from '../api/types';
@@ -14,7 +14,7 @@ import { add, niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
-import { EditScene } from './EditController';
+import { EditScene, gridBehindWires } from './EditController';
 import { EditToolbar, stepLabel } from './EditToolbar';
 import { Panel } from './Panel';
 
@@ -318,11 +318,6 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
     [scheme],
   );
   const ramp = scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT;
-  // the Z = 0 grid must not hide the drawing grid lying in the same plane
-  const gridMesh = useRef<Mesh>(null);
-  useLayoutEffect(() => {
-    if (gridMesh.current) (gridMesh.current.material as Material).depthWrite = false;
-  }, []);
   const fill = GROUND_FILL[ground];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const groundColor = useMemo(() => (fill ? cssVar(fill) : null), [fill, scheme]);
@@ -387,7 +382,7 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
 
       {/* the ground (real / perfect ground) or the Z = 0 plane; lines on round coordinates, fixed in place */}
       <Grid
-        ref={gridMesh}
+        ref={gridBehindWires}
         position={[grid.center.x, grid.center.y, grid.z]}
         rotation={[Math.PI / 2, 0, 0]}
         args={[grid.half * 2, grid.half * 2]}

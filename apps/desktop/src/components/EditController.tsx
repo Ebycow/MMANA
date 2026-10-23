@@ -10,7 +10,7 @@
 import { Grid, Html, Line, TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
-import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3 } from 'three';
+import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3, type Material, type Mesh } from 'three';
 import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 import type { Point3, PulsePoint, Wire } from '../api/types';
 import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
@@ -768,6 +768,17 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
   );
 }
 
+/**
+ * A callback ref for a grid that shares its plane with wires: the grid is
+ * pushed back in depth so the wires lying in it draw over its lines, and
+ * writes no depth so a second grid in the same plane is not hidden by it.
+ */
+export function gridBehindWires(mesh: Mesh | null) {
+  if (!mesh) return;
+  const m = mesh.material as Material;
+  Object.assign(m, { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, depthWrite: false });
+}
+
 /** The shape being drawn, the snap marker and the grid of the drawing plane. */
 function DrawPreview({ offset, step, radius, center: middle }: { offset: Point3; step: number; radius: number; center: Point3 }) {
   const tool = useEditor((s) => s.tool);
@@ -805,6 +816,7 @@ function DrawPreview({ offset, step, radius, center: middle }: { offset: Point3;
   return (
     <>
       <Grid
+        ref={gridBehindWires}
         position={w(gridCenter)}
         rotation={rotation}
         args={[extent, extent]}
