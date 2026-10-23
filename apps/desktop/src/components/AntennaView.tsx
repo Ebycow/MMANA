@@ -313,7 +313,7 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
   );
 
   const colors = useMemo(
-    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section'), dimension: cssVar('--text-secondary') }),
+    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section'), dimension: cssVar('--view3d-dimension') }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scheme],
   );
@@ -404,7 +404,7 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
             <meshBasicMaterial color={groundColor} transparent opacity={0.28} depthWrite={false} side={DoubleSide} />
           </mesh>
           <Line points={groundEdge} color={colors.section} lineWidth={1.2} raycast={() => null} />
-          <HeightDimension at={box.center} groundZ={g.z} tick={box.radius * 0.06} color={colors.dimension} />
+          <HeightDimension at={box.center} groundZ={g.z} near={box.radius * 0.5} color={colors.dimension} />
         </>
       )}
 
@@ -459,25 +459,32 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
   );
 }
 
-/** The height setting as a dimension from the ground up to Z = 0, below the middle of the antenna. */
-function HeightDimension({ at, groundZ, tick, color }: { at: Point3; groundZ: number; tick: number; color: string }) {
-  // the label stays near the antenna, where the view is usually framed
-  const label = tick * 8;
+/**
+ * The height setting as a dimension from the ground up to Z = 0, below the
+ * middle of the antenna: a faint dashed line in its own colour and without
+ * end bars, so it is not taken for a wire.
+ */
+function HeightDimension({ at, groundZ, near, color }: { at: Point3; groundZ: number; near: number; color: string }) {
   // a fixed parent: drei's default one changes once events connect, remounting the label mid-render
   const gl = useThree((s) => s.gl);
   const portal = useMemo(() => ({ current: gl.domElement.parentElement as HTMLElement }), [gl]);
   if (groundZ >= 0) return null;
   const { x, y } = at;
-  const bar = (z: number): [number, number, number][] => [
-    [x - tick, y, z],
-    [x + tick, y, z],
-  ];
   return (
     <>
-      <Line points={[[x, y, groundZ], [x, y, 0]]} color={color} lineWidth={1} dashed dashSize={-groundZ / 40} gapSize={-groundZ / 60} raycast={() => null} />
-      <Line points={bar(groundZ)} color={color} lineWidth={1.5} raycast={() => null} />
-      <Line points={bar(0)} color={color} lineWidth={1.5} raycast={() => null} />
-      <Html portal={portal} position={[x, y, Math.max(groundZ / 2, -label)]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
+      <Line
+        points={[[x, y, groundZ], [x, y, 0]]}
+        color={color}
+        lineWidth={1}
+        dashed
+        dashSize={-groundZ / 60}
+        gapSize={-groundZ / 40}
+        transparent
+        opacity={0.7}
+        raycast={() => null}
+      />
+      {/* the label stays near the antenna, where the view is usually framed */}
+      <Html portal={portal} position={[x, y, Math.max(groundZ / 2, -near)]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
         <div className="view3d-dim-label num">地上高 {metres(-groundZ)}</div>
       </Html>
     </>

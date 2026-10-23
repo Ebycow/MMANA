@@ -19,6 +19,7 @@
   --view3d-grid-section: #a6a59e;
   --view3d-real-ground: #c4a678;
   --view3d-perfect-ground: #93a8c0;
+  --view3d-dimension: #b07a2a;
   --wire: #3d4451;
   --wire-selected: #eb6834;
 }
@@ -40,6 +41,7 @@
   --view3d-grid-section: #64645d;
   --view3d-real-ground: #8a7148;
   --view3d-perfect-ground: #4f6884;
+  --view3d-dimension: #d4a24c;
   --wire: #c9ccd2;
   --wire-selected: #d95926;
 }
@@ -354,8 +356,8 @@ tr.selected .row-actions {
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
-  color: var(--text-secondary);
+  border: 1px solid var(--view3d-dimension);
+  color: var(--view3d-dimension);
   font-size: 11px;
   white-space: nowrap;
 }
