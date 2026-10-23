@@ -15,6 +15,8 @@
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --view3d-bg: #f7f8fa;
+  --view3d-grid: #d6d5d0;
+  --view3d-grid-section: #a6a59e;
   --wire: #3d4451;
   --wire-selected: #eb6834;
 }
@@ -32,6 +34,8 @@
   --series-2: #d95926;
   --series-3: #199e70;
   --view3d-bg: #171716;
+  --view3d-grid: #393936;
+  --view3d-grid-section: #64645d;
   --wire: #c9ccd2;
   --wire-selected: #d95926;
 }
@@ -321,6 +325,17 @@ tr.selected .row-actions {
   text-align: center;
   pointer-events: none;
   z-index: 10;
+}
+.view3d-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
 }
 .view3d-box {
   position: absolute;

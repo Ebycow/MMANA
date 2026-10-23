@@ -3,19 +3,19 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
 import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Color, MOUSE, Vector3 } from 'three';
+import { Color, DoubleSide, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
 import type { Point3 } from '../api/types';
 import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
-import { bounds, currentPolylines, displayWires, type DisplayWire } from '../domain/geometry';
+import { bounds, currentPolylines, displayWires, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
 import { add, niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { EditScene } from './EditController';
-import { EditToolbar } from './EditToolbar';
+import { EditToolbar, stepLabel } from './EditToolbar';
 import { Panel } from './Panel';
 
 // an unassigned button does nothing in OrbitControls
@@ -86,6 +86,8 @@ export function AntennaView() {
   // framing and the grid step follow the antenna, not a drag in progress
   const box = useMemo(() => bounds(displayWires(antenna)), [antenna]);
   const autoStep = niceStep(box.radius / 25);
+  const groundZ = environment.ground === 'freeSpace' ? null : -environment.height;
+  const grid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
   const currents = useMemo(
     () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),
     [wires, result, showCurrents, stale, preview],
@@ -148,7 +150,7 @@ export function AntennaView() {
             currents={currents}
             preset={preset}
             scheme={scheme}
-            groundZ={environment.ground === 'freeSpace' ? null : -environment.height}
+            grid={grid}
             feeds={feeds}
             offset={offset}
           />
@@ -166,14 +168,15 @@ export function AntennaView() {
         </Canvas>
         <EditToolbar autoStep={autoStep} editable={editable} />
         <EditOverlay />
-        {currents && (
-          <CurrentLegend maxMa={currents.maxMa} ramp={scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT} />
-        )}
-        {stale && result && showCurrents && (
-          <Text size="xs" c="dimmed" style={{ position: 'absolute', left: 12, bottom: 10 }}>
-            編集後は再計算すると電流分布を表示します
-          </Text>
-        )}
+        <div className="view3d-legend">
+          {currents && <CurrentLegend maxMa={currents.maxMa} ramp={scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT} />}
+          {stale && result && showCurrents && (
+            <Text size="xs" c="dimmed">
+              編集後は再計算すると電流分布を表示します
+            </Text>
+          )}
+          <SceneLegend grid={grid} ground={groundZ != null} />
+        </div>
       </div>
     </Panel>
   );
@@ -217,9 +220,18 @@ function EditOverlay() {
   );
 }
 
+/** What the horizontal grid is and how far apart its lines are. */
+function SceneLegend({ grid, ground }: { grid: SceneGrid; ground: boolean }) {
+  return (
+    <div className="num">
+      {ground ? '地面' : 'Z = 0 の面'} ・ グリッド {stepLabel(grid.cell)}（太線 {stepLabel(grid.section)}）
+    </div>
+  );
+}
+
 function CurrentLegend({ maxMa, ramp }: { maxMa: number; ramp: string[] }) {
   return (
-    <div style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
+    <div>
       <div style={{ marginBottom: 3 }}>電流の大きさ</div>
       <div style={{ width: 140, height: 8, borderRadius: 4, background: `linear-gradient(90deg, ${ramp.join(',')})` }} />
       <div className="num" style={{ display: 'flex', justifyContent: 'space-between', width: 140, marginTop: 2 }}>
@@ -232,18 +244,19 @@ function CurrentLegend({ maxMa, ramp }: { maxMa: number; ramp: string[] }) {
 
 interface SceneProps {
   wires: DisplayWire[];
-  box: ReturnType<typeof bounds>;
+  box: Bounds;
   currents: ReturnType<typeof currentPolylines> | null;
   preset: { p: Preset; n: number };
   scheme: 'light' | 'dark';
-  groundZ: number | null;
+  /** The ground, or the Z = 0 plane in free space. */
+  grid: SceneGrid;
   /** Source and load markers in wire coordinates. */
   feeds: FeedPositions;
   /** Where the first stacked copy is drawn: world = wire + offset. */
   offset: Point3;
 }
 
-function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }: SceneProps) {
+function Scene({ wires, box, currents, preset, scheme, grid, feeds, offset }: SceneProps) {
   const selected = useApp((s) => s.selectedWires);
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
@@ -255,7 +268,7 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
   );
 
   const colors = useMemo(
-    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--chart-grid'), axis: cssVar('--chart-axis') }),
+    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section') }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scheme],
   );
@@ -294,7 +307,6 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
   useEffect(() => invalidate());
 
   const markerSize = box.radius * 0.025;
-  const gridSize = Math.max(10, Math.ceil(box.radius * 4));
 
   return (
     <>
@@ -312,17 +324,20 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
         onChange={() => invalidate()}
       />
 
-      {/* ground plane (real / perfect ground) or a reference grid at z = 0 */}
+      {/* the ground (real / perfect ground) or the Z = 0 plane; lines on round coordinates, fixed in place */}
       <Grid
-        position={[box.center.x, box.center.y, groundZ ?? Math.min(0, box.minZ)]}
+        position={[grid.center.x, grid.center.y, grid.z]}
         rotation={[Math.PI / 2, 0, 0]}
-        args={[gridSize, gridSize]}
-        cellSize={gridSize / 40}
-        sectionSize={gridSize / 8}
+        args={[grid.half * 2, grid.half * 2]}
+        cellSize={grid.cell}
+        sectionSize={grid.section}
         cellColor={colors.grid}
-        sectionColor={colors.axis}
-        fadeDistance={gridSize * 2.5}
-        infiniteGrid
+        sectionColor={colors.section}
+        cellThickness={0.7}
+        sectionThickness={1.1}
+        fadeDistance={1e12}
+        fadeStrength={0}
+        side={DoubleSide}
       />
 
       {/* picking is done in screen space by EditScene */}

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { niceTicks } from '../charts/ticks';
 import { radiusFor, sampleAngle, sampleAt } from '../charts/polar';
 import { evaluate } from '../domain/expr';
-import { displayWires, normalizePulse, pulseLocation } from '../domain/geometry';
+import { bounds, displayWires, normalizePulse, pulseLocation, sceneGrid } from '../domain/geometry';
 import { newProject, newSource, setAutoVoltage } from '../domain/project';
 import { formatSegmentation, parseSegmentation, segmentationFromCode, segmentationToCode } from '../domain/segmentation';
 import { sweepOrder } from '../domain/sweep';
@@ -107,6 +107,24 @@ describe('3D view geometry', () => {
   it('converts full-width pulse names to half-width', () => {
     expect(normalizePulse(' ｗ１ｃ　')).toBe('w1c');
     expect(normalizePulse('Ｗ３Ｂ－１')).toBe('W3B-1');
+  });
+  it('lays the grid on round coordinates in the snap step', () => {
+    // a 2 m dipole off the origin, in free space
+    const box = bounds([{ base: 0, start: { x: 0.33, y: -1, z: 0 }, end: { x: 0.33, y: 1, z: 0 }, radius: 0.001 }]);
+    expect(box.maxZ).toBe(0);
+    const g = sceneGrid(box, 0, 0.05);
+    expect(g).toEqual({ center: { x: 0.5, y: 0 }, z: 0, half: 2, cell: 0.05, section: 0.5 });
+    // moving the antenna a little leaves the grid where it is
+    expect(sceneGrid({ ...box, center: { x: 0.4, y: 0.1, z: 0 } }, 0, 0.05)).toEqual(g);
+  });
+  it('coarsens the grid when the ground is far below', () => {
+    const box = bounds([{ base: 0, start: { x: 0, y: -1, z: 0 }, end: { x: 0, y: 1, z: 0 }, radius: 0.001 }]);
+    const g = sceneGrid(box, -10, 0.05);
+    // 6 m of ground either side would be 240 cells of 5 cm
+    expect(g.cell).toBe(0.5);
+    expect(g.section).toBe(5);
+    expect(g.half).toBe(10);
+    expect(g.z).toBe(-10);
   });
 });
 

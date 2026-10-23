@@ -61,8 +61,15 @@ export function pulseLocation(name: string, wires: Wire[]): Point3 | null {
   return lerp(w.start, w.end, where === 'b' ? 0.04 : where === 'e' ? 0.96 : 0.5);
 }
 
-export function bounds(wires: DisplayWire[]): { center: Point3; radius: number; minZ: number } {
-  if (wires.length === 0) return { center: { x: 0, y: 0, z: 0 }, radius: 5, minZ: 0 };
+export interface Bounds {
+  center: Point3;
+  radius: number;
+  minZ: number;
+  maxZ: number;
+}
+
+export function bounds(wires: DisplayWire[]): Bounds {
+  if (wires.length === 0) return { center: { x: 0, y: 0, z: 0 }, radius: 5, minZ: 0, maxZ: 0 };
   const lo = { x: Infinity, y: Infinity, z: Infinity };
   const hi = { x: -Infinity, y: -Infinity, z: -Infinity };
   for (const w of wires) {
@@ -77,7 +84,34 @@ export function bounds(wires: DisplayWire[]): { center: Point3; radius: number; 
   }
   const center = { x: (lo.x + hi.x) / 2, y: (lo.y + hi.y) / 2, z: (lo.z + hi.z) / 2 };
   const radius = Math.max(0.5, Math.hypot(hi.x - lo.x, hi.y - lo.y, hi.z - lo.z) / 2);
-  return { center, radius, minZ: lo.z };
+  return { center, radius, minZ: lo.z, maxZ: hi.z };
+}
+
+/** The horizontal grid of the 3D view: a square of `half` either side of `center`, at height `z`. */
+export interface SceneGrid {
+  center: { x: number; y: number };
+  z: number;
+  half: number;
+  /** Line spacing; every tenth line is a section line. */
+  cell: number;
+  section: number;
+}
+
+/**
+ * Lays out the horizontal grid at height `z` (the ground, or Z = 0 in free
+ * space). Lines fall on round coordinates in the snap step, or a power of ten
+ * times it so a large scene does not turn into a haze, and the square covers
+ * the antenna's footprint and enough ground around it to read its height. The
+ * layout only changes when the antenna grows past a section or moves by one.
+ */
+export function sceneGrid(box: Bounds, z: number, step: number): SceneGrid {
+  const want = Math.max(box.radius * 2, (box.maxZ - z) * 0.6);
+  let cell = step;
+  while ((2 * want) / cell > 100) cell = Number((cell * 10).toPrecision(6));
+  const section = Number((cell * 10).toPrecision(6));
+  const half = Math.max(1, Math.ceil(want / section - 1e-9)) * section;
+  const snap = (v: number) => Number((Math.round(v / section) * section).toPrecision(12)) + 0;
+  return { center: { x: snap(box.center.x), y: snap(box.center.y) }, z, half, cell, section };
 }
 
 export interface CurrentPolyline {
