@@ -1,7 +1,7 @@
-import { ActionIcon, Button, Checkbox, Group, SegmentedControl, Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Button, Checkbox, Group, SegmentedControl, Stack, Text, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconCopy, IconLayoutRows, IconPlus, IconTrash } from '@tabler/icons-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Point3 } from '../api/types';
 import {
   lengthDigits,
@@ -16,9 +16,11 @@ import {
   radiusWavelength,
   type Units,
 } from '../domain/elements';
+import { byWire, worst, type Diagnostic } from '../domain/diagnostics';
 import { newWire, wavelength, wireLength } from '../domain/project';
 import { describeSegmentation, formatSegmentation, parseSegmentation } from '../domain/segmentation';
 import { insertWires, removeWires } from '../domain/wireEdit';
+import { useDiagnostics } from '../state/diagnostics';
 import { useDisplay } from '../state/display';
 import { useApp } from '../state/store';
 import { NumCell, TextCell, format } from './Cells';
@@ -48,6 +50,8 @@ export function WireTable() {
   const units: Units = { wavelengths: display.wavelengths && lambda > 0, millimetres: display.millimetres, lambda };
   const lu = lengthUnit(units);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
+  const diagnostics = useDiagnostics();
+  const problems = useMemo(() => byWire(diagnostics), [diagnostics]);
 
   // keep the row selected in the 3D view visible
   useEffect(() => {
@@ -112,9 +116,7 @@ export function WireTable() {
               className={selection.includes(i) ? 'selected' : undefined}
               onFocus={() => (selection.includes(i) ? setSelection(selection, i) : select(i))}
             >
-              <td className="index num" onClick={(e) => clickRow(i, e)}>
-                {i + 1}
-              </td>
+              <WireNumber index={i} problems={problems.get(i) ?? []} onClick={(e) => clickRow(i, e)} />
               {COORDS.map((c) => (
                 <td key={c.label} style={{ minWidth: 50 }}>
                   <NumCell
@@ -225,5 +227,38 @@ export function WireTable() {
         </Group>
       </Group>
     </>
+  );
+}
+
+const SEVERITY_COLOR = { error: 'var(--diag-error)', warning: 'var(--diag-warning)', info: 'var(--diag-info)' };
+
+/** The row number, coloured by the worst problem of the wire; the problems show on hover. */
+function WireNumber({ index, problems, onClick }: { index: number; problems: Diagnostic[]; onClick: (e: React.MouseEvent) => void }) {
+  const severity = worst(problems);
+  return (
+    <Tooltip
+      disabled={severity == null}
+      position="right"
+      multiline
+      w={320}
+      openDelay={150}
+      label={
+        <Stack gap={2}>
+          {problems.map((d, k) => (
+            <Text key={k} size="xs" style={{ borderLeft: `3px solid ${SEVERITY_COLOR[d.severity]}`, paddingLeft: 6 }}>
+              {d.message}
+            </Text>
+          ))}
+        </Stack>
+      }
+    >
+      <td
+        className={`index num${severity ? ` diag-${severity}` : ''}`}
+        aria-description={problems.map((d) => d.message).join('。') || undefined}
+        onClick={onClick}
+      >
+        {index + 1}
+      </td>
+    </Tooltip>
   );
 }

@@ -22,6 +22,9 @@
   --view3d-dimension: #b07a2a;
   --wire: #3d4451;
   --wire-selected: #eb6834;
+  --diag-error: #d42a2a;
+  --diag-warning: #b8860b;
+  --diag-info: #6e7f96;
 }
 :root[data-mantine-color-scheme='dark'] {
   --app-bg: #141414;
@@ -44,6 +47,9 @@
   --view3d-dimension: #d4a24c;
   --wire: #c9ccd2;
   --wire-selected: #d95926;
+  --diag-error: #f0524f;
+  --diag-warning: #e0a92e;
+  --diag-info: #8f9db0;
 }
 
 html,
@@ -177,6 +183,22 @@ textarea {
   text-align: center;
   width: 34px;
   cursor: pointer;
+}
+/* a wire with a problem: the row number takes the colour of the worst one */
+.grid-table td.index.diag-error,
+.grid-table td.index.diag-warning,
+.grid-table td.index.diag-info {
+  --diag: var(--diag-info);
+  color: var(--diag);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--diag) 16%, transparent);
+  box-shadow: inset 3px 0 0 var(--diag);
+}
+.grid-table td.index.diag-error {
+  --diag: var(--diag-error);
+}
+.grid-table td.index.diag-warning {
+  --diag: var(--diag-warning);
 }
 .grid-table td.readonly {
   color: var(--text-secondary);
