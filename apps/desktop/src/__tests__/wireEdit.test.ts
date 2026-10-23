@@ -5,6 +5,7 @@ import {
   alignToOrigin,
   appendCopies,
   connectedWires,
+  facingPlane,
   followWire,
   insertWires,
   mirrorCopy,
@@ -195,5 +196,32 @@ describe('copies made in place', () => {
     const moved = transformWires(ws, [0, 1], translation(p(0, 0, 1)), true);
     expect(moved[2].start).toEqual(p(0, 0, 1));
     expect(moved[2].end).toEqual(p(1, 1, 1));
+  });
+});
+
+describe('facing plane', () => {
+  const look = (x: number, y: number, z: number) => {
+    const n = Math.hypot(x, y, z);
+    return p(x / n, y / n, z / n);
+  };
+  it('draws on the ground unless the view is nearly level', () => {
+    expect(facingPlane(look(1, -1.15, -0.75), null)).toBe('xy');
+    expect(facingPlane(look(0, 1, -0.1), null)).toBe('xz');
+    expect(facingPlane(look(1, 0, -0.1), null)).toBe('yz');
+  });
+  it('keeps the plane in use near a boundary', () => {
+    // about 19° down: level by the threshold, but not far enough to leave the ground plane
+    const dz = look(1, -1, -0.49);
+    expect(facingPlane(dz, null)).toBe('xz');
+    expect(facingPlane(dz, 'xy')).toBe('xy');
+    expect(facingPlane(look(1, -1, -0.2), 'xy')).toBe('xz');
+    // a level view at 48° from X stays on the plane it had
+    const diag = look(1, -1.11, 0);
+    expect(facingPlane(diag, 'yz')).toBe('yz');
+    expect(facingPlane(diag, 'xz')).toBe('xz');
+    expect(facingPlane(look(1, -1.5, 0), 'yz')).toBe('xz');
+    // and climbs back to the ground only clearly above the threshold
+    expect(facingPlane(look(1, -1, -0.6), 'xz')).toBe('xz');
+    expect(facingPlane(look(1, -1, -0.8), 'xz')).toBe('xy');
   });
 });

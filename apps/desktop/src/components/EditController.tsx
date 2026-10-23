@@ -10,7 +10,7 @@
 import { Grid, Html, Line, TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
-import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3, type Camera } from 'three';
+import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3 } from 'three';
 import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 import type { Point3, PulsePoint, Wire } from '../api/types';
 import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
@@ -22,6 +22,7 @@ import {
   distToSegment2,
   distance,
   dominantAxis,
+  facingPlane,
   moveEndpoint,
   norm,
   polygonPoints,
@@ -66,17 +67,6 @@ const pt = (v: Vector3): Point3 => ({ x: v.x, y: v.y, z: v.z });
 const fmt = (v: number) => Number(v.toFixed(4)).toString();
 const fmtPoint = (p: Point3) => `(${fmt(p.x)}, ${fmt(p.y)}, ${fmt(p.z)})`;
 const PLANE_LABEL: Record<Plane, string> = { xy: 'XY', xz: 'XZ', yz: 'YZ' };
-
-/**
- * The plane free drags and automatic drawing use: the ground plane (XY)
- * unless the camera looks within about 20° of horizontal, then the vertical
- * plane that faces it.
- */
-function facingPlane(camera: Camera): Plane {
-  const d = camera.getWorldDirection(new Vector3());
-  if (Math.abs(d.z) > 0.35) return 'xy';
-  return Math.abs(d.y) >= Math.abs(d.x) ? 'xz' : 'yz';
-}
 
 /** Mantine keeps some closed modals mounted; an open one has a box. */
 /** Whether a key of the viewer's mouse setting is held. */
@@ -145,6 +135,9 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
     const ndc = new Vector2();
     const tmp = new Vector3();
     let drag: Drag | null = null;
+    let facing: Plane | null = null;
+    /** The plane free drags and automatic drawing use, kept until the view turns clearly to another. */
+    const facingView = (): Plane => (facing = facingPlane(latest.current.camera.getWorldDirection(tmp), facing));
 
     const local = (e: MouseEvent): Pt2 => {
       const r = gl.domElement.getBoundingClientRect();
@@ -277,7 +270,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
 
     const drawPlane = (): Plane => {
       const ed = useEditor.getState();
-      return ed.draftPlane ?? (ed.plane === 'auto' ? facingPlane(latest.current.camera) : ed.plane);
+      return ed.draftPlane ?? (ed.plane === 'auto' ? facingView() : ed.plane);
     };
 
     const drawCursor = (p: Pt2, constrain: boolean): DrawCursor | null => {
@@ -411,7 +404,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
         updateDrag(e);
         return;
       }
-      const plane = facingPlane(latest.current.camera);
+      const plane = facingView();
       if (hit.kind === 'end') {
         drag = {
           kind: 'end',
