@@ -769,11 +769,10 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
 }
 
 /**
- * A callback ref for a grid that shares its plane with wires: the grid is
- * pushed back in depth so the wires lying in it draw over its lines, and
- * writes no depth so a second grid in the same plane is not hidden by it.
+ * A callback ref for the drawing grid, which shares its plane with wires: it
+ * is pushed back in depth so the wires lying in it draw over its lines.
  */
-export function gridBehindWires(mesh: Mesh | null) {
+function gridBehindWires(mesh: Mesh | null) {
   if (!mesh) return;
   const m = mesh.material as Material;
   Object.assign(m, { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, depthWrite: false });
