@@ -15,6 +15,11 @@
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --view3d-bg: #f7f8fa;
+  --view3d-grid: #c6c5bf;
+  --view3d-grid-section: #98978f;
+  --view3d-real-ground: #c4a678;
+  --view3d-perfect-ground: #93a8c0;
+  --view3d-dimension: #b07a2a;
   --wire: #3d4451;
   --wire-selected: #eb6834;
 }
@@ -32,6 +37,11 @@
   --series-2: #d95926;
   --series-3: #199e70;
   --view3d-bg: #171716;
+  --view3d-grid: #52524d;
+  --view3d-grid-section: #7a7a72;
+  --view3d-real-ground: #8a7148;
+  --view3d-perfect-ground: #4f6884;
+  --view3d-dimension: #d4a24c;
   --wire: #c9ccd2;
   --wire-selected: #d95926;
 }
@@ -321,6 +331,47 @@ tr.selected .row-actions {
   text-align: center;
   pointer-events: none;
   z-index: 10;
+}
+.view3d-legend {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.view3d-legend-button {
+  pointer-events: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: -4px;
+}
+.view3d-legend-button:hover {
+  background: var(--panel-bg);
+  color: var(--text-primary);
+}
+.view3d-ground-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 2px;
+  vertical-align: -1px;
+  opacity: 0.8;
+}
+.view3d-dim-label {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--view3d-dimension);
+  color: var(--view3d-dimension);
+  font-size: 11px;
+  white-space: nowrap;
 }
 .view3d-box {
   position: absolute;

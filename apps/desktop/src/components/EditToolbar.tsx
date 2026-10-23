@@ -79,8 +79,8 @@ const TOOLS: { tool: Tool; label: string; help: (h: Held) => string; icon: React
 /** Tools that start a new group in the toolbar. */
 const GROUP_START: Tool[] = ['wire', 'feed'];
 
-const STEPS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 5];
-const stepLabel = (m: number) => (m < 0.01 ? `${m * 1000} mm` : m < 1 ? `${Number((m * 100).toFixed(1))} cm` : `${m} m`);
+export const STEPS = [0.001, 0.005, 0.01, 0.05, 0.1, 0.25, 0.5, 1, 5];
+export const stepLabel = (m: number) => (m < 0.01 ? `${m * 1000} mm` : m < 1 ? `${Number((m * 100).toFixed(1))} cm` : `${m} m`);
 
 export function EditToolbar({ autoStep, editable }: { autoStep: number; editable: boolean }) {
   const tool = useEditor((s) => s.tool);

@@ -1,21 +1,22 @@
-import { GizmoHelper, GizmoViewport, Grid, Line, OrbitControls } from '@react-three/drei';
+import { GizmoHelper, GizmoViewport, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
-import { ActionIcon, Group, Switch, Text, Tooltip, useComputedColorScheme } from '@mantine/core';
-import { IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
+import { ActionIcon, Group, Menu, Switch, Text, Tooltip, UnstyledButton, useComputedColorScheme } from '@mantine/core';
+import { IconArrowAutofitHeight, IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
-import type { Point3 } from '../api/types';
+import type { Point3, Project } from '../api/types';
 import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
-import { bounds, currentPolylines, displayWires, type DisplayWire } from '../domain/geometry';
+import { bounds, currentPolylines, displayWires, reachingGround, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
 import { add, niceStep, sub } from '../domain/wireEdit';
 import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { EditScene } from './EditController';
-import { EditToolbar } from './EditToolbar';
+import { GroundGrid } from './GroundGrid';
+import { EditToolbar, STEPS, stepLabel } from './EditToolbar';
 import { Panel } from './Panel';
 
 // an unassigned button does nothing in OrbitControls
@@ -79,6 +80,8 @@ export function AntennaView() {
   const step = useEditor((s) => s.step);
   const scheme = useComputedColorScheme('light');
   const [preset, setPreset] = useState<{ p: Preset; n: number }>({ p: 'iso', n: 0 });
+  /** Framing takes in the ground as well as the antenna. */
+  const [fitGround, setFitGround] = useState(false);
 
   // a drag in progress shows its wires; the antenna changes when it ends
   const shown = useMemo(() => (preview ? { ...antenna, wires: preview } : antenna), [antenna, preview]);
@@ -86,6 +89,10 @@ export function AntennaView() {
   // framing and the grid step follow the antenna, not a drag in progress
   const box = useMemo(() => bounds(displayWires(antenna)), [antenna]);
   const autoStep = niceStep(box.radius / 25);
+  const groundZ = environment.ground === 'freeSpace' ? null : -environment.height;
+  // the grid shows the step snapping uses
+  const grid = useMemo(() => sceneGrid(box, groundZ ?? 0, step ?? autoStep), [box, groundZ, step, autoStep]);
+  const frame = useMemo(() => (fitGround && groundZ != null ? reachingGround(box, groundZ) : box), [fitGround, groundZ, box]);
   const currents = useMemo(
     () => (result && showCurrents && !stale && !preview ? currentPolylines(wires, result) : null),
     [wires, result, showCurrents, stale, preview],
@@ -132,6 +139,20 @@ export function AntennaView() {
               <IconArrowsMaximize size={15} />
             </ActionIcon>
           </Tooltip>
+          <Tooltip label={groundZ == null ? '大地も画面に収める（自由空間では使えません）' : `大地も画面に収める（${fitGround ? 'オン' : 'オフ'}）`}>
+            <ActionIcon
+              aria-label="大地も画面に収める"
+              aria-pressed={fitGround}
+              variant={fitGround && groundZ != null ? 'light' : 'subtle'}
+              disabled={groundZ == null}
+              onClick={() => {
+                setFitGround(!fitGround);
+                go(preset.p);
+              }}
+            >
+              <IconArrowAutofitHeight size={15} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       }
     >
@@ -145,10 +166,12 @@ export function AntennaView() {
           <Scene
             wires={wires}
             box={box}
+            frame={frame}
             currents={currents}
             preset={preset}
             scheme={scheme}
-            groundZ={environment.ground === 'freeSpace' ? null : -environment.height}
+            grid={grid}
+            ground={environment.ground}
             feeds={feeds}
             offset={offset}
           />
@@ -160,20 +183,22 @@ export function AntennaView() {
             step={step ?? autoStep}
             editable={editable}
             radius={box.radius}
+            center={box.center}
             feeds={feeds}
             layout={layout}
           />
         </Canvas>
         <EditToolbar autoStep={autoStep} editable={editable} />
         <EditOverlay />
-        {currents && (
-          <CurrentLegend maxMa={currents.maxMa} ramp={scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT} />
-        )}
-        {stale && result && showCurrents && (
-          <Text size="xs" c="dimmed" style={{ position: 'absolute', left: 12, bottom: 10 }}>
-            編集後は再計算すると電流分布を表示します
-          </Text>
-        )}
+        <div className="view3d-legend">
+          {currents && <CurrentLegend maxMa={currents.maxMa} ramp={scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT} />}
+          {stale && result && showCurrents && (
+            <Text size="xs" c="dimmed">
+              編集後は再計算すると電流分布を表示します
+            </Text>
+          )}
+          <SceneLegend grid={grid} autoStep={autoStep} ground={environment.ground} box={box} />
+        </div>
       </div>
     </Panel>
   );
@@ -217,9 +242,71 @@ function EditOverlay() {
   );
 }
 
+type GroundKind = Project['environment']['ground'];
+const GROUND_LABEL: Record<GroundKind, string> = { freeSpace: '自由空間（Z = 0 の面）', perfect: '完全大地', real: 'リアルグランド' };
+const GROUND_FILL: Record<GroundKind, string | null> = { freeSpace: null, perfect: '--view3d-perfect-ground', real: '--view3d-real-ground' };
+
+const metres = (v: number) => `${Number(v.toFixed(3))} m`;
+
+/** What the horizontal grid is, how far apart its lines are and how high the antenna stands. */
+function SceneLegend({ grid, autoStep, ground, box }: { grid: SceneGrid; autoStep: number; ground: GroundKind; box: Bounds }) {
+  const fill = GROUND_FILL[ground];
+  // the height setting lifts Z = 0; the lowest wire may stand elsewhere
+  const lowest = box.minZ - grid.z;
+  return (
+    <div className="num">
+      <div>
+        {fill && <span className="view3d-ground-swatch" style={{ background: `var(${fill})` }} />}
+        {GROUND_LABEL[ground]}
+        {fill && ` ・ 地上高 ${metres(-grid.z)}`}
+      </div>
+      {fill && Math.abs(box.minZ) > 1e-9 && lowest >= 0 && <div>最も低い点 {metres(lowest)}</div>}
+      {fill && lowest < -1e-9 && (
+        <Text size="xs" c="red">
+          ワイヤーが地面より {metres(-lowest)} 下にあります
+        </Text>
+      )}
+      <GridStepMenu grid={grid} autoStep={autoStep} />
+    </div>
+  );
+}
+
+/**
+ * The grid step in the legend, which opens the same choice as the snap
+ * settings: the grid shows the step snapping uses.
+ */
+function GridStepMenu({ grid, autoStep }: { grid: SceneGrid; autoStep: number }) {
+  const step = useEditor((s) => s.step);
+  const gridSnap = useEditor((s) => s.gridSnap);
+  const set = useEditor((s) => s.set);
+  const big = Number((grid.section * 10).toPrecision(6));
+  return (
+    <Menu position="top-start" shadow="md" withinPortal>
+      <Menu.Target>
+        <UnstyledButton
+          className="view3d-legend-button num"
+          aria-label="グリッドの間隔を変える"
+          title={`線は ${stepLabel(grid.cell)}・${stepLabel(grid.section)}・${stepLabel(big)} ごと。画面で細かすぎる段は省きます`}
+        >
+          グリッド {stepLabel(grid.cell)}
+          {gridSnap ? '' : '（スナップ オフ）'} ▾
+        </UnstyledButton>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Label>グリッドとスナップの間隔</Menu.Label>
+        {[null, ...STEPS].map((m) => (
+          <Menu.Item key={String(m)} className="num" fw={m === step ? 600 : undefined} onClick={() => set({ step: m })}>
+            {m == null ? `自動（${stepLabel(autoStep)}）` : stepLabel(m)}
+          </Menu.Item>
+        ))}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
+
 function CurrentLegend({ maxMa, ramp }: { maxMa: number; ramp: string[] }) {
   return (
-    <div style={{ position: 'absolute', left: 12, bottom: 10, fontSize: 11, color: 'var(--text-secondary)' }}>
+    <div>
       <div style={{ marginBottom: 3 }}>電流の大きさ</div>
       <div style={{ width: 140, height: 8, borderRadius: 4, background: `linear-gradient(90deg, ${ramp.join(',')})` }} />
       <div className="num" style={{ display: 'flex', justifyContent: 'space-between', width: 140, marginTop: 2 }}>
@@ -232,18 +319,22 @@ function CurrentLegend({ maxMa, ramp }: { maxMa: number; ramp: string[] }) {
 
 interface SceneProps {
   wires: DisplayWire[];
-  box: ReturnType<typeof bounds>;
+  box: Bounds;
+  /** What the camera takes in when framing. */
+  frame: Bounds;
   currents: ReturnType<typeof currentPolylines> | null;
   preset: { p: Preset; n: number };
   scheme: 'light' | 'dark';
-  groundZ: number | null;
+  /** The ground, or the Z = 0 plane in free space. */
+  grid: SceneGrid;
+  ground: GroundKind;
   /** Source and load markers in wire coordinates. */
   feeds: FeedPositions;
   /** Where the first stacked copy is drawn: world = wire + offset. */
   offset: Point3;
 }
 
-function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }: SceneProps) {
+function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feeds, offset }: SceneProps) {
   const selected = useApp((s) => s.selectedWires);
   const hover = useEditor((s) => (s.hover ? s.hover.wire : null));
   const controls = useRef<OrbitControlsImpl>(null);
@@ -255,19 +346,22 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
   );
 
   const colors = useMemo(
-    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--chart-grid'), axis: cssVar('--chart-axis') }),
+    () => ({ wire: cssVar('--wire'), selected: cssVar('--wire-selected'), grid: cssVar('--view3d-grid'), section: cssVar('--view3d-grid-section'), dimension: cssVar('--view3d-dimension') }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [scheme],
   );
   const ramp = scheme === 'dark' ? RAMP_DARK : RAMP_LIGHT;
+  const fill = GROUND_FILL[ground];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const groundColor = useMemo(() => (fill ? cssVar(fill) : null), [fill, scheme]);
 
   // camera framing
   useEffect(() => {
-    const c = box.center;
+    const c = frame.center;
     const dir = new Vector3(...PRESET_DIRS[preset.p]).normalize();
     const fov = ((camera as { fov?: number }).fov ?? 35) * (Math.PI / 180);
     const aspect = size.width / Math.max(1, size.height);
-    const fit = box.radius / Math.sin(Math.min(fov, fov * aspect) / 2);
+    const fit = frame.radius / Math.sin(Math.min(fov, fov * aspect) / 2);
     camera.position.set(c.x + dir.x * fit * 0.85, c.y + dir.y * fit * 0.85, c.z + dir.z * fit * 0.85);
     camera.up.set(0, 0, 1);
     controls.current?.target.set(c.x, c.y, c.z);
@@ -294,7 +388,6 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
   useEffect(() => invalidate());
 
   const markerSize = box.radius * 0.025;
-  const gridSize = Math.max(10, Math.ceil(box.radius * 4));
 
   return (
     <>
@@ -312,18 +405,9 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
         onChange={() => invalidate()}
       />
 
-      {/* ground plane (real / perfect ground) or a reference grid at z = 0 */}
-      <Grid
-        position={[box.center.x, box.center.y, groundZ ?? Math.min(0, box.minZ)]}
-        rotation={[Math.PI / 2, 0, 0]}
-        args={[gridSize, gridSize]}
-        cellSize={gridSize / 40}
-        sectionSize={gridSize / 8}
-        cellColor={colors.grid}
-        sectionColor={colors.axis}
-        fadeDistance={gridSize * 2.5}
-        infiniteGrid
-      />
+      {/* the ground (real / perfect ground) or the Z = 0 plane; lines on round coordinates, fixed in place */}
+      <GroundGrid grid={grid} cellColor={colors.grid} sectionColor={colors.section} fill={groundColor} />
+      {groundColor && <HeightDimension at={box.center} groundZ={grid.z} near={box.radius * 0.5} color={colors.dimension} />}
 
       {/* picking is done in screen space by EditScene */}
       {wires.map((w, i) => {
@@ -372,6 +456,38 @@ function Scene({ wires, box, currents, preset, scheme, groundZ, feeds, offset }:
       <GizmoHelper alignment="bottom-right" margin={[56, 56]} onUpdate={() => invalidate()}>
         <GizmoViewport axisColors={['#e34948', '#1baf7a', '#2a78d6']} labelColor="#ffffff" />
       </GizmoHelper>
+    </>
+  );
+}
+
+/**
+ * The height setting as a dimension from the ground up to Z = 0, below the
+ * middle of the antenna: a faint dashed line in its own colour and without
+ * end bars, so it is not taken for a wire.
+ */
+function HeightDimension({ at, groundZ, near, color }: { at: Point3; groundZ: number; near: number; color: string }) {
+  // a fixed parent: drei's default one changes once events connect, remounting the label mid-render
+  const gl = useThree((s) => s.gl);
+  const portal = useMemo(() => ({ current: gl.domElement.parentElement as HTMLElement }), [gl]);
+  if (groundZ >= 0) return null;
+  const { x, y } = at;
+  return (
+    <>
+      <Line
+        points={[[x, y, groundZ], [x, y, 0]]}
+        color={color}
+        lineWidth={1}
+        dashed
+        dashSize={-groundZ / 60}
+        gapSize={-groundZ / 40}
+        transparent
+        opacity={0.7}
+        raycast={() => null}
+      />
+      {/* the label stays near the antenna, where the view is usually framed */}
+      <Html portal={portal} position={[x, y, Math.max(groundZ / 2, -near)]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
+        <div className="view3d-dim-label num">地上高 {metres(-groundZ)}</div>
+      </Html>
     </>
   );
 }

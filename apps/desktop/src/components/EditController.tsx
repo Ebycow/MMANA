@@ -10,7 +10,7 @@
 import { Grid, Html, Line, TransformControls } from '@react-three/drei';
 import { useThree } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef, type RefObject } from 'react';
-import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3, type Camera } from 'three';
+import { Group, Plane as ThreePlane, Raycaster, Vector2, Vector3, type Material, type Mesh } from 'three';
 import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 import type { Point3, PulsePoint, Wire } from '../api/types';
 import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
@@ -22,6 +22,7 @@ import {
   distToSegment2,
   distance,
   dominantAxis,
+  facingPlane,
   moveEndpoint,
   norm,
   polygonPoints,
@@ -67,17 +68,6 @@ const fmt = (v: number) => Number(v.toFixed(4)).toString();
 const fmtPoint = (p: Point3) => `(${fmt(p.x)}, ${fmt(p.y)}, ${fmt(p.z)})`;
 const PLANE_LABEL: Record<Plane, string> = { xy: 'XY', xz: 'XZ', yz: 'YZ' };
 
-/**
- * The plane free drags and automatic drawing use: the ground plane (XY)
- * unless the camera looks within about 20° of horizontal, then the vertical
- * plane that faces it.
- */
-function facingPlane(camera: Camera): Plane {
-  const d = camera.getWorldDirection(new Vector3());
-  if (Math.abs(d.z) > 0.35) return 'xy';
-  return Math.abs(d.y) >= Math.abs(d.x) ? 'xz' : 'yz';
-}
-
 /** Mantine keeps some closed modals mounted; an open one has a box. */
 /** Whether a key of the viewer's mouse setting is held. */
 const held = (setting: 'boxSelect' | 'addToSelection' | 'constrain' | 'followToggle', e: MouseEvent) =>
@@ -97,6 +87,8 @@ export interface EditSceneProps {
   editable: boolean;
   /** Size of the antenna, for the drawing grid. */
   radius: number;
+  /** Middle of the antenna in world coordinates, where the drawing grid is centred. */
+  center: Point3;
   /** Source and load markers in wire coordinates. */
   feeds: FeedPositions;
   /** The pulse layout, when it fits the wires. */
@@ -128,7 +120,7 @@ export function EditScene(props: EditSceneProps) {
       <PointerController {...props} gizmo={gizmo} />
       <EndHandles wires={props.wires} offset={props.offset} />
       <SelectionGizmo {...props} gizmo={gizmo} />
-      <DrawPreview offset={props.offset} step={props.step} radius={props.radius} />
+      <DrawPreview offset={props.offset} step={props.step} radius={props.radius} center={props.center} />
       <PulseTicks wires={props.wires} offset={props.offset} layout={props.layout} />
     </>
   );
@@ -145,6 +137,9 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
     const ndc = new Vector2();
     const tmp = new Vector3();
     let drag: Drag | null = null;
+    let facing: Plane | null = null;
+    /** The plane free drags and automatic drawing use, kept until the view turns clearly to another. */
+    const facingView = (): Plane => (facing = facingPlane(latest.current.camera.getWorldDirection(tmp), facing));
 
     const local = (e: MouseEvent): Pt2 => {
       const r = gl.domElement.getBoundingClientRect();
@@ -277,7 +272,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
 
     const drawPlane = (): Plane => {
       const ed = useEditor.getState();
-      return ed.draftPlane ?? (ed.plane === 'auto' ? facingPlane(latest.current.camera) : ed.plane);
+      return ed.draftPlane ?? (ed.plane === 'auto' ? facingView() : ed.plane);
     };
 
     const drawCursor = (p: Pt2, constrain: boolean): DrawCursor | null => {
@@ -411,7 +406,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
         updateDrag(e);
         return;
       }
-      const plane = facingPlane(latest.current.camera);
+      const plane = facingView();
       if (hit.kind === 'end') {
         drag = {
           kind: 'end',
@@ -773,14 +768,23 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
   );
 }
 
+/**
+ * A callback ref for the drawing grid, which shares its plane with wires: it
+ * is pushed back in depth so the wires lying in it draw over its lines.
+ */
+function gridBehindWires(mesh: Mesh | null) {
+  if (!mesh) return;
+  const m = mesh.material as Material;
+  Object.assign(m, { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, depthWrite: false });
+}
+
 /** The shape being drawn, the snap marker and the grid of the drawing plane. */
-function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; radius: number }) {
+function DrawPreview({ offset, step, radius, center: middle }: { offset: Point3; step: number; radius: number; center: Point3 }) {
   const tool = useEditor((s) => s.tool);
   const draft = useEditor((s) => s.draft);
   const draftPlane = useEditor((s) => s.draftPlane);
   const cursor = useEditor((s) => s.cursor);
   const sides = useEditor((s) => s.sides);
-  const gridSnap = useEditor((s) => s.gridSnap);
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => invalidate());
   if (!isDrawTool(tool)) return null;
@@ -797,16 +801,21 @@ function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; r
       if (distance(corner, draft[0]) > JOIN_EPS) outline = polygonPoints(draft[0], corner, plane, sides);
     }
   }
-  // the grid lies on the drawing plane through the point drawn from
-  const through = last ?? (cursor?.snap === 'vertex' || cursor?.snap === 'midpoint' ? cursor.point : ORIGIN);
+  // the grid lies on the drawing plane through the point drawn from, where a
+  // free click lands, and stays put under the antenna; it only grows to reach
+  // a pointer beyond it, its lines staying where they were
+  const through = last ?? ORIGIN;
   const normal = PLANE_NORMAL[plane];
-  const center = { ...(cursor?.point ?? through), [normal]: through[normal] };
-  const gridCenter = gridSnap ? snapToGrid(center, plane, step * 10) : center;
-  const extent = Math.max(step * 40, radius * 2.5);
+  const section = step * 10;
+  const gridCenter = snapToGrid({ ...sub(middle, offset), [normal]: through[normal] }, plane, section);
+  const [u, v] = PLANE_AXES[plane];
+  const reach = cursor ? Math.max(Math.abs(cursor.point[u] - gridCenter[u]), Math.abs(cursor.point[v] - gridCenter[v])) : 0;
+  const extent = 2 * section * Math.ceil(Math.max(step * 20, radius * 1.5, reach * 1.2) / section);
   const rotation: [number, number, number] = plane === 'xy' ? [Math.PI / 2, 0, 0] : plane === 'yz' ? [0, 0, Math.PI / 2] : [0, 0, 0];
   return (
     <>
       <Grid
+        ref={gridBehindWires}
         position={w(gridCenter)}
         rotation={rotation}
         args={[extent, extent]}
@@ -819,6 +828,7 @@ function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; r
         fadeDistance={extent * 1.5}
         fadeStrength={2}
         side={2}
+        renderOrder={1}
       />
       {draft.length > 1 && tool === 'wire' && <Line points={draft.map(w)} color="#eb6834" lineWidth={2.5} />}
       {outline && <Line points={outline.map(w)} color="#eb6834" lineWidth={2} dashed dashSize={step / 2} gapSize={step / 3} />}
