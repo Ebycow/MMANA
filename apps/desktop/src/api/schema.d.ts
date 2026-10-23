@@ -1423,7 +1423,7 @@ export interface components {
             part: components["schemas"]["StackPart"];
         };
         /** @enum {string} */
-        WarningCode: "belowGround" | "nonPositivePower" | "negligiblePower" | "tooManySegments";
+        WarningCode: "belowGround" | "nonPositivePower" | "negligiblePower" | "tooManySegments" | "closeWires";
         /**
          * @description How much each goal counts (評価の割合, 0-100 each). All zero counts every
          *     goal equally.
