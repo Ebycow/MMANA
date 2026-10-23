@@ -1,0 +1,415 @@
+/* The print preview and the printed sheets. Sizes are in mm and pt so the
+   preview is the page; the sheets keep light colours in the dark theme. */
+
+.print-view {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  background: var(--mantine-color-body);
+}
+.print-controls {
+  width: 300px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--panel-border);
+}
+.print-pages {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 24px;
+  background: #e4e3df;
+}
+:root[data-mantine-color-scheme='dark'] .print-pages {
+  background: #2a2a28;
+}
+
+.print-sheet {
+  --p-text: #161616;
+  --p-muted: #6b6a66;
+  --p-grid: #dddcd7;
+  --p-axis: #9b9a94;
+  --p-rule: #ecebe7;
+  --p-fill: #f6f6f3;
+  --p-accent: #1f63c6;
+  --p-series-1: #1f63c6;
+  --p-series-2: #d6541f;
+  --p-series-3: #12936a;
+  --p-feed: #d6301f;
+
+  width: 210mm;
+  height: 297mm;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 12mm;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: var(--p-text);
+  font-size: 8.5pt;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.18);
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.p-running-head,
+.p-running-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 6mm;
+  color: var(--p-muted);
+  font-size: 7pt;
+}
+.p-running-head {
+  height: 9mm;
+  align-items: flex-start;
+}
+.p-running-foot {
+  height: 7mm;
+  align-items: flex-end;
+}
+.p-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5mm;
+  overflow: hidden;
+}
+.p-block {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.p-heading {
+  box-sizing: border-box;
+  height: 5.5mm;
+  margin-bottom: 1.5mm;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4mm;
+  border-bottom: 0.35mm solid var(--p-accent);
+  font-size: 10pt;
+  font-weight: 700;
+}
+.p-heading-note {
+  font-size: 7pt;
+  font-weight: 400;
+  color: var(--p-muted);
+  padding-bottom: 0.5mm;
+}
+.p-empty,
+.p-ok {
+  color: var(--p-muted);
+  padding: 1mm 0;
+}
+.p-ok {
+  color: var(--p-series-3);
+}
+.p-stale {
+  opacity: 0.55;
+}
+
+/* title */
+.p-title-block {
+  border-bottom: 0.6mm solid var(--p-text);
+  padding-bottom: 1.5mm;
+  height: 100%;
+  box-sizing: border-box;
+}
+.p-antenna-name {
+  font-size: 17pt;
+  font-weight: 700;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.p-subtitle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1mm 5mm;
+  color: var(--p-muted);
+  margin-top: 0.5mm;
+}
+.p-comment {
+  margin-top: 1.5mm;
+  white-space: pre-wrap;
+  line-height: 4.2mm;
+  max-height: 16.8mm;
+  overflow: hidden;
+}
+
+/* summary */
+.p-tiles {
+  display: grid;
+  grid-template-columns: 0.9fr 0.9fr 1fr 1.6fr 0.9fr 1fr;
+  height: 16mm;
+  gap: 1.8mm;
+}
+.p-tile {
+  border: 0.25mm solid var(--p-grid);
+  border-radius: 1.5mm;
+  background: var(--p-fill);
+  padding: 1mm 2mm;
+  overflow: hidden;
+}
+.p-tile-label {
+  font-size: 7pt;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+.p-tile-value {
+  font-size: 12.5pt;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.p-tile-unit {
+  font-size: 7.5pt;
+  font-weight: 400;
+  color: var(--p-muted);
+}
+.p-tile-sub {
+  font-size: 6.5pt;
+  color: var(--p-muted);
+  white-space: nowrap;
+}
+.p-mmana {
+  margin: 0;
+  padding: 1.2mm 2.5mm;
+  border-left: 0.6mm solid var(--p-accent);
+  background: var(--p-fill);
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 7.3pt;
+  line-height: 3.55mm;
+  white-space: pre;
+  overflow: hidden;
+}
+.p-kv {
+  margin: 2mm 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6mm 6mm;
+  font-size: 7.5pt;
+}
+.p-kv div {
+  display: flex;
+  gap: 2mm;
+  min-width: 0;
+}
+.p-kv dt {
+  color: var(--p-muted);
+  flex-shrink: 0;
+}
+.p-kv dd {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.p-resonance {
+  margin-top: 1.5mm;
+  font-size: 8pt;
+}
+
+/* figures */
+.p-figure {
+  display: block;
+  overflow: visible;
+  font-family: inherit;
+}
+.p-figure text {
+  fill: var(--p-muted);
+}
+.p-figure .p-title {
+  fill: var(--p-text);
+  font-weight: 600;
+}
+.p-figure .p-muted {
+  fill: var(--p-muted);
+  font-weight: 400;
+}
+.p-grid {
+  fill: none;
+  stroke: var(--p-grid);
+  stroke-width: 0.2;
+}
+.p-axis {
+  fill: none;
+  stroke: var(--p-axis);
+  stroke-width: 0.25;
+}
+.p-band {
+  fill: var(--p-series-1);
+  opacity: 0.09;
+}
+.p-wire {
+  stroke: var(--p-text);
+  stroke-width: 0.35;
+  stroke-linecap: round;
+}
+.p-feed {
+  fill: var(--p-feed);
+}
+.p-load {
+  fill: var(--p-series-3);
+}
+.p-scale {
+  stroke: var(--p-text);
+  stroke-width: 0.3;
+}
+.p-legend {
+  height: 5mm;
+  display: flex;
+  align-items: center;
+  gap: 5mm;
+  font-size: 7.5pt;
+  color: var(--p-muted);
+}
+.p-legend svg {
+  margin-right: 1.5mm;
+  vertical-align: middle;
+}
+.p-patterns {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.p-patterns-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2mm;
+}
+.p-patterns figure {
+  margin: 0;
+}
+.p-patterns figcaption {
+  height: 4mm;
+  font-size: 7.5pt;
+  font-weight: 600;
+}
+
+/* warnings */
+.p-warnings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  line-height: 4.2mm;
+}
+.p-warnings b {
+  display: inline-block;
+  min-width: 10mm;
+  margin-right: 2mm;
+  font-size: 7pt;
+}
+.p-warnings .p-error b {
+  color: #c92a2a;
+}
+.p-warnings .p-warning b {
+  color: #c77700;
+}
+.p-warnings .p-info b {
+  color: var(--p-muted);
+}
+
+/* tables */
+.p-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 7.5pt;
+  line-height: 1;
+}
+.p-table th,
+.p-table td {
+  padding: 0 1.2mm;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.p-table th {
+  height: 6mm;
+  box-sizing: border-box;
+  background: var(--p-fill);
+  border-bottom: 0.3mm solid var(--p-axis);
+  font-weight: 600;
+  font-size: 7pt;
+}
+.p-table td {
+  height: 4.6mm;
+  box-sizing: border-box;
+  border-bottom: 0.15mm solid var(--p-rule);
+}
+.p-table .left {
+  text-align: left;
+}
+
+/* sweep */
+.p-bandwidth {
+  height: 10mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.6mm;
+  font-size: 8pt;
+}
+.p-sweep {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+}
+
+/* memo */
+.p-memo {
+  height: 56mm;
+  border: 0.25mm solid var(--p-grid);
+  border-radius: 1.5mm;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 7.7mm, var(--p-grid) 7.7mm, var(--p-grid) 8mm);
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+  .print-view {
+    position: static;
+    display: block;
+    background: none;
+  }
+  .print-controls {
+    display: none;
+  }
+  .print-pages {
+    display: block;
+    overflow: visible;
+    padding: 0;
+    background: none !important;
+  }
+  .print-sheet {
+    /* a hair under the page, so rounding never spills onto a blank one */
+    height: 296.5mm;
+    box-shadow: none;
+    break-after: page;
+  }
+  .print-sheet:last-child {
+    break-after: auto;
+  }
+}

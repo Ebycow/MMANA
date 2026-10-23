@@ -1,7 +1,7 @@
 // The printed sheets (印刷): which sections there are, how they fall onto A4
 // pages, and the figures MMANA printed that the screen does not show (the
 // SWR against 600 Ω, the SWR bandwidths of the 周波数特性 sheet).
-import type { Complex, SweepPoint, Wire } from '../api/types';
+import type { Complex, Point3, SweepPoint } from '../api/types';
 
 export type SectionId = 'summary' | 'patterns' | 'shape' | 'warnings' | 'elements' | 'wires' | 'feed' | 'sweep' | 'memo';
 
@@ -16,7 +16,7 @@ export interface Section {
 export const SECTIONS: Section[] = [
   { id: 'summary', label: '計算結果', description: '利得・F/B・Z・SWR・打ち上げ角と計算条件（MMANA のパターン図の結果欄を含む）', initial: true },
   { id: 'patterns', label: '指向性図', description: '水平面と垂直面', initial: true },
-  { id: 'shape', label: 'アンテナ形状', description: '上・前・横から見た 3 面図と全体の寸法', initial: true },
+  { id: 'shape', label: 'アンテナ形状', description: '上・後ろ・横から見た 3 面図と全体の大きさ', initial: true },
   { id: 'warnings', label: '警告', description: '結果を信用できない可能性のある箇所', initial: true },
   { id: 'elements', label: 'エレメント表', description: 'エレメント編集と同じ表（位置・間隔・横幅・縦幅・全周）', initial: true },
   { id: 'wires', label: 'ワイヤー表', description: '全ワイヤーの座標・半径・分割数・長さ', initial: true },
@@ -139,7 +139,7 @@ export interface Extent {
 }
 
 /** The box around every wire, in metres; null for no wires. */
-export function extentOf(wires: Wire[]): Extent | null {
+export function extentOf(wires: { start: Point3; end: Point3 }[]): Extent | null {
   if (wires.length === 0) return null;
   const pts = wires.flatMap((w) => [w.start, w.end]);
   const axis = (k: 'x' | 'y' | 'z', f: (...v: number[]) => number) => f(...pts.map((p) => p[k]));
