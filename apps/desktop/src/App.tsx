@@ -5,6 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { useEffect } from 'react';
 import { EngineError, files, isTauri, startupFile, transport } from './api/transport';
 import { AppHeader, type FileActions } from './components/AppHeader';
+import { ChecksSettings } from './components/ChecksSettings';
 import { ElementEditor } from './components/ElementEditor';
 import { InputSettings } from './components/InputSettings';
 import { OptimizerDialog } from './components/OptimizerDialog';
@@ -210,6 +211,7 @@ export function App() {
       <OptimizerDialog />
       <OptimizerResults />
       <InputSettings />
+      <ChecksSettings />
     </AppShell>
   );
 }
