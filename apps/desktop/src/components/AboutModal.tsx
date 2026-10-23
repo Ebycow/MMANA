@@ -36,14 +36,19 @@ export function AboutModal({ opened, onClose }: { opened: boolean; onClose: () =
               <Table.Td className="num">{formatBuiltAt(BUILT_AT)}</Table.Td>
             </Table.Tr>
             <Table.Tr>
+              <Table.Td c="dimmed">ライセンス</Table.Td>
+              <Table.Td>LGPL-3.0-or-later</Table.Td>
+            </Table.Tr>
+            <Table.Tr>
               <Table.Td c="dimmed">ソースコード</Table.Td>
               <Table.Td style={{ userSelect: 'text' }}>github.com/Ebycow/MMMANA</Table.Td>
             </Table.Tr>
           </Table.Tbody>
         </Table>
         <Text size="xs" c="dimmed">
-          「v0.2.0-43-g060248a」は、v0.2.0 から 43 コミット後のコミット 060248a を表します。
-          不具合を報告するときは、バージョン情報をコピーして添えてください。
+          オリジナルの MMANA の LGPL を受け継いでいます。
+          <br />
+          Copyright 1999-2013 Makoto Mori (JE3HHT), Nobuyuki Oba (JA7UDE)
         </Text>
         <Group justify="flex-end">
           <CopyButton value={versionLine()}>
