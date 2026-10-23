@@ -87,6 +87,8 @@ export interface EditSceneProps {
   editable: boolean;
   /** Size of the antenna, for the drawing grid. */
   radius: number;
+  /** Middle of the antenna in world coordinates, where the drawing grid is centred. */
+  center: Point3;
   /** Source and load markers in wire coordinates. */
   feeds: FeedPositions;
   /** The pulse layout, when it fits the wires. */
@@ -118,7 +120,7 @@ export function EditScene(props: EditSceneProps) {
       <PointerController {...props} gizmo={gizmo} />
       <EndHandles wires={props.wires} offset={props.offset} />
       <SelectionGizmo {...props} gizmo={gizmo} />
-      <DrawPreview offset={props.offset} step={props.step} radius={props.radius} />
+      <DrawPreview offset={props.offset} step={props.step} radius={props.radius} center={props.center} />
       <PulseTicks wires={props.wires} offset={props.offset} layout={props.layout} />
     </>
   );
@@ -767,13 +769,12 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
 }
 
 /** The shape being drawn, the snap marker and the grid of the drawing plane. */
-function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; radius: number }) {
+function DrawPreview({ offset, step, radius, center: middle }: { offset: Point3; step: number; radius: number; center: Point3 }) {
   const tool = useEditor((s) => s.tool);
   const draft = useEditor((s) => s.draft);
   const draftPlane = useEditor((s) => s.draftPlane);
   const cursor = useEditor((s) => s.cursor);
   const sides = useEditor((s) => s.sides);
-  const gridSnap = useEditor((s) => s.gridSnap);
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => invalidate());
   if (!isDrawTool(tool)) return null;
@@ -790,12 +791,16 @@ function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; r
       if (distance(corner, draft[0]) > JOIN_EPS) outline = polygonPoints(draft[0], corner, plane, sides);
     }
   }
-  // the grid lies on the drawing plane through the point drawn from
-  const through = last ?? (cursor?.snap === 'vertex' || cursor?.snap === 'midpoint' ? cursor.point : ORIGIN);
+  // the grid lies on the drawing plane through the point drawn from, where a
+  // free click lands, and stays put under the antenna; it only grows to reach
+  // a pointer beyond it, its lines staying where they were
+  const through = last ?? ORIGIN;
   const normal = PLANE_NORMAL[plane];
-  const center = { ...(cursor?.point ?? through), [normal]: through[normal] };
-  const gridCenter = gridSnap ? snapToGrid(center, plane, step * 10) : center;
-  const extent = Math.max(step * 40, radius * 2.5);
+  const section = step * 10;
+  const gridCenter = snapToGrid({ ...sub(middle, offset), [normal]: through[normal] }, plane, section);
+  const [u, v] = PLANE_AXES[plane];
+  const reach = cursor ? Math.max(Math.abs(cursor.point[u] - gridCenter[u]), Math.abs(cursor.point[v] - gridCenter[v])) : 0;
+  const extent = 2 * section * Math.ceil(Math.max(step * 20, radius * 1.5, reach * 1.2) / section);
   const rotation: [number, number, number] = plane === 'xy' ? [Math.PI / 2, 0, 0] : plane === 'yz' ? [0, 0, Math.PI / 2] : [0, 0, 0];
   return (
     <>
@@ -812,6 +817,7 @@ function DrawPreview({ offset, step, radius }: { offset: Point3; step: number; r
         fadeDistance={extent * 1.5}
         fadeStrength={2}
         side={2}
+        renderOrder={1}
       />
       {draft.length > 1 && tool === 'wire' && <Line points={draft.map(w)} color="#eb6834" lineWidth={2.5} />}
       {outline && <Line points={outline.map(w)} color="#eb6834" lineWidth={2} dashed dashSize={step / 2} gapSize={step / 3} />}
