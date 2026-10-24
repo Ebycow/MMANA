@@ -5,6 +5,7 @@ import {
   currentTrial,
   defaultSetup,
   formatBound,
+  followWires,
   formatLink,
   makeTarget,
   matchingJx,
@@ -209,5 +210,22 @@ describe('optimisation in the store', () => {
     expect(spy.mock.calls[0][0].values).toEqual([4.9]);
     expect(useApp.getState().project.antenna.wires[0].end.y).toBe(4.9);
     expect(useApp.getState().optimizer.appliedValues).toEqual([4.9]);
+  });
+});
+
+describe('reordered wires', () => {
+  it('moves wire variables, the current goal and band sources with their wires', () => {
+    const s = defaultSetup();
+    s.variables = [
+      { target: makeTarget('wire', 0, 0), link: { kind: 'independent' }, pitch: 1, min: 0, max: 1, minFrom: null, maxFrom: null },
+      { target: makeTarget('element', 0, 0), link: { kind: 'independent' }, pitch: 1, min: 0, max: 1, minFrom: null, maxFrom: null },
+    ];
+    s.goals.currentPulse = 'w2c';
+    s.bands = [{ frequencyMhz: 14, sources: [{ pulse: 'w1b', phaseDeg: 0, voltage: 1 }] }];
+    const f = followWires(s, [2, 0, 1]);
+    expect(f.variables[0].target).toMatchObject({ kind: 'wire', wire: 2 });
+    expect(f.variables[1].target).toEqual(s.variables[1].target);
+    expect(f.goals.currentPulse).toBe('w1c');
+    expect(f.bands[0].sources[0].pulse).toBe('w3b');
   });
 });

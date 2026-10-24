@@ -16,6 +16,7 @@ import type {
 } from '../api/types';
 import { evaluate } from './expr';
 import { strDbl } from './elements';
+import { followWire } from './wireEdit';
 
 export type TargetKind = VariableTarget['kind'];
 
@@ -106,6 +107,25 @@ export function targetPosition(t: VariableTarget): number | null {
     default:
       return null;
   }
+}
+
+/**
+ * The setup after the wires were reordered (`moved[i]` = the new index of
+ * wire i): wire variables, the current goal and the bands' sources follow
+ * their wires. Element numbers are left as they are.
+ */
+export function followWires(setup: OptimizerSetup, moved: number[]): OptimizerSetup {
+  const pulse = (name: string) => followWire(name, moved).pulse;
+  return {
+    ...setup,
+    variables: setup.variables.map((v) =>
+      (v.target.kind === 'wire' || v.target.kind === 'polarWire') && moved[v.target.wire] != null
+        ? { ...v, target: { ...v.target, wire: moved[v.target.wire] } }
+        : v,
+    ),
+    goals: { ...setup.goals, currentPulse: pulse(setup.goals.currentPulse) },
+    bands: setup.bands.map((b) => ({ ...b, sources: b.sources.map((src) => ({ ...src, pulse: pulse(src.pulse) })) })),
+  };
 }
 
 /** A target from the three columns; a part the kind lacks becomes its first. */
