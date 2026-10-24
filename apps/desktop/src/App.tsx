@@ -143,6 +143,7 @@ export function App() {
       'tool.rect': tool('rect'),
       'tool.polygon': tool('polygon'),
       'tool.feed': tool('feed'),
+      drawPlane: () => useEditor.getState().cyclePlane(),
     },
     // calculating must also work while typing in a cell
     ['calculate'],

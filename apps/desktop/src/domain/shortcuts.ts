@@ -23,6 +23,7 @@ export type CommandId =
   | 'calculate'
   | 'optimize'
   | 'settings'
+  | 'drawPlane'
   | `tool.${Tool}`;
 
 export interface Command {
@@ -58,6 +59,7 @@ export const COMMANDS: Command[] = [
   { id: 'tool.rect', label: '四角ループ', group: '3D ビューのツール', keys: ['Q'] },
   { id: 'tool.polygon', label: '多角形ループ', group: '3D ビューのツール', keys: ['O'] },
   { id: 'tool.feed', label: '給電点・負荷を移動', group: '3D ビューのツール', keys: ['F'] },
+  { id: 'drawPlane', label: '作図面を切り替え（自動 → XY → XZ → YZ）', group: '3D ビューのツール', keys: ['P'] },
   { id: 'settings', label: 'キーボードとマウスの設定', group: 'その他', keys: ['mod+,'] },
 ];
 

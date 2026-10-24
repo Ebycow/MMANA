@@ -45,7 +45,7 @@ import { evaluate } from '../domain/expr';
 import { describeIssue, findJunctionIssues, fixable, isMistake, issuePoint, issueWires, type JunctionIssue } from '../domain/junctions';
 import { wavelength } from '../domain/project';
 import { AXES, type Axis } from '../domain/wireEdit';
-import { useEditor, type PlaneMode, type Tool } from '../state/editor';
+import { PLANE_MODES, isDrawTool, useEditor, type PlaneMode, type Tool } from '../state/editor';
 import { useHeldText, useKeyText } from '../state/input';
 import { useApp } from '../state/store';
 import {
@@ -132,6 +132,7 @@ export function EditToolbar({ autoStep, editable }: { autoStep: number; editable
         <SnapSettings autoStep={autoStep} />
         <JunctionCheck editable={editable} />
       </Paper>
+      {isDrawTool(tool) && <DrawBar />}
       <SelectionBar editable={editable} />
     </div>
   );
@@ -139,7 +140,6 @@ export function EditToolbar({ autoStep, editable }: { autoStep: number; editable
 
 function SnapSettings({ autoStep }: { autoStep: number }) {
   const s = useEditor();
-  const constrainKey = useHeldText('constrain');
   const followKey = useHeldText('followToggle');
   const stepValue = s.step == null ? 'auto' : String(s.step);
   return (
@@ -183,26 +183,6 @@ function SnapSettings({ autoStep }: { autoStep: number }) {
             </div>
           </Tooltip>
           <Divider />
-          <div>
-            <Text size="xs" c="dimmed" mb={4}>
-              作図面（描画ツール）
-            </Text>
-            <SegmentedControl
-              size="xs"
-              fullWidth
-              value={s.plane}
-              onChange={(v) => s.set({ plane: v as PlaneMode })}
-              data={[
-                { value: 'auto', label: '自動' },
-                { value: 'xy', label: 'XY' },
-                { value: 'xz', label: 'XZ' },
-                { value: 'yz', label: 'YZ' },
-              ]}
-            />
-            <Text size="xs" c="dimmed" mt={4}>
-              自動は視線に最も向いた面。直前の点を通る面に描きます。{constrainKey} で 15° 刻み。
-            </Text>
-          </div>
           <NumberInput
             size="xs"
             label="多角形の角の数"
@@ -306,6 +286,41 @@ function JunctionCheck({ editable }: { editable: boolean }) {
         </Stack>
       </Popover.Dropdown>
     </Popover>
+  );
+}
+
+const PLANE_LABEL: Record<PlaneMode, string> = { auto: '自動', xy: 'XY', xz: 'XZ', yz: 'YZ' };
+
+/** The drawing plane, in reach while a drawing tool is on. */
+function DrawBar() {
+  const plane = useEditor((s) => s.plane);
+  const setPlane = useEditor((s) => s.setPlane);
+  // the plane in use: fixed by a shape's first click, else the one auto picked last
+  const current = useEditor((s) => s.draftPlane ?? s.cursor?.plane ?? null);
+  const constrainKey = useHeldText('constrain');
+  const key = useKeyText('drawPlane');
+  return (
+    <Paper className="view3d-toolbar-row" shadow="xs" withBorder>
+      <Tooltip
+        multiline
+        w={260}
+        label={`点は直前の点を通るこの面の上に置きます。自動は視線に最も向いた面です。${key ? `${key} で切り替え。` : ''}${constrainKey} で 15° 刻み`}
+      >
+        <Text size="xs" px={6} style={{ whiteSpace: 'nowrap' }}>
+          作図面
+        </Text>
+      </Tooltip>
+      <SegmentedControl
+        size="xs"
+        aria-label="作図面"
+        value={plane}
+        onChange={(v) => setPlane(v as PlaneMode)}
+        data={PLANE_MODES.map((m) => ({
+          value: m,
+          label: m === 'auto' && plane === 'auto' && current ? `自動（${PLANE_LABEL[current]}）` : PLANE_LABEL[m],
+        }))}
+      />
+    </Paper>
   );
 }
 
