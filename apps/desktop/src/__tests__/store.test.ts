@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalcResult, ParsedProject, ResonanceSearch, SweepRequest, SweepResponse } from '../api/types';
 import { files, transport } from '../api/transport';
 import { newProject } from '../domain/project';
+import { useEditor } from '../state/editor';
 import { useApp } from '../state/store';
+import { previewSelectionCommand, runSelectionCommand, type SelectionCommand } from '../state/wireCommands';
 
 /** A promise the test resolves by hand, to finish a request at a chosen moment. */
 function deferred<T>() {
@@ -105,6 +107,38 @@ describe('新規作成', () => {
     expect(antenna).toMatchObject({ name: '', wires: [], sources: [], frequencyMhz: 14.05 });
     expect(environment).toMatchObject({ ground: 'perfect', height: 7, swrReference: { r: 50, x: 0 } });
     expect(useApp.getState().dirty).toBe(false);
+  });
+});
+
+describe('previewing a selection command', () => {
+  afterEach(() => useEditor.getState().set({ preview: null }));
+
+  it('shows the result without editing, and running it gives the same wires', () => {
+    const c: SelectionCommand = { kind: 'rotate', axis: 'z', deg: 90 };
+    const before = useApp.getState().project;
+    useApp.getState().selectWire(0);
+    previewSelectionCommand(c);
+    const shown = useEditor.getState().preview;
+    expect(shown?.[0].start.x).toBeCloseTo(5.121);
+    expect(useApp.getState().project).toBe(before);
+    previewSelectionCommand(null);
+    expect(useEditor.getState().preview).toBeNull();
+    runSelectionCommand(c);
+    expect(useApp.getState().project.antenna.wires).toEqual(shown);
+  });
+
+  it('shows the copies a mirror copy would add', () => {
+    useApp.getState().edit((p) => void (p.antenna.wires[0] = { ...p.antenna.wires[0], start: { x: 1, y: -1, z: 0 }, end: { x: 1, y: 1, z: 0 } }));
+    useApp.getState().selectWire(0);
+    previewSelectionCommand({ kind: 'mirrorCopy', axis: 'x' });
+    expect(useEditor.getState().preview?.map((w) => w.start.x)).toEqual([1, -1]);
+    expect(useApp.getState().project.antenna.wires).toHaveLength(1);
+  });
+
+  it('shows nothing without a selection', () => {
+    useApp.getState().selectWire(null);
+    previewSelectionCommand({ kind: 'flip', axis: 'y' });
+    expect(useEditor.getState().preview).toBeNull();
   });
 });
 

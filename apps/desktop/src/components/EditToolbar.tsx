@@ -49,14 +49,13 @@ import { PLANE_MODES, isDrawTool, useEditor, type PlaneMode, type Tool } from '.
 import { useHeldText, useKeyText } from '../state/input';
 import { useApp } from '../state/store';
 import {
-  alignSelected,
   deleteSelected,
   duplicateSelected,
   fixIssues,
-  flipSelected,
-  mirrorCopySelected,
-  rotateSelected,
   transformSelected,
+  previewSelectionCommand,
+  runSelectionCommand,
+  type SelectionCommand,
 } from '../state/wireCommands';
 import { KeyHint } from './InputSettings';
 
@@ -331,12 +330,25 @@ function SelectionBar({ editable }: { editable: boolean }) {
   const duplicateKey = useKeyText('duplicate');
   const deleteKey = useKeyText('delete');
   if (count === 0) return null;
-  const axisItems = (f: (a: Axis) => void, label: (a: string) => string) =>
-    AXES.map((a) => (
-      <Menu.Item key={a} onClick={() => f(a)}>
-        {label(a.toUpperCase())}
-      </Menu.Item>
-    ));
+  // pointing at an item shows its result in the 3D view
+  const item = (key: string, c: SelectionCommand, label: string) => (
+    <Menu.Item
+      key={key}
+      onMouseEnter={() => previewSelectionCommand(c)}
+      onMouseLeave={() => previewSelectionCommand(null)}
+      onFocus={() => previewSelectionCommand(c)}
+      onBlur={() => previewSelectionCommand(null)}
+      onClick={() => {
+        previewSelectionCommand(null);
+        runSelectionCommand(c);
+      }}
+    >
+      {label}
+    </Menu.Item>
+  );
+  const axisItems = (kind: 'flip' | 'mirrorCopy' | 'align', label: (a: string) => string) =>
+    AXES.map((a) => item(a, { kind, axis: a }, label(a.toUpperCase())));
+  const endPreview = () => previewSelectionCommand(null);
   return (
     <Paper className="view3d-toolbar-row" shadow="xs" withBorder>
       <Text size="xs" px={6} className="num" style={{ whiteSpace: 'nowrap' }}>
@@ -352,7 +364,7 @@ function SelectionBar({ editable }: { editable: boolean }) {
           <IconCopy size={15} />
         </ActionIcon>
       </Tooltip>
-      <Menu position="bottom-start" withinPortal disabled={!editable}>
+      <Menu position="bottom-start" withinPortal disabled={!editable} onClose={endPreview}>
         <Menu.Target>
           <Tooltip label="反転・鏡像">
             <ActionIcon aria-label="反転・鏡像" variant="subtle" color="gray" disabled={!editable}>
@@ -362,12 +374,12 @@ function SelectionBar({ editable }: { editable: boolean }) {
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Label>選択の中心で反転</Menu.Label>
-          {axisItems(flipSelected, (a) => `${a} 方向に反転`)}
+          {axisItems('flip', (a) => `${a} 方向に反転`)}
           <Menu.Label>鏡像コピーを追加</Menu.Label>
-          {axisItems(mirrorCopySelected, (a) => `${a} = 0 の面に対して`)}
+          {axisItems('mirrorCopy', (a) => `${a} = 0 の面に対して`)}
         </Menu.Dropdown>
       </Menu>
-      <Menu position="bottom-start" withinPortal disabled={!editable}>
+      <Menu position="bottom-start" withinPortal disabled={!editable} onClose={endPreview}>
         <Menu.Target>
           <Tooltip label="原点にそろえる">
             <ActionIcon aria-label="原点にそろえる" variant="subtle" color="gray" disabled={!editable}>
@@ -377,10 +389,10 @@ function SelectionBar({ editable }: { editable: boolean }) {
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Label>選択の中心を</Menu.Label>
-          {axisItems(alignSelected, (a) => `${a} = 0 へ`)}
+          {axisItems('align', (a) => `${a} = 0 へ`)}
         </Menu.Dropdown>
       </Menu>
-      <Menu position="bottom-start" withinPortal disabled={!editable}>
+      <Menu position="bottom-start" withinPortal disabled={!editable} onClose={endPreview}>
         <Menu.Target>
           <Tooltip label="90° 回転">
             <ActionIcon aria-label="90° 回転" variant="subtle" color="gray" disabled={!editable}>
@@ -391,12 +403,8 @@ function SelectionBar({ editable }: { editable: boolean }) {
         <Menu.Dropdown>
           <Menu.Label>選択の中心で 90° 回転</Menu.Label>
           {AXES.flatMap((a) => [
-            <Menu.Item key={`${a}+`} onClick={() => rotateSelected(a, 90)}>
-              {a.toUpperCase()} 軸 +90°
-            </Menu.Item>,
-            <Menu.Item key={`${a}-`} onClick={() => rotateSelected(a, -90)}>
-              {a.toUpperCase()} 軸 −90°
-            </Menu.Item>,
+            item(`${a}+`, { kind: 'rotate', axis: a, deg: 90 }, `${a.toUpperCase()} 軸 +90°`),
+            item(`${a}-`, { kind: 'rotate', axis: a, deg: -90 }, `${a.toUpperCase()} 軸 −90°`),
           ])}
         </Menu.Dropdown>
       </Menu>
