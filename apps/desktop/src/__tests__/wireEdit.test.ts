@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Point3, Wire } from '../api/types';
 import { newProject, newWire } from '../domain/project';
 import {
+  addedWire,
   alignToOrigin,
   appendCopies,
   connectedWires,
@@ -168,6 +169,44 @@ describe('inserting wires', () => {
     expect(r.antenna.wires[1].start).toEqual(p(5, 0, 0));
     expect(r.antenna.sources[0].pulse).toBe('w3c');
     expect(r.antenna.loads[0].pulse).toBe('w1c');
+  });
+});
+
+describe('the wire the list adds', () => {
+  const settings = { mode: 'zero' as const, offset: p(0.1, 0, 0), start: p(1, 2, 3), end: p(1, 2, 4) };
+  const last: Wire = { ...w(p(0, -1, 0), p(0, 1, 0)), radius: 0.002, note: 'dipole', group: 'DE' };
+
+  it('starts at the origin with zero length, like MMANA', () => {
+    const n = addedWire(last, settings);
+    expect([n.start, n.end]).toEqual([p(0, 0, 0), p(0, 0, 0)]);
+    expect(n).toMatchObject({ radius: 0.002, note: '', group: 'DE' });
+  });
+
+  it('continues from the end of the last wire', () => {
+    const n = addedWire(last, { ...settings, mode: 'continue' });
+    expect([n.start, n.end]).toEqual([p(0, 1, 0), p(0, 2, 0)]);
+  });
+
+  it('shifts the last wire, sharing no end with it', () => {
+    const n = addedWire(last, { ...settings, mode: 'offset' });
+    expect([n.start, n.end]).toEqual([p(0.1, -1, 0), p(0.1, 1, 0)]);
+  });
+
+  it('uses the fixed coordinates', () => {
+    const n = addedWire(last, { ...settings, mode: 'fixed' });
+    expect([n.start, n.end]).toEqual([p(1, 2, 3), p(1, 2, 4)]);
+  });
+
+  it('starts a 1 m wire at the origin when there is no last wire to follow', () => {
+    for (const mode of ['continue', 'offset'] as const) {
+      const n = addedWire(undefined, { ...settings, mode });
+      expect([n.start, n.end]).toEqual([p(0, 0, 0), p(0, 1, 0)]);
+    }
+    expect(addedWire(undefined, settings)).toEqual(newWire(p(0, 0, 0), p(0, 0, 0)));
+  });
+
+  it('does not share the segmentation object with the last wire', () => {
+    expect(addedWire(last, settings).segmentation).not.toBe(last.segmentation);
   });
 });
 

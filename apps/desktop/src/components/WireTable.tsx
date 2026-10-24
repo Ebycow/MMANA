@@ -1,4 +1,4 @@
-import { ActionIcon, Button, Checkbox, Group, SegmentedControl, Stack, Text, TextInput, Tooltip } from '@mantine/core';
+import { ActionIcon, Button, Checkbox, Group, Popover, Radio, SegmentedControl, Stack, Text, TextInput, Tooltip } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
   IconChevronDown,
@@ -9,9 +9,10 @@ import {
   IconLayoutRows,
   IconPencil,
   IconPlus,
+  IconSettings,
   IconTrash,
 } from '@tabler/icons-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Point3 } from '../api/types';
 import {
@@ -28,15 +29,17 @@ import {
   type Units,
 } from '../domain/elements';
 import { byWire, worst, type Diagnostic } from '../domain/diagnostics';
-import { newWire, wavelength, wireLength } from '../domain/project';
+import { evaluate } from '../domain/expr';
+import { wavelength, wireLength } from '../domain/project';
 import { describeSegmentation, formatSegmentation, parseSegmentation } from '../domain/segmentation';
-import { insertWires, removeWires } from '../domain/wireEdit';
+import { addedWire, insertWires, removeWires, type NewWireMode } from '../domain/wireEdit';
 import { listRows, type ListRow } from '../domain/wireGroups';
 import { formatKey } from '../domain/shortcuts';
 import { useDiagnostics } from '../state/diagnostics';
 import { useDisplay } from '../state/display';
 import { useEditor } from '../state/editor';
 import { useInput } from '../state/input';
+import { useNewWire } from '../state/newWire';
 import { useApp } from '../state/store';
 import {
   canEditWires,
@@ -137,12 +140,8 @@ export function WireTable() {
   };
 
   const addWire = () => {
-    edit((p) => {
-      const last = p.antenna.wires.at(-1);
-      // continue from the end of the last wire, like drawing in MMANA
-      const start = last ? { ...last.end } : { x: 0, y: 0, z: 0 };
-      p.antenna.wires.push({ ...(last ?? newWire(start, start)), start, end: { ...start, y: start.y + 1 }, note: '' });
-    });
+    const settings = useNewWire.getState();
+    edit((p) => void p.antenna.wires.push(addedWire(p.antenna.wires.at(-1), settings)));
     select(wires.length);
   };
 
@@ -296,9 +295,12 @@ export function WireTable() {
       {drag.view && <DragOverlay view={drag.view} />}
       <Group p="xs" justify="space-between">
         <Group gap="xs">
-          <Button variant="light" leftSection={<IconPlus size={14} />} onClick={addWire}>
-            ワイヤーを追加
-          </Button>
+          <Group gap={0} wrap="nowrap">
+            <Button variant="light" leftSection={<IconPlus size={14} />} onClick={addWire}>
+              ワイヤーを追加
+            </Button>
+            <NewWireOptions units={units} />
+          </Group>
           <Tooltip label="つながったワイヤをエレメントとして、幅・全周・間隔などをまとめて変更します" multiline w={260}>
             <Button variant="default" leftSection={<IconLayoutRows size={14} />} onClick={() => setElementEditorOpen(true)}>
               エレメント編集…
@@ -343,6 +345,92 @@ export function WireTable() {
         </Group>
       </Group>
     </>
+  );
+}
+
+const NEW_WIRE_MODES: { mode: NewWireMode; label: string }[] = [
+  { mode: 'zero', label: '原点に長さ 0（座標はあとで入力。MMANA と同じ）' },
+  { mode: 'continue', label: '最後のワイヤーの終点につなげる（Y 方向に 1 m）' },
+  { mode: 'offset', label: '最後のワイヤーをずらした位置' },
+  { mode: 'fixed', label: '指定した座標' },
+];
+
+/** The settings of the 追加 button: where the new wire goes. */
+function NewWireOptions({ units }: { units: Units }) {
+  const s = useNewWire();
+  const lu = lengthUnit(units);
+  const point = (key: 'offset' | 'start' | 'end', labels: string[], disabled: boolean) => (
+    <Group grow gap="xs" wrap="nowrap">
+      {(['x', 'y', 'z'] as const).map((a, k) => (
+        <LengthInput key={a} label={labels[k]} value={s[key][a]} units={units} disabled={disabled} onCommit={(v) => s.set({ [key]: { ...s[key], [a]: v } })} />
+      ))}
+    </Group>
+  );
+  return (
+    <Popover position="top-start" shadow="md">
+      <Popover.Target>
+        <Tooltip label="追加するワイヤーの位置">
+          <ActionIcon variant="light" size="input-sm" aria-label="追加するワイヤーの位置">
+            <IconSettings size={16} />
+          </ActionIcon>
+        </Tooltip>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs" w={300}>
+          <Radio.Group label="追加するワイヤーの位置" value={s.mode} onChange={(v) => s.set({ mode: v as NewWireMode })}>
+            <Stack gap={6} mt={6}>
+              {NEW_WIRE_MODES.map((m) => (
+                <Radio key={m.mode} size="xs" value={m.mode} label={m.label} />
+              ))}
+            </Stack>
+          </Radio.Group>
+          <Text size="xs" fw={500}>
+            ずらす量（{lu}）
+          </Text>
+          {point('offset', ['ΔX', 'ΔY', 'ΔZ'], s.mode !== 'offset')}
+          <Text size="xs" fw={500}>
+            指定した座標（{lu}）
+          </Text>
+          {point('start', ['X1', 'Y1', 'Z1'], s.mode !== 'fixed')}
+          {point('end', ['X2', 'Y2', 'Z2'], s.mode !== 'fixed')}
+          <Text size="xs" c="dimmed">
+            半径と SEG は最後のワイヤーと同じにします。最後のワイヤーがないときは、ずらす・続けるの代わりに原点から Y 方向に 1 m のワイヤーを追加します。
+          </Text>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+/** A length in the wire table's units; takes expressions like the cells (R = wavelength). */
+function LengthInput({ label, value, units, disabled, onCommit }: { label: string; value: number; units: Units; disabled: boolean; onCommit: (m: number) => void }) {
+  const shown = format(lengthToDisplay(value, units), lengthDigits(units));
+  const [text, setText] = useState(shown);
+  const [bad, setBad] = useState(false);
+  useEffect(() => {
+    setText(shown);
+    setBad(false);
+  }, [shown]);
+  const commit = () => {
+    if (text === shown) return setBad(false);
+    const v = evaluate(text, { wavelength: lengthWavelength(units) });
+    if (v == null) return setBad(true);
+    setBad(false);
+    onCommit(lengthFromDisplay(v, units));
+    setText(format(v, lengthDigits(units)));
+  };
+  return (
+    <TextInput
+      size="xs"
+      label={label}
+      value={text}
+      disabled={disabled}
+      error={bad}
+      classNames={{ input: 'num' }}
+      onChange={(e) => setText(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
+    />
   );
 }
 
