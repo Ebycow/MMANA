@@ -18,6 +18,8 @@ export type CommandId =
   | 'duplicate'
   | 'selectAll'
   | 'delete'
+  | 'group'
+  | 'ungroup'
   | 'calculate'
   | 'optimize'
   | 'settings'
@@ -45,6 +47,8 @@ export const COMMANDS: Command[] = [
   { id: 'duplicate', label: '複製', group: '編集', keys: ['mod+D'] },
   { id: 'selectAll', label: 'すべて選択', group: '編集', keys: ['mod+A'] },
   { id: 'delete', label: '選択したワイヤーを削除', group: '編集', keys: ['Delete', 'Backspace'] },
+  { id: 'group', label: '選択したワイヤーをグループにまとめる', group: '編集', keys: ['mod+G'] },
+  { id: 'ungroup', label: '選択したワイヤーのグループを解除', group: '編集', keys: ['mod+shift+G'] },
   { id: 'calculate', label: '計算', group: '計算', keys: ['mod+Enter'] },
   { id: 'optimize', label: '最適化', group: '計算', keys: [] },
   { id: 'tool.select', label: '選択', group: '3D ビューのツール', keys: ['V'] },

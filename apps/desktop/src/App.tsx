@@ -19,7 +19,7 @@ import { useEditor, type Tool } from './state/editor';
 import { useCommandKeys, useInput } from './state/input';
 import { usePrint } from './state/print';
 import { useApp } from './state/store';
-import { canEditWires, copySelected, cutSelected, deleteSelected, duplicateSelected, paste, selectAll } from './state/wireCommands';
+import { canEditWires, copySelected, cutSelected, deleteSelected, duplicateSelected, groupSelected, paste, selectAll, ungroupSelected } from './state/wireCommands';
 
 function reportError(e: unknown) {
   const err = e instanceof EngineError ? e : new EngineError('internal', 'エラー', String(e));
@@ -130,6 +130,8 @@ export function App() {
       duplicate: wireKey(duplicateSelected),
       selectAll,
       delete: wireKey(deleteSelected),
+      group: wireKey(() => void groupSelected()),
+      ungroup: wireKey(ungroupSelected),
       calculate: () => s.getState().calculate(),
       optimize: () => !s.getState().optimizer.running && s.getState().setOptimizer({ dialogOpen: true }),
       settings: () => useInput.getState().setDialogOpen(true),
