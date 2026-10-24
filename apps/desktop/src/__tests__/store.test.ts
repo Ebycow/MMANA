@@ -20,7 +20,8 @@ const parsed = (name: string) => {
 };
 const moveWire = () => useApp.getState().edit((p) => void (p.antenna.wires[0].end.z += 1));
 
-beforeEach(() => useApp.getState().reset());
+// the dipole the page opens with (新規作成 starts empty)
+beforeEach(() => useApp.getState().load({ project: newProject(), warnings: [] }, '無題.maa', null));
 afterEach(() => vi.restoreAllMocks());
 
 describe('resonance search', () => {
@@ -89,6 +90,21 @@ describe('sweep staleness', () => {
     moveWire();
     useApp.getState().load(parsed('B'), 'B.maa', null);
     expect(useApp.getState().sweep).toMatchObject({ data: null, stale: false });
+  });
+});
+
+describe('新規作成', () => {
+  it("starts empty like MMANA's, keeping the ground and resetting the SWR reference", () => {
+    useApp.getState().edit((p) => {
+      p.environment.ground = 'perfect';
+      p.environment.height = 7;
+      p.environment.swrReference = { r: 75, x: 0 };
+    });
+    useApp.getState().reset();
+    const { antenna, environment } = useApp.getState().project;
+    expect(antenna).toMatchObject({ name: '', wires: [], sources: [], frequencyMhz: 14.05 });
+    expect(environment).toMatchObject({ ground: 'perfect', height: 7, swrReference: { r: 50, x: 0 } });
+    expect(useApp.getState().dirty).toBe(false);
   });
 });
 

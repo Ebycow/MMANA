@@ -15,15 +15,32 @@ export function defaultEnvironment(): Environment {
   };
 }
 
-/** A half-wave dipole for 14.05 MHz, MMANA's default band. */
+/**
+ * The page opens with a half-wave dipole for 14.05 MHz, MMANA's default band,
+ * so there is something to calculate and look at.
+ */
 export function newProject(): Project {
+  const project = emptyProject(defaultEnvironment());
+  const half = Math.round((wavelength(project.antenna.frequencyMhz) * 0.48) / 2 * 1000) / 1000;
+  project.antenna.name = '新規アンテナ';
+  project.antenna.wires = [newWire({ x: 0, y: -half, z: 0 }, { x: 0, y: half, z: 0 })];
+  project.antenna.sources = [{ pulse: 'w1c', phaseDeg: 0, voltage: 1 }];
+  return project;
+}
+
+/**
+ * MMANA's 新規作成 (`InitAntDef`): no name, wires or sources. Like MMANA,
+ * which keeps its environment in Mmana.ini, it keeps the ground, the height
+ * and the wire material of `environment` and resets the SWR reference and
+ * the F/B range.
+ */
+export function emptyProject(environment: Environment): Project {
   const f = 14.05;
-  const half = Math.round((wavelength(f) * 0.48) / 2 * 1000) / 1000;
   const antenna: Antenna = {
-    name: '新規アンテナ',
+    name: '',
     frequencyMhz: f,
-    wires: [newWire({ x: 0, y: -half, z: 0 }, { x: 0, y: half, z: 0 })],
-    sources: [{ pulse: 'w1c', phaseDeg: 0, voltage: 1 }],
+    wires: [],
+    sources: [],
     autoVoltage: true,
     loads: [],
     loadsEnabled: true,
@@ -32,7 +49,8 @@ export function newProject(): Project {
     combinedWires: [],
     comment: '',
   };
-  return { antenna, environment: defaultEnvironment() };
+  const { swrReference, fbRange } = defaultEnvironment();
+  return { antenna, environment: { ...structuredClone(environment), swrReference, fbRange } };
 }
 
 export function newWire(start: Wire['start'], end: Wire['end']): Wire {

@@ -51,7 +51,8 @@ describe('naming a step of the history', () => {
 });
 
 describe('the history list', () => {
-  beforeEach(() => useApp.getState().reset());
+  // the dipole the page opens with (新規作成 starts empty)
+  beforeEach(() => useApp.getState().load({ project: newProject(), warnings: [] }, '無題.maa', null));
 
   const rename = (name: string) => useApp.getState().edit((p) => void (p.antenna.name = name));
   const labels = () => {

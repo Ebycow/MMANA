@@ -130,7 +130,8 @@ describe('trial list', () => {
 });
 
 describe('optimisation in the store', () => {
-  beforeEach(() => useApp.getState().reset());
+  // the dipole the page opens with (新規作成 starts empty)
+  beforeEach(() => useApp.getState().load({ project: newProject(), warnings: [] }, '無題.maa', null));
   afterEach(() => vi.restoreAllMocks());
 
   const outcome = (): OptimizeOutcome => {
