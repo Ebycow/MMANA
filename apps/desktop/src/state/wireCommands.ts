@@ -1,6 +1,7 @@
 // Edits of the selected wires shared by the 3D view, its toolbar and the
 // keyboard shortcuts. Each is one undoable step.
 import { notifications } from '@mantine/notifications';
+import { clipboardText } from '../api/transport';
 import type { Point3, Wire } from '../api/types';
 import {
   alignToOrigin,
@@ -24,6 +25,7 @@ import { followWires } from '../domain/optimize';
 import { copyName, duplicateGroup, groupMembers, groupWires, newGroupName, renameGroup, ungroupWires } from '../domain/wireGroups';
 import type { FeedRef } from '../domain/feed';
 import { fixJunctions, joinTouched, type JunctionIssue, type Split } from '../domain/junctions';
+import { wiresFromText, wiresToText } from '../domain/wireText';
 import { useEditor } from './editor';
 import { useApp } from './store';
 
@@ -128,9 +130,15 @@ export const duplicateSelected = withSelection((sel) => {
   useEditor.getState().setTool('move');
 });
 
+/** Copies the selection, also as `.maa` wire lines on the system clipboard for other windows. */
 export const copySelected = () => {
   const sel = selection();
-  if (sel.length) useEditor.getState().set({ clipboard: [...sel].sort((a, b) => a - b).map((i) => structuredClone(wires()[i])) });
+  if (!sel.length) return;
+  const clipboard = [...sel].sort((a, b) => a - b).map((i) => structuredClone(wires()[i]));
+  const text = wiresToText(clipboard);
+  useEditor.getState().set({ clipboard, clipboardText: text });
+  // without the system clipboard the copy still pastes in this window
+  clipboardText.write(text).catch(() => {});
 };
 
 export const cutSelected = () => {
@@ -138,9 +146,22 @@ export const cutSelected = () => {
   deleteSelected();
 };
 
-export function paste() {
-  const clip = useEditor.getState().clipboard;
-  if (clip.length) addWires(structuredClone(clip));
+/**
+ * Pastes wire lines from the system clipboard. This window's own copy is
+ * taken whole while its text is still there, keeping notes and groups, and
+ * also when the clipboard cannot be read.
+ */
+export async function paste() {
+  if (!canEditWires()) return;
+  const own = useEditor.getState();
+  let text: string | null = null;
+  try {
+    text = await clipboardText.read();
+  } catch {
+    // not allowed by the browser
+  }
+  if (text == null || text === own.clipboardText) addWires(structuredClone(own.clipboard));
+  else addWires(wiresFromText(text) ?? []);
 }
 
 export function selectAll() {

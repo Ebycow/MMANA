@@ -42,7 +42,10 @@ export interface EditorState {
   /** Corners of the polygon tool. */
   sides: number;
 
+  /** The wires this window copied, notes and groups included. */
   clipboard: Wire[];
+  /** The text the copy put on the system clipboard; while it is still there, pasting takes `clipboard`. */
+  clipboardText: string;
   /** The wires shown instead of the antenna's while a drag is in progress. */
   preview: Wire[] | null;
   hover: Hover;
@@ -91,6 +94,7 @@ export const useEditor = create<EditorState>()((set, get) => ({
   autoJoin: true,
   sides: 8,
   clipboard: [],
+  clipboardText: '',
   preview: null,
   hover: null,
   draft: [],
