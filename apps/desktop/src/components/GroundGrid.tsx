@@ -1,8 +1,9 @@
 // The horizontal plane of the 3D view, the ground or Z = 0 in free space,
 // drawn by one shader: the ground's tint, lines on round world coordinates
 // at the cell, ten, a hundred and a thousand times it, the finer ones fading
-// out where they crowd together on screen, and a fade towards the edge of a
-// disc so the plane has no hard border.
+// out where they crowd together on screen, the X and Y axes in their colours
+// so the origin stands out, and a fade towards the edge of a disc so the plane
+// has no hard border.
 import { useEffect, useMemo } from 'react';
 import { Color, DoubleSide, ShaderMaterial, Vector2 } from 'three';
 import type { SceneGrid } from '../domain/geometry';
@@ -25,6 +26,8 @@ const fragmentShader = /* glsl */ `
   uniform vec3 sectionColor;
   uniform vec3 fillColor;
   uniform float fillOpacity;
+  uniform vec3 xAxisColor;
+  uniform vec3 yAxisColor;
   varying vec2 vWorld;
 
   // coverage of lines size apart and width pixels wide; lines closer than a
@@ -35,6 +38,11 @@ const fragmentShader = /* glsl */ `
     vec2 g = abs(fract(r - 0.5) - 0.5) / d;
     float on = 1.0 - min(min(g.x, g.y) + 1.0 - width, 1.0);
     return on * (1.0 - smoothstep(0.1, 0.2, max(d.x, d.y)));
+  }
+
+  // coverage of the line where v = 0, width pixels wide at any zoom
+  float axis(float v, float width) {
+    return 1.0 - min(abs(v) / fwidth(v) + 1.0 - width, 1.0);
   }
 
   vec4 over(vec4 src, vec4 dst) {
@@ -49,6 +57,8 @@ const fragmentShader = /* glsl */ `
     c = over(vec4(sectionColor, lines(section, 1.1)), c);
     c = over(vec4(sectionColor, lines(section * 10.0, 1.3)), c);
     c = over(vec4(sectionColor, lines(section * 100.0, 1.3)), c);
+    c = over(vec4(xAxisColor, 0.5 * axis(vWorld.y, 1.5)), c);
+    c = over(vec4(yAxisColor, 0.5 * axis(vWorld.x, 1.5)), c);
     c.a *= fade;
     if (c.a <= 0.002) discard;
     gl_FragColor = c;
@@ -63,9 +73,12 @@ interface GroundGridProps {
   sectionColor: string;
   /** The ground's tint; null in free space. */
   fill: string | null;
+  /** The lines along the X axis (Y = 0) and the Y axis (X = 0). */
+  xAxisColor: string;
+  yAxisColor: string;
 }
 
-export function GroundGrid({ grid, cellColor, sectionColor, fill }: GroundGridProps) {
+export function GroundGrid({ grid, cellColor, sectionColor, fill, xAxisColor, yAxisColor }: GroundGridProps) {
   const material = useMemo(
     () =>
       new ShaderMaterial({
@@ -78,6 +91,8 @@ export function GroundGrid({ grid, cellColor, sectionColor, fill }: GroundGridPr
           sectionColor: { value: new Color() },
           fillColor: { value: new Color() },
           fillOpacity: { value: 0 },
+          xAxisColor: { value: new Color() },
+          yAxisColor: { value: new Color() },
         },
         vertexShader,
         fragmentShader,
@@ -102,6 +117,8 @@ export function GroundGrid({ grid, cellColor, sectionColor, fill }: GroundGridPr
   u.sectionColor.value.set(sectionColor);
   u.fillColor.value.set(fill ?? cellColor);
   u.fillOpacity.value = fill ? 0.28 : 0;
+  u.xAxisColor.value.set(xAxisColor);
+  u.yAxisColor.value.set(yAxisColor);
 
   return (
     <mesh position={[grid.center.x, grid.center.y, grid.z]} material={material} renderOrder={-1} raycast={() => null}>

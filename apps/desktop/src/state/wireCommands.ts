@@ -154,19 +154,39 @@ export function selectConnected(wire: number, add: boolean) {
   app.setSelection(add ? [...app.selectedWires, ...chain] : chain, wire);
 }
 
-export const flipSelected = (axis: Axis) => withSelection((sel) => commitWires(mirrorInPlace(wires(), sel, axis)))();
-export const mirrorCopySelected = (axis: Axis) =>
+/** A command of the selection bar's menus. */
+export type SelectionCommand = { kind: 'flip' | 'mirrorCopy' | 'align'; axis: Axis } | { kind: 'rotate'; axis: Axis; deg: number };
+
+/** The wires a command leaves and the selection after it (a mirror copy selects the copies). */
+function applied(c: SelectionCommand, sel: number[]): Edited {
+  const ws = wires();
+  switch (c.kind) {
+    case 'flip':
+      return { wires: mirrorInPlace(ws, sel, c.axis), selection: sel };
+    case 'mirrorCopy':
+      return mirrorCopy(ws, sel, c.axis);
+    case 'align':
+      return { wires: alignToOrigin(ws, sel, c.axis, follow()), selection: sel };
+    case 'rotate':
+      return { wires: rotateSelection(ws, sel, c.axis, c.deg, follow()), selection: sel };
+  }
+}
+
+export const runSelectionCommand = (c: SelectionCommand) =>
   withSelection((sel) => {
-    const r = mirrorCopy(wires(), sel, axis);
-    if (r.selection.length === 0) {
-      notifications.show({ color: 'yellow', title: '鏡像コピー', message: `選択したワイヤーは ${axis.toUpperCase()} = 0 の面の上にあり、鏡像は元と同じです。` });
+    const r = applied(c, sel);
+    if (c.kind === 'mirrorCopy' && r.selection.length === 0) {
+      notifications.show({ color: 'yellow', title: '鏡像コピー', message: `選択したワイヤーは ${c.axis.toUpperCase()} = 0 の面の上にあり、鏡像は元と同じです。` });
       return;
     }
     commitEdited(r);
   })();
-export const alignSelected = (axis: Axis) => withSelection((sel) => commitWires(alignToOrigin(wires(), sel, axis, follow())))();
-export const rotateSelected = (axis: Axis, deg: number) =>
-  withSelection((sel) => commitWires(rotateSelection(wires(), sel, axis, deg, follow())))();
+
+/** Shows in the 3D view what a command would do, while its menu item is pointed at; null ends it. */
+export function previewSelectionCommand(c: SelectionCommand | null) {
+  const sel = selection();
+  useEditor.getState().set({ preview: c && sel.length > 0 && canEditWires() ? applied(c, sel).wires : null });
+}
 
 export type NumericTransform =
   | { kind: 'move'; offset: Point3; copies: number }

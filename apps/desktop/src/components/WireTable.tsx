@@ -28,15 +28,16 @@ import {
   type Units,
 } from '../domain/elements';
 import { byWire, worst, type Diagnostic } from '../domain/diagnostics';
-import { newWire, wavelength, wireLength } from '../domain/project';
+import { wavelength, wireLength } from '../domain/project';
 import { describeSegmentation, formatSegmentation, parseSegmentation } from '../domain/segmentation';
-import { insertWires, removeWires } from '../domain/wireEdit';
+import { addedWire, insertWires, removeWires } from '../domain/wireEdit';
 import { listRows, type ListRow } from '../domain/wireGroups';
 import { formatKey } from '../domain/shortcuts';
 import { useDiagnostics } from '../state/diagnostics';
 import { useDisplay } from '../state/display';
 import { useEditor } from '../state/editor';
 import { useInput } from '../state/input';
+import { useNewWire } from '../state/newWire';
 import { useApp } from '../state/store';
 import {
   canEditWires,
@@ -50,6 +51,7 @@ import {
   ungroupSelected,
 } from '../state/wireCommands';
 import { NumCell, TextCell, format } from './Cells';
+import { NEW_WIRE_LABELS } from './NewWireSettings';
 import { useWireDrag, type DragView } from './useWireDrag';
 
 const COORDS: { end: 'start' | 'end'; axis: keyof Point3; label: string }[] = [
@@ -136,13 +138,10 @@ export function WireTable() {
     drag.start(e, { wires: r.wires, dragged: { kind: 'group', name: r.name, wires: r.wires }, label: `グループ「${r.name}」（${r.wires.length} 本）` });
   };
 
+  const newWireMode = useNewWire((s) => s.mode);
   const addWire = () => {
-    edit((p) => {
-      const last = p.antenna.wires.at(-1);
-      // continue from the end of the last wire, like drawing in MMANA
-      const start = last ? { ...last.end } : { x: 0, y: 0, z: 0 };
-      p.antenna.wires.push({ ...(last ?? newWire(start, start)), start, end: { ...start, y: start.y + 1 }, note: '' });
-    });
+    const settings = useNewWire.getState();
+    edit((p) => void p.antenna.wires.push(addedWire(p.antenna.wires.at(-1), settings)));
     select(wires.length);
   };
 
@@ -296,9 +295,11 @@ export function WireTable() {
       {drag.view && <DragOverlay view={drag.view} />}
       <Group p="xs" justify="space-between">
         <Group gap="xs">
-          <Button variant="light" leftSection={<IconPlus size={14} />} onClick={addWire}>
-            ワイヤーを追加
-          </Button>
+          <Tooltip label={`追加する位置: ${NEW_WIRE_LABELS[newWireMode]}（設定 → ワイヤーの追加… で変更）`} multiline w={260}>
+            <Button variant="light" leftSection={<IconPlus size={14} />} onClick={addWire}>
+              ワイヤーを追加
+            </Button>
+          </Tooltip>
           <Tooltip label="つながったワイヤをエレメントとして、幅・全周・間隔などをまとめて変更します" multiline w={260}>
             <Button variant="default" leftSection={<IconLayoutRows size={14} />} onClick={() => setElementEditorOpen(true)}>
               エレメント編集…

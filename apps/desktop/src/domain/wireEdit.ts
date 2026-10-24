@@ -3,7 +3,7 @@
 // snapping helpers. Pure functions; the view keeps the pointer state.
 import type { Antenna, Point3, Wire } from '../api/types';
 import { normalizePulse } from './geometry';
-import { newWire, setAutoVoltage } from './project';
+import { firstWire, setAutoVoltage } from './project';
 
 export type Axis = 'x' | 'y' | 'z';
 export const AXES: Axis[] = ['x', 'y', 'z'];
@@ -293,10 +293,45 @@ export function withGroup(w: Wire, group: string): Wire {
   return group ? { ...rest, group } : rest;
 }
 
-/** Radius and segmentation for a new wire: those of `like`, else MMANA's defaults. */
+/** Radius and segmentation for a new wire: those of `like`, else MMANA's for the first wire. */
 export function wireFrom(like: Wire | undefined, start: Point3, end: Point3): Wire {
-  const base = like ? { radius: like.radius, segmentation: structuredClone(like.segmentation) } : newWire(start, end);
+  const base = like ? { radius: like.radius, segmentation: structuredClone(like.segmentation) } : firstWire(start, end);
   return { radius: base.radius, segmentation: base.segmentation, start: cleanPoint(start), end: cleanPoint(end), note: '' };
+}
+
+/** Where the wire list's 追加 puts a new wire. */
+export type NewWireMode = 'zero' | 'continue' | 'offset' | 'fixed';
+
+export interface NewWireSettings {
+  mode: NewWireMode;
+  /** For `offset`: the shift from the last wire. */
+  offset: Point3;
+  /** For `fixed`. */
+  start: Point3;
+  end: Point3;
+}
+
+/**
+ * The wire the wire list adds after `last`. Like MMANA, it takes the radius
+ * and segmentation of the last wire (here its group too, so it stays in the
+ * group the list ends with), or MMANA's first-wire defaults; MMANA's new row
+ * is the zero-length wire at the origin. Without a last wire, `continue` and `offset` start a 1 m wire at
+ * the origin.
+ */
+export function addedWire(last: Wire | undefined, s: NewWireSettings): Wire {
+  const origin = { x: 0, y: 0, z: 0 };
+  const unit = (start: Point3) => ({ start, end: { ...start, y: start.y + 1 } });
+  const ends =
+    s.mode === 'zero'
+      ? { start: origin, end: origin }
+      : s.mode === 'fixed'
+        ? { start: s.start, end: s.end }
+        : !last
+          ? unit(origin)
+          : s.mode === 'continue'
+            ? unit(last.end)
+            : { start: add(last.start, s.offset), end: add(last.end, s.offset) };
+  return { ...structuredClone(last ?? firstWire(origin, origin)), start: cleanPoint(ends.start), end: cleanPoint(ends.end), note: '' };
 }
 
 /** Wires along a polyline; zero-length steps are dropped. */

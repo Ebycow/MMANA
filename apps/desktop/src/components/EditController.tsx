@@ -15,6 +15,7 @@ import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 import type { Point3, PulsePoint, Wire } from '../api/types';
 import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
 import type { DisplayWire } from '../domain/geometry';
+import { AXIS_COLORS } from './axisColors';
 import { isHeld } from '../domain/shortcuts';
 import { along } from '../domain/junctions';
 import {
@@ -69,11 +70,13 @@ const fmt = (v: number) => Number(v.toFixed(4)).toString();
 const fmtPoint = (p: Point3) => `(${fmt(p.x)}, ${fmt(p.y)}, ${fmt(p.z)})`;
 const PLANE_LABEL: Record<Plane, string> = { xy: 'XY', xz: 'XZ', yz: 'YZ' };
 
-/** Mantine keeps some closed modals mounted; an open one has a box. */
+type Modifiers = Pick<MouseEvent, 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>;
+
 /** Whether a key of the viewer's mouse setting is held. */
-const held = (setting: 'boxSelect' | 'addToSelection' | 'constrain' | 'followToggle', e: MouseEvent) =>
+const held = (setting: 'boxSelect' | 'addToSelection' | 'constrain' | 'followToggle', e: Modifiers) =>
   isHeld(useInput.getState().mouse[setting], e);
 
+/** Mantine keeps some closed modals mounted; an open one has a box. */
 const modalOpen = () => [...document.querySelectorAll('.mantine-Modal-content')].some((e) => e.getClientRects().length > 0);
 
 export interface EditSceneProps {
@@ -604,10 +607,14 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       }
     };
 
+    // the last pointer over the view, for redrawing the cursor without a move
+    let pointer: PointerEvent | null = null;
     const onMove = (e: PointerEvent) => {
+      pointer = e;
       if (!drag && e.buttons === 0) updateHover(e);
     };
     const onLeave = () => {
+      pointer = null;
       if (drag) return;
       setHover(null);
       useEditor.getState().set({ cursor: null, feedHover: null });
@@ -659,6 +666,11 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       }
     };
 
+    // a plane switched from the keyboard moves the cursor and the grid onto it at once
+    const unsubscribe = useEditor.subscribe((ed, prev) => {
+      if ((ed.plane !== prev.plane || ed.draftPlane !== prev.draftPlane) && pointer && !drag && isDrawTool(ed.tool)) updateHover(pointer);
+    });
+
     el.addEventListener('pointerdown', onDown, true);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerleave', onLeave);
@@ -666,6 +678,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
     el.addEventListener('contextmenu', onContextMenu);
     window.addEventListener('keydown', onKey, true);
     return () => {
+      unsubscribe();
       endDrag(true);
       el.style.cursor = '';
       el.removeEventListener('pointerdown', onDown, true);
@@ -725,8 +738,22 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
   const invalidate = useThree((s) => s.invalidate);
   const pivot = useRef<Group>(null);
   const start = useRef<{ base: Wire[]; sel: number[]; center: Point3; pos: Vector3 } | null>(null);
+  // the gizmo's events carry no keys; window capture listeners see the
+  // pointer before the gizmo does, so a drag reads the keys of its own event
+  const keys = useRef<Modifiers>({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false });
   const center = useMemo(() => selectionCenter(wires, selected), [wires, selected]);
   const active = (tool === 'move' || tool === 'rotate') && center != null && editable;
+
+  useEffect(() => {
+    if (!active) return;
+    const track = ({ shiftKey, altKey, ctrlKey, metaKey }: PointerEvent) => (keys.current = { shiftKey, altKey, ctrlKey, metaKey });
+    window.addEventListener('pointerdown', track, true);
+    window.addEventListener('pointermove', track, true);
+    return () => {
+      window.removeEventListener('pointerdown', track, true);
+      window.removeEventListener('pointermove', track, true);
+    };
+  }, [active]);
 
   const place = () => {
     const g = pivot.current;
@@ -743,15 +770,16 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
     const g = pivot.current;
     if (!s || !g) return;
     const ed = useEditor.getState();
+    const follow = ed.follow !== held('followToggle', keys.current);
     if (tool === 'move') {
       const d = pt(g.position.clone().sub(s.pos));
-      ed.set({ preview: transformWires(s.base, s.sel, translation(d), ed.follow), hud: `移動 ΔX ${fmt(d.x)}  ΔY ${fmt(d.y)}  ΔZ ${fmt(d.z)} m` });
+      ed.set({ preview: transformWires(s.base, s.sel, translation(d), follow), hud: `移動 ΔX ${fmt(d.x)}  ΔY ${fmt(d.y)}  ΔZ ${fmt(d.z)} m` });
     } else {
       const q = g.quaternion.clone();
       const c = v3(s.center);
       const f = (p: Point3) => pt(v3(p).sub(c).applyQuaternion(q).add(c));
       const deg = (2 * Math.acos(Math.min(1, Math.abs(q.w))) * 180) / Math.PI;
-      ed.set({ preview: transformWires(s.base, s.sel, f, ed.follow), hud: `回転 ${fmt(deg)}°` });
+      ed.set({ preview: transformWires(s.base, s.sel, f, follow), hud: `回転 ${fmt(deg)}°` });
     }
   };
   return (
@@ -846,6 +874,14 @@ function DrawPreview({ offset, step, radius, center: middle }: { offset: Point3;
         side={2}
         renderOrder={1}
       />
+      {/* the lines of the plane's axes through the origin, where they cross the grid */}
+      {[u, v].map((a) => {
+        const other = a === u ? v : u;
+        if (Math.abs(gridCenter[other]) > extent / 2) return null;
+        const at = { x: 0, y: 0, z: 0, [normal]: through[normal] };
+        const ends = [-1, 1].map((k) => w({ ...at, [a]: gridCenter[a] + (k * extent) / 2 }));
+        return <Line key={a} points={ends} color={AXIS_COLORS[a]} lineWidth={1.5} transparent opacity={0.5} renderOrder={1} raycast={() => null} />;
+      })}
       {draft.length > 1 && tool === 'wire' && <Line points={draft.map(w)} color="#eb6834" lineWidth={2.5} />}
       {outline && <Line points={outline.map(w)} color="#eb6834" lineWidth={2} dashed dashSize={step / 2} gapSize={step / 3} />}
       {draft.map((p, i) => (

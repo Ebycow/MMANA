@@ -3,7 +3,7 @@ import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedPr
 import { EngineError, files, transport } from '../api/transport';
 import { describeChange } from '../domain/history';
 import { defaultSetup } from '../domain/optimize';
-import { UNTITLED, defaultOptions, newProject, suggestedFileName } from '../domain/project';
+import { UNTITLED, defaultOptions, emptyProject, newProject, suggestedFileName } from '../domain/project';
 import { OUTLINE_POINTS, sweepOrder } from '../domain/sweep';
 
 const HISTORY_LIMIT = 200;
@@ -319,7 +319,7 @@ export const useApp = create<AppState>()((set, get) => {
       for (let i = 0; i < Math.abs(steps); i++) (steps < 0 ? get().undo : get().redo)();
     },
     load: (parsed, name, path) => openDocument(parsed.project, name, path),
-    reset: () => openDocument(newProject(), UNTITLED, null),
+    reset: () => openDocument(emptyProject(get().project.environment), UNTITLED, null),
     selectWire: (index) => set({ selectedWires: index == null ? [] : [index], selectedWire: index }),
     setSelection: (indices, active) => {
       const unique = [...new Set(indices)];

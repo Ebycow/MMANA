@@ -1,7 +1,7 @@
 // Keyboard shortcuts and mouse modifiers the viewer can reassign: the commands
 // that take a key, the key strings ("mod+shift+S", where mod is ⌘ on a Mac
 // and Ctrl elsewhere), reading one from a key press, matching and showing it.
-import type { Tool } from '../state/editor';
+import type { PlaneMode, Tool } from '../state/editor';
 
 export type CommandId =
   | 'newFile'
@@ -23,6 +23,8 @@ export type CommandId =
   | 'calculate'
   | 'optimize'
   | 'settings'
+  | 'drawPlane'
+  | `drawPlane.${PlaneMode}`
   | `tool.${Tool}`;
 
 export interface Command {
@@ -58,6 +60,11 @@ export const COMMANDS: Command[] = [
   { id: 'tool.rect', label: '四角ループ', group: '3D ビューのツール', keys: ['Q'] },
   { id: 'tool.polygon', label: '多角形ループ', group: '3D ビューのツール', keys: ['O'] },
   { id: 'tool.feed', label: '給電点・負荷を移動', group: '3D ビューのツール', keys: ['F'] },
+  { id: 'drawPlane', label: '作図面を切り替え（自動 → XY → XZ → YZ）', group: '3D ビューのツール', keys: ['P'] },
+  { id: 'drawPlane.auto', label: '作図面を自動に', group: '3D ビューのツール', keys: [] },
+  { id: 'drawPlane.xy', label: '作図面を XY に', group: '3D ビューのツール', keys: [] },
+  { id: 'drawPlane.xz', label: '作図面を XZ に', group: '3D ビューのツール', keys: [] },
+  { id: 'drawPlane.yz', label: '作図面を YZ に', group: '3D ビューのツール', keys: [] },
   { id: 'settings', label: 'キーボードとマウスの設定', group: 'その他', keys: ['mod+,'] },
 ];
 

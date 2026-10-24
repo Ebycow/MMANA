@@ -13,6 +13,7 @@ export const isDrawTool = (t: Tool) => DRAW_TOOLS.includes(t);
 
 /** The drawing plane; `auto` faces the camera. */
 export type PlaneMode = 'auto' | Plane;
+export const PLANE_MODES: PlaneMode[] = ['auto', 'xy', 'xz', 'yz'];
 
 export type Hover = { kind: 'wire'; wire: number } | { kind: 'end'; wire: number; end: End } | null;
 
@@ -71,6 +72,10 @@ export interface EditorState {
 
   set: (patch: Partial<EditorState>) => void;
   setTool: (tool: Tool) => void;
+  /** Sets the drawing plane; a rectangle or polygon being drawn moves onto a fixed one. */
+  setPlane: (plane: PlaneMode) => void;
+  /** Auto, XY, XZ, YZ and round again. */
+  cyclePlane: () => void;
   /** Drops the shape being drawn; false when there was none. */
   cancelDraft: () => boolean;
 }
@@ -104,6 +109,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
 
   set: (patch) => set(patch),
   setTool: (tool) => set({ tool, draft: [], draftPlane: null, typed: '', cursor: null, hud: null, feedHover: null, feedDrag: null }),
+  setPlane: (plane) => set((s) => ({ plane, draftPlane: s.draftPlane && plane !== 'auto' ? plane : s.draftPlane })),
+  cyclePlane: () => get().setPlane(PLANE_MODES[(PLANE_MODES.indexOf(get().plane) + 1) % PLANE_MODES.length]),
   cancelDraft: () => {
     if (get().draft.length === 0) return false;
     set({ draft: [], draftPlane: null, typed: '' });

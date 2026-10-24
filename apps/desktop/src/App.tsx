@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { EngineError, files, isTauri, startupFile, transport } from './api/transport';
 import { AppHeader, type FileActions } from './components/AppHeader';
 import { ChecksSettings } from './components/ChecksSettings';
+import { NewWireSettings } from './components/NewWireSettings';
 import { ElementEditor } from './components/ElementEditor';
 import { InputSettings } from './components/InputSettings';
 import { OptimizerDialog } from './components/OptimizerDialog';
@@ -142,6 +143,11 @@ export function App() {
       'tool.rect': tool('rect'),
       'tool.polygon': tool('polygon'),
       'tool.feed': tool('feed'),
+      drawPlane: () => useEditor.getState().cyclePlane(),
+      'drawPlane.auto': () => useEditor.getState().setPlane('auto'),
+      'drawPlane.xy': () => useEditor.getState().setPlane('xy'),
+      'drawPlane.xz': () => useEditor.getState().setPlane('xz'),
+      'drawPlane.yz': () => useEditor.getState().setPlane('yz'),
     },
     // calculating must also work while typing in a cell
     ['calculate'],
@@ -217,6 +223,7 @@ export function App() {
       <OptimizerResults />
       <InputSettings />
       <ChecksSettings />
+      <NewWireSettings />
       <PrintView />
     </AppShell>
   );

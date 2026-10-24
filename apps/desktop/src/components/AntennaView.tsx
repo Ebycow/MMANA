@@ -17,6 +17,7 @@ import { isDrawTool, useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { EditScene } from './EditController';
+import { AXIS_COLORS } from './axisColors';
 import { GroundGrid } from './GroundGrid';
 import { EditToolbar, STEPS, stepLabel } from './EditToolbar';
 import { Panel } from './Panel';
@@ -419,7 +420,14 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
       />
 
       {/* the ground (real / perfect ground) or the Z = 0 plane; lines on round coordinates, fixed in place */}
-      <GroundGrid grid={grid} cellColor={colors.grid} sectionColor={colors.section} fill={groundColor} />
+      <GroundGrid
+        grid={grid}
+        cellColor={colors.grid}
+        sectionColor={colors.section}
+        fill={groundColor}
+        xAxisColor={AXIS_COLORS.x}
+        yAxisColor={AXIS_COLORS.y}
+      />
       {groundColor && <HeightDimension at={box.center} groundZ={grid.z} near={box.radius * 0.5} color={colors.dimension} />}
 
       {/* picking is done in screen space by EditScene */}
@@ -469,7 +477,7 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
       ))}
 
       <GizmoHelper alignment="bottom-right" margin={[56, 56]} onUpdate={() => invalidate()}>
-        <GizmoViewport axisColors={['#e34948', '#1baf7a', '#2a78d6']} labelColor="#ffffff" />
+        <GizmoViewport axisColors={[AXIS_COLORS.x, AXIS_COLORS.y, AXIS_COLORS.z]} labelColor="#ffffff" />
       </GizmoHelper>
     </>
   );
