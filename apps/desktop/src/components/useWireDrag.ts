@@ -104,6 +104,7 @@ export function useWireDrag(
         active = true;
         dragged.current = true;
         document.body.classList.add('wire-dragging');
+        window.getSelection()?.removeAllRanges();
         s.begin?.();
         frame = requestAnimationFrame(scroll);
       }
@@ -115,6 +116,8 @@ export function useWireDrag(
       // the click that follows the release is not a click on the row
       setTimeout(() => (dragged.current = false));
     };
+    // a press on a row number would otherwise select the text of the cells it passes
+    const noSelect = (ev: Event) => ev.preventDefault();
     const up = () => end(true);
     const cancel = () => end(false);
     const key = (ev: KeyboardEvent) => {
@@ -127,11 +130,13 @@ export function useWireDrag(
     window.addEventListener('pointerup', up);
     window.addEventListener('pointercancel', cancel);
     window.addEventListener('keydown', key, true);
+    document.addEventListener('selectstart', noSelect);
     cleanup.current = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', cancel);
       window.removeEventListener('keydown', key, true);
+      document.removeEventListener('selectstart', noSelect);
       cancelAnimationFrame(frame);
       document.body.classList.remove('wire-dragging');
       setView(null);
