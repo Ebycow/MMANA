@@ -39,6 +39,11 @@ export function newWire(start: Wire['start'], end: Wire['end']): Wire {
   return { start, end, radius: 0.001, segmentation: { kind: 'taper' }, note: '' };
 }
 
+/** A wire added to an empty list: R 0.8 mm and SEG 0, as MMANA's `Grid2NewLine` and `AddAntDrawWire` give it. */
+export function firstWire(start: Wire['start'], end: Wire['end']): Wire {
+  return { start, end, radius: 0.0008, segmentation: { kind: 'auto' }, note: '' };
+}
+
 export const newSource = (): Source => ({ pulse: 'w1c', phaseDeg: 0, voltage: 1 });
 
 /**

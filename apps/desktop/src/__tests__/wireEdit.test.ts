@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Point3, Wire } from '../api/types';
-import { newProject, newWire } from '../domain/project';
+import { firstWire, newProject, newWire } from '../domain/project';
 import {
   addedWire,
   alignToOrigin,
@@ -122,6 +122,10 @@ describe('shapes', () => {
     expect(ws[1].radius).toBe(0.002);
   });
 
+  it("gives the first wire drawn MMANA's R 0.8 mm and SEG 0", () => {
+    expect(polylineWires([p(0, 0, 0), p(1, 0, 0)], undefined)[0]).toMatchObject({ radius: 0.0008, segmentation: { kind: 'auto' } });
+  });
+
   it('closes rectangles and polygons exactly', () => {
     const r = rectanglePoints(p(0, 0, 5), p(2, 1, 5), 'xy');
     expect(r).toEqual([p(0, 0, 5), p(2, 0, 5), p(2, 1, 5), p(0, 1, 5), p(0, 0, 5)]);
@@ -202,7 +206,8 @@ describe('the wire the list adds', () => {
       const n = addedWire(undefined, { ...settings, mode });
       expect([n.start, n.end]).toEqual([p(0, 0, 0), p(0, 1, 0)]);
     }
-    expect(addedWire(undefined, settings)).toEqual(newWire(p(0, 0, 0), p(0, 0, 0)));
+    // R 0.8 mm and SEG 0, as MMANA gives the first row
+    expect(addedWire(undefined, settings)).toEqual(firstWire(p(0, 0, 0), p(0, 0, 0)));
   });
 
   it('does not share the segmentation object with the last wire', () => {
