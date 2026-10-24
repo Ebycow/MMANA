@@ -27,6 +27,7 @@ fn wire(start: (f64, f64, f64), end: (f64, f64, f64), segments: i32) -> Wire {
         radius: 0.001,
         segmentation: Segmentation::Fixed { count: segments },
         note: String::new(),
+        group: String::new(),
     }
 }
 

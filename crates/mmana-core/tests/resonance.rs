@@ -16,6 +16,7 @@ fn dipole(half: f64) -> Project {
         radius: 0.001,
         segmentation: Segmentation::Fixed { count: 21 },
         note: String::new(),
+        group: String::new(),
     }];
     p.antenna.sources = vec![Source { pulse: "w1c".into(), phase_deg: 0.0, voltage: 1.0 }];
     p

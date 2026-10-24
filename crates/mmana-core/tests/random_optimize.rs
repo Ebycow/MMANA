@@ -108,6 +108,7 @@ prop_compose! {
                 radius: 0.001 * wavelength,
                 segmentation: Segmentation::Fixed { count: segments | 1 },
                 note: String::new(),
+                group: String::new(),
             });
         }
         ant.sources = vec![Source { pulse: "w2c".into(), phase_deg: 0.0, voltage: 1.0 }];

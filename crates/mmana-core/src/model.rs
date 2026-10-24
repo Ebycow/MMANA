@@ -84,6 +84,10 @@ pub struct Wire {
     pub segmentation: Segmentation,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
+    /// Name of the group the wire list shows it in (the port's own, saved in
+    /// the comment like the note); empty for none. Not used in calculation.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub group: String,
 }
 
 /// Voltage source. `pulse` uses MMANA's notation: `w1c` (centre of wire 1),

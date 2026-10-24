@@ -10,6 +10,8 @@ use crate::model::*;
 
 const WIRE_NOTE_BEGIN: &str = "[MMANA-WIRE-NOTES]";
 const WIRE_NOTE_END: &str = "[/MMANA-WIRE-NOTES]";
+const WIRE_GROUP_BEGIN: &str = "[MMANA-WIRE-GROUPS]";
+const WIRE_GROUP_END: &str = "[/MMANA-WIRE-GROUPS]";
 /// MMANA keeps the real-ground media in Mmana.ini, not in the file; the port
 /// stores them in the comment so a file reproduces its results. MMANA shows
 /// the block as comment text and calculates with its own INI values.
@@ -185,6 +187,7 @@ impl Parser<'_> {
                 radius: self.num(get(6)),
                 segmentation: Segmentation::from_code(seg),
                 note: String::new(),
+                group: String::new(),
             };
             self.project.antenna.wires.push(wire);
         }
@@ -320,7 +323,8 @@ fn pulse_name(s: &str) -> String {
     crate::engine::to_half_width(s).trim_end().chars().take(8).collect()
 }
 
-/// Moves the port's own blocks (`[MMANA-WIRE-NOTES]`, `[MMANA-REAL-GROUND]`)
+/// Moves the port's own blocks (`[MMANA-WIRE-NOTES]`, `[MMANA-WIRE-GROUPS]`,
+/// `[MMANA-REAL-GROUND]`)
 /// from the comment onto the model. A block that cannot be read stays in the
 /// comment so nothing the user wrote is lost.
 fn finish_comment(project: &mut Project, warnings: &mut Vec<String>) {
@@ -339,7 +343,9 @@ fn finish_comment(project: &mut Project, warnings: &mut Vec<String>) {
                 continue;
             }
             if *begin == WIRE_NOTE_BEGIN {
-                read_wire_notes(&mut project.antenna, lines);
+                read_wire_texts(&mut project.antenna, lines, |w| &mut w.note);
+            } else if *begin == WIRE_GROUP_BEGIN {
+                read_wire_texts(&mut project.antenna, lines, |w| &mut w.group);
             } else if let Some(rg) = read_real_ground(lines) {
                 project.environment.real_ground = rg;
             } else {
@@ -351,6 +357,7 @@ fn finish_comment(project: &mut Project, warnings: &mut Vec<String>) {
         }
         match line {
             WIRE_NOTE_BEGIN => block = Some((WIRE_NOTE_BEGIN, WIRE_NOTE_END, Vec::new())),
+            WIRE_GROUP_BEGIN => block = Some((WIRE_GROUP_BEGIN, WIRE_GROUP_END, Vec::new())),
             GROUND_BEGIN => block = Some((GROUND_BEGIN, GROUND_END, Vec::new())),
             _ => keep(line),
         }
@@ -366,15 +373,41 @@ fn finish_comment(project: &mut Project, warnings: &mut Vec<String>) {
     project.antenna.comment = clean;
 }
 
-fn read_wire_notes(ant: &mut Antenna, lines: &[&str]) {
+/// `wire=text` lines (1-based wire numbers) of a per-wire text such as the note.
+fn read_wire_texts(ant: &mut Antenna, lines: &[&str], field: fn(&mut Wire) -> &mut String) {
     for line in lines {
-        if let Some((n, note)) = line.split_once('=') {
+        if let Some((n, text)) = line.split_once('=') {
             let w: usize = n.trim().parse().unwrap_or(0);
             if w > 0 && w <= ant.wires.len() {
-                ant.wires[w - 1].note = decode_note(note);
+                *field(&mut ant.wires[w - 1]) = decode_note(text);
             }
         }
     }
+}
+
+/// The block of a per-wire text, for the wires that have one.
+fn write_wire_texts(ant: &Antenna, begin: &str, end: &str, field: fn(&Wire) -> &String, out: &mut String) {
+    let lines: Vec<String> = ant
+        .wires
+        .iter()
+        .enumerate()
+        .filter(|(_, w)| !field(w).is_empty())
+        .map(|(i, w)| format!("{}={}", i + 1, encode_note(field(w))))
+        .collect();
+    if lines.is_empty() {
+        return;
+    }
+    if !out.is_empty() && !out.ends_with('\n') {
+        out.push_str("\r\n");
+    }
+    out.push_str(begin);
+    out.push_str("\r\n");
+    for l in lines {
+        out.push_str(&l);
+        out.push_str("\r\n");
+    }
+    out.push_str(end);
+    out.push_str("\r\n");
 }
 
 /// `medium=permittivity,conductivity,boundary,height` (one line per medium,
@@ -561,26 +594,8 @@ pub fn write(project: &Project) -> String {
         }
     }
     let mut rem = ant.comment.clone();
-    let notes: Vec<String> = ant
-        .wires
-        .iter()
-        .enumerate()
-        .filter(|(_, w)| !w.note.is_empty())
-        .map(|(i, w)| format!("{}={}", i + 1, encode_note(&w.note)))
-        .collect();
-    if !notes.is_empty() {
-        if !rem.is_empty() && !rem.ends_with('\n') {
-            rem.push_str("\r\n");
-        }
-        rem.push_str(WIRE_NOTE_BEGIN);
-        rem.push_str("\r\n");
-        for n in notes {
-            rem.push_str(&n);
-            rem.push_str("\r\n");
-        }
-        rem.push_str(WIRE_NOTE_END);
-        rem.push_str("\r\n");
-    }
+    write_wire_texts(ant, WIRE_NOTE_BEGIN, WIRE_NOTE_END, |w| &w.note, &mut rem);
+    write_wire_texts(ant, WIRE_GROUP_BEGIN, WIRE_GROUP_END, |w| &w.group, &mut rem);
     // the default is what MMANA itself starts with, so it is left out and the
     // file stays identical to one MMANA writes
     if env.real_ground != RealGround::default() {
@@ -646,6 +661,27 @@ mod tests {
         assert_eq!(back.antenna.wires[0].note, "給電 element");
         assert_eq!(back.antenna.comment, "hello\r\n");
     }
+
+    #[test]
+    fn wire_groups_round_trip() {
+        let mut p = parse(DP).project;
+        p.antenna.wires[0].note = "給電".into();
+        p.antenna.wires[0].group = "Radiator = 1/2λ".into();
+        p.antenna.comment = "hello\r\n".into();
+        let text = write(&p);
+        assert!(text.contains(WIRE_GROUP_BEGIN));
+        let back = parse(&decode(&encode(&text))).project;
+        assert_eq!(back.antenna.wires[0].group, "Radiator = 1/2λ");
+        assert_eq!(back.antenna.wires[0].note, "給電");
+        assert_eq!(back.antenna.comment, "hello\r\n");
+        assert_eq!(write(&back), text);
+    }
+
+    #[test]
+    fn no_groups_no_block() {
+        assert!(!write(&parse(DP).project).contains(WIRE_GROUP_BEGIN));
+    }
+
     fn reread(p: &Project) -> ParsedMaa {
         parse(&decode(&encode(&write(p))))
     }

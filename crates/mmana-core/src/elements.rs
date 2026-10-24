@@ -996,6 +996,7 @@ impl ElementList {
             radius: 0.0,
             segmentation: Segmentation::Auto,
             note: String::new(),
+            group: String::new(),
         };
         self.slots.push(Slot { wire: blank, live: false, origin: None });
         self.slots.len() - 1
@@ -1844,6 +1845,7 @@ mod tests {
             radius: 0.001,
             segmentation: Segmentation::Taper,
             note: String::new(),
+            group: String::new(),
         }
     }
 

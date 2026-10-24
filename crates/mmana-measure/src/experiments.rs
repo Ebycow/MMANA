@@ -147,6 +147,7 @@ fn wire(a: (f64, f64, f64), b: (f64, f64, f64), radius: f64, count: i32) -> Wire
         radius,
         segmentation: Segmentation::Fixed { count },
         note: String::new(),
+        group: String::new(),
     }
 }
 

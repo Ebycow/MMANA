@@ -96,6 +96,7 @@ fn wires() -> impl Strategy<Value = Vec<Wire>> {
         radius,
         segmentation,
         note: String::new(),
+        group: String::new(),
     });
     prop::collection::vec(wire, 0..7)
 }
