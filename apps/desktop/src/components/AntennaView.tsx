@@ -37,6 +37,8 @@ const PRESET_DIRS: Record<Preset, [number, number, number]> = {
 // Light mode runs light -> dark; dark mode dark -> light, so low current recedes.
 const RAMP_LIGHT = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281', '#0d366b'];
 const RAMP_DARK = ['#184f95', '#1c5cab', '#2a78d6', '#5598e7', '#86b6ef', '#cde2fb'];
+/** Screen width of the current-coloured lines, in pixels. */
+const CURRENT_WIDTH = 3.2;
 
 function rampColor(ramp: string[], t: number): Color {
   const x = Math.min(1, Math.max(0, t)) * (ramp.length - 1);
@@ -437,6 +439,10 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
         // a wire with a problem stays solid over the currents, in the colour of the worst one
         const severity = worst(problems.get(w.base) ?? []);
         const showPlain = !currents || severity != null;
+        // over the currents, selection and hover ring the coloured line instead of
+        // fighting it for the same pixels: wider, drawn first and leaving the depth free
+        const ring = !showPlain && (isSel || isHover);
+        const faint = !showPlain && !ring;
         return (
           <Line
             key={i}
@@ -445,9 +451,11 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
               [w.end.x, w.end.y, w.end.z],
             ]}
             color={isSel ? colors.selected : severity ? colors[severity] : colors.wire}
-            lineWidth={isSel ? 4 : isHover ? 3.5 : severity ? 3 : showPlain ? 2.2 : 1}
-            transparent={!showPlain && !isSel}
-            opacity={!showPlain && !isSel ? 0.35 : 1}
+            lineWidth={ring ? CURRENT_WIDTH + (isSel ? 4 : 3) : isSel ? 4 : isHover ? 3.5 : severity ? 3 : showPlain ? 2.2 : 1}
+            transparent={faint}
+            opacity={faint ? 0.35 : 1}
+            depthWrite={!ring}
+            renderOrder={ring ? 1 : 0}
             raycast={() => null}
           />
         );
@@ -458,7 +466,8 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
           key={`c${l.wire}`}
           points={l.points.map((p) => [p.x, p.y, p.z] as [number, number, number])}
           vertexColors={l.levels.map((t) => rampColor(ramp, t).toArray() as [number, number, number])}
-          lineWidth={3.2}
+          lineWidth={CURRENT_WIDTH}
+          renderOrder={2}
           raycast={() => null}
         />
       ))}
