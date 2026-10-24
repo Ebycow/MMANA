@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Wire } from '../api/types';
 import { newProject, newWire } from '../domain/project';
-import { dropTarget, groupMembers, groupNames, groupWires, listRows, newGroupName, renameGroup, ungroupWires, type Dragged } from '../domain/wireGroups';
+import { copyName, dropTarget, duplicateGroup, groupMembers, groupNames, groupWires, listRows, newGroupName, renameGroup, ungroupWires, type Dragged } from '../domain/wireGroups';
 
 const wire = (y: number, group?: string): Wire => ({ ...newWire({ x: 0, y, z: 0 }, { x: 0, y: y + 1, z: 0 }), ...(group && { group }) });
 
@@ -40,6 +40,19 @@ describe('editing groups', () => {
     expect(r.antenna.wires.map((w) => w.group ?? '')).toEqual(['', 'Driven', 'Driven', '']);
     expect(r.selection).toEqual([1, 2]);
     expect(r.antenna.sources[0].pulse).toBe('w3c');
+  });
+
+  it('copies a group after itself under a new name', () => {
+    const a = newProject().antenna;
+    a.wires = [wire(0, 'A'), wire(1, 'A'), wire(2)];
+    a.sources = [{ pulse: 'w3c', phaseDeg: 0, voltage: 1 }];
+    const r = duplicateGroup(a, [0, 1], copyName(a.wires, 'A'));
+    expect(r.antenna.wires.map((w) => `${w.start.y}${w.group ?? ''}`)).toEqual(['0A', '1A', '0A のコピー', '1A のコピー', '2']);
+    expect(r.selection).toEqual([2, 3]);
+    expect(r.antenna.sources).toEqual([{ pulse: 'w5c', phaseDeg: 0, voltage: 1 }]);
+    // the copies are not the same objects
+    expect(r.antenna.wires[2].start).not.toBe(a.wires[0].start);
+    expect(copyName(r.antenna.wires, 'A')).toBe('A のコピー 2');
   });
 
   it('ungroups and renames', () => {

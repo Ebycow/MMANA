@@ -41,6 +41,7 @@ import { useApp } from '../state/store';
 import {
   canEditWires,
   dissolveGroup,
+  duplicateWireGroup,
   groupSelected,
   moveGroup,
   renameWireGroup,
@@ -204,6 +205,7 @@ export function WireTable() {
                   onToggle={() => toggleCollapsed(r.name)}
                   onRename={() => canEditWires() && setEditor({ renamingGroup: r.name })}
                   onRenamed={(to) => finishRename(r.name, to)}
+                  onDuplicate={() => duplicateWireGroup(r.name, r.wires)}
                   onDissolve={() => dissolveGroup(r.name)}
                 />
               );
@@ -402,6 +404,7 @@ interface GroupHeadingProps {
   onRename: () => void;
   /** The new name, or null when renaming was cancelled. */
   onRenamed: (name: string | null) => void;
+  onDuplicate: () => void;
   onDissolve: () => void;
 }
 
@@ -431,6 +434,11 @@ function GroupHeading(p: GroupHeadingProps) {
             <Tooltip label="名前を変更">
               <ActionIcon size="sm" aria-label={`グループ「${p.name}」の名前を変更`} {...own} onClick={(e) => (e.stopPropagation(), p.onRename())}>
                 <IconPencil size={14} />
+              </ActionIcon>
+            </Tooltip>
+            <Tooltip label="グループを複製（コピーしたワイヤーを新しいグループとして直後に追加）" multiline w={220}>
+              <ActionIcon size="sm" aria-label={`グループ「${p.name}」を複製`} {...own} onClick={(e) => (e.stopPropagation(), p.onDuplicate())}>
+                <IconCopy size={14} />
               </ActionIcon>
             </Tooltip>
             <Tooltip label="グループを解除（ワイヤーは残ります）">

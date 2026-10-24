@@ -21,7 +21,7 @@ import {
   type Moved,
 } from '../domain/wireEdit';
 import { followWires } from '../domain/optimize';
-import { groupMembers, groupWires, newGroupName, renameGroup, ungroupWires } from '../domain/wireGroups';
+import { copyName, duplicateGroup, groupMembers, groupWires, newGroupName, renameGroup, ungroupWires } from '../domain/wireGroups';
 import type { FeedRef } from '../domain/feed';
 import { fixJunctions, joinTouched, type JunctionIssue, type Split } from '../domain/junctions';
 import { useEditor } from './editor';
@@ -213,6 +213,18 @@ export function reorderWires(sel: number[], at: number, group?: string) {
 export function moveGroup(name: string, members: number[], at: number) {
   if (members.length === 0 || !canEditWires()) return;
   commitMoved(moveWires(useApp.getState().project.antenna, members, at), `グループ「${name}」を移動`);
+}
+
+/** Copies the wires under a group heading into a new group after them, selects the copies and starts naming it. */
+export function duplicateWireGroup(name: string, run: number[]) {
+  if (run.length === 0 || !canEditWires()) return;
+  const app = useApp.getState();
+  const copy = copyName(wires(), name);
+  const r = duplicateGroup(app.project.antenna, run, copy);
+  app.edit((p) => void (p.antenna = structuredClone(r.antenna)), { label: `グループ「${name}」を複製` });
+  app.setSelection(r.selection);
+  useEditor.getState().set({ renamingGroup: copy });
+  if (r.warnings.length) notifications.show({ color: 'yellow', title: '給電点・負荷を更新しました', message: r.warnings.join('\n') });
 }
 
 /** Puts the selection in a new group, gathered where its first wire is; returns the name. */

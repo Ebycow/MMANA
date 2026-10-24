@@ -2,7 +2,7 @@
 // the wires that share it. A group is meant to be a run of neighbouring wires;
 // putting wires in a group moves them next to each other. Pure functions.
 import type { Antenna, Wire } from '../api/types';
-import { moveWires, withGroup, type Moved } from './wireEdit';
+import { insertWires, moveWires, withGroup, type Moved } from './wireEdit';
 
 export const groupOf = (w: Wire) => w.group ?? '';
 
@@ -35,6 +35,25 @@ export function newGroupName(wires: Wire[]): string {
   let n = 1;
   while (used.has(`グループ ${n}`)) n++;
   return `グループ ${n}`;
+}
+
+/** 「name のコピー」, numbered when that is in use too. */
+export function copyName(wires: Wire[], name: string): string {
+  const used = new Set(groupNames(wires));
+  const base = `${name} のコピー`;
+  let n = 1;
+  while (used.has(n === 1 ? base : `${base} ${n}`)) n++;
+  return n === 1 ? base : `${base} ${n}`;
+}
+
+/**
+ * Copies the wires under a group heading into a new group right after them.
+ * The copies lie on the originals; sources and loads stay on the originals.
+ */
+export function duplicateGroup(antenna: Antenna, run: number[], name: string): { antenna: Antenna; warnings: string[]; selection: number[] } {
+  const at = Math.max(...run) + 1;
+  const copies = run.map((i) => withGroup(structuredClone(antenna.wires[i]), name));
+  return { ...insertWires(antenna, at, copies), selection: copies.map((_, k) => at + k) };
 }
 
 /** Puts the selected wires in a group, gathered where the first of them is. */
