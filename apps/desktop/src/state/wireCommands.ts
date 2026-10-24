@@ -209,12 +209,19 @@ export function reorderWires(sel: number[], at: number, group?: string) {
   commitMoved(r, group ? `ワイヤー ${n} 本を「${group}」へ移動` : `ワイヤー ${n} 本を移動`);
 }
 
+/** Moves the wires under a group heading into the gap before wire `at`. */
+export function moveGroup(name: string, members: number[], at: number) {
+  if (members.length === 0 || !canEditWires()) return;
+  commitMoved(moveWires(useApp.getState().project.antenna, members, at), `グループ「${name}」を移動`);
+}
+
 /** Puts the selection in a new group, gathered where its first wire is; returns the name. */
 export function groupSelected(): string | null {
   const sel = selection();
   if (sel.length === 0 || !canEditWires()) return null;
   const name = newGroupName(wires());
   commitMoved(groupWires(useApp.getState().project.antenna, sel, name), `グループ「${name}」を作成`);
+  useEditor.getState().set({ renamingGroup: name });
   return name;
 }
 
@@ -234,7 +241,7 @@ export function dissolveGroup(name: string) {
 
 export function renameWireGroup(from: string, to: string) {
   const name = to.trim();
-  if (!name || name === from || !canEditWires()) return;
+  if (!name || name === from || groupMembers(wires(), from).length === 0 || !canEditWires()) return;
   useApp.getState().edit((p) => void (p.antenna.wires = renameGroup(p.antenna.wires, from, name)), { label: `グループ名を「${name}」に変更` });
 }
 
