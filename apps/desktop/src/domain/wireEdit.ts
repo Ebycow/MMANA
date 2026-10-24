@@ -262,6 +262,37 @@ export function insertWires(antenna: Antenna, at: number, wires: Wire[]): { ante
   return renumberWires(antenna, [...antenna.wires.slice(0, at), ...wires, ...antenna.wires.slice(at)], (p) => followWire(p, moved));
 }
 
+/** A reordering of the wires: the antenna, `moved[i]` = the new index of wire i, and where the moved wires went. */
+export interface Moved {
+  antenna: Antenna;
+  warnings: string[];
+  moved: number[];
+  selection: number[];
+}
+
+/**
+ * Moves the selected wires, in their order, into the gap before wire `at`
+ * (the wire count for the end), renumbering sources and loads. With `group`
+ * they are put in that group ('' for none); otherwise they keep theirs.
+ */
+export function moveWires(antenna: Antenna, selection: number[], at: number, group?: string): Moved {
+  const sel = new Set(selection.filter((i) => i >= 0 && i < antenna.wires.length));
+  const ids = antenna.wires.map((_, i) => i);
+  const picked = ids.filter((i) => sel.has(i));
+  const order = [...ids.filter((i) => i < at && !sel.has(i)), ...picked, ...ids.filter((i) => i >= at && !sel.has(i))];
+  const moved: number[] = [];
+  order.forEach((from, to) => (moved[from] = to));
+  const wires = order.map((i) => (sel.has(i) && group !== undefined ? withGroup(antenna.wires[i], group) : antenna.wires[i]));
+  const r = renumberWires(antenna, wires, (p) => followWire(p, moved));
+  return { ...r, moved, selection: picked.map((i) => moved[i]) };
+}
+
+/** The wire in `group`; the field is left out for none, as the engine writes it. */
+export function withGroup(w: Wire, group: string): Wire {
+  const { group: _, ...rest } = w;
+  return group ? { ...rest, group } : rest;
+}
+
 /** Radius and segmentation for a new wire: those of `like`, else MMANA's defaults. */
 export function wireFrom(like: Wire | undefined, start: Point3, end: Point3): Wire {
   const base = like ? { radius: like.radius, segmentation: structuredClone(like.segmentation) } : newWire(start, end);
