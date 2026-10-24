@@ -1,24 +1,47 @@
 import { GizmoHelper, GizmoViewport, Html, Line, OrbitControls } from '@react-three/drei';
 import { Canvas, useThree } from '@react-three/fiber';
-import { ActionIcon, Group, Menu, Switch, Text, Tooltip, UnstyledButton, useComputedColorScheme } from '@mantine/core';
-import { IconArrowAutofitHeight, IconArrowsMaximize, IconBox, IconLayoutDistributeHorizontal, IconSquare, IconViewfinder } from '@tabler/icons-react';
+import { ActionIcon, Group, Menu, NumberInput, Popover, Stack, Switch, Text, Tooltip, UnstyledButton, useComputedColorScheme } from '@mantine/core';
+import {
+  IconAdjustmentsHorizontal,
+  IconArrowAutofitHeight,
+  IconArrowsMaximize,
+  IconBox,
+  IconLayoutDistributeHorizontal,
+  IconSquare,
+  IconViewfinder,
+} from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Color, MOUSE, Vector3 } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { transport } from '../api/transport';
-import type { Point3, Project } from '../api/types';
+import type { NearFieldResponse, Point3, Project } from '../api/types';
 import { byWire, worst } from '../domain/diagnostics';
+import {
+  autoRange,
+  exposureGrid,
+  exposureMap,
+  exposureSpec,
+  limits,
+  peakPower,
+  unsurePoints,
+  type ExposureGrid,
+  type ExposureMap,
+  type Limits,
+} from '../domain/exposure';
 import { feedPositions, pulsesFit, type FeedKind, type FeedPositions, type LayoutFor } from '../domain/feed';
 import { bounds, currentPolylines, displayWires, reachingGround, sceneGrid, type Bounds, type DisplayWire, type SceneGrid } from '../domain/geometry';
 import type { CameraAction } from '../domain/shortcuts';
 import { add, niceStep, sub } from '../domain/wireEdit';
 import { useDiagnostics } from '../state/diagnostics';
 import { isDrawTool, useEditor } from '../state/editor';
+import { useExposure } from '../state/exposure';
 import { useInput } from '../state/input';
 import { useApp } from '../state/store';
 import { EditScene } from './EditController';
 import { GroundGrid } from './GroundGrid';
 import { EditToolbar, STEPS, stepLabel } from './EditToolbar';
+import { EXPOSURE_COLORS, ExposurePlane } from './ExposurePlane';
+import { FieldNumber } from './Fields';
 import { Panel } from './Panel';
 
 // an unassigned button does nothing in OrbitControls
@@ -67,6 +90,88 @@ function usePulseLayout(): LayoutFor | null {
   return latest;
 }
 
+interface ExposureView {
+  grid: ExposureGrid;
+  /** Added to a view Z to give the engine's. */
+  offset: number;
+  limits: Limits;
+  freeSpace: boolean;
+  automatic: boolean;
+}
+
+type Exposure =
+  | ({ status: 'busy' } & ExposureView)
+  | ({ status: 'failed' } & ExposureView)
+  | ({ status: 'ready'; map: ExposureMap } & ExposureView);
+
+/**
+ * The radio-protection map of the antenna of the latest result while it is
+ * switched on; null while off or after an edit. The fields are computed at
+ * 1 W and scaled to the powers, so a change of power alone computes again
+ * only when it changes the automatic range.
+ */
+function useExposureMap(): Exposure | null {
+  const on = useExposure((s) => s.on);
+  const averageW = useExposure((s) => s.averageW);
+  const peakW = useExposure((s) => s.peakW);
+  const heightM = useExposure((s) => s.heightM);
+  const rangeM = useExposure((s) => s.rangeM);
+  const result = useApp((s) => s.result);
+  const stale = useApp((s) => s.resultStale);
+
+  // the result is of the project as it is
+  const setup = useMemo(() => {
+    if (!on || !result || stale) return null;
+    const { project } = useApp.getState();
+    const box = bounds(displayWires(project.antenna));
+    const freeSpace = project.environment.ground === 'freeSpace';
+    const offset = freeSpace ? 0 : project.environment.height;
+    return { project, box, freeSpace, offset, z: heightM - offset, limits: limits(result.frequencyMhz) };
+  }, [on, result, stale, heightM]);
+  const half = setup && (rangeM ?? autoRange(setup.box, setup.z, result!.gainDbi, { averageW, peakW, heightM, rangeM }, setup.limits));
+  const view = useMemo<ExposureView | null>(
+    () =>
+      setup && half != null
+        ? {
+            grid: exposureGrid(setup.box, setup.z, half),
+            offset: setup.offset,
+            limits: setup.limits,
+            freeSpace: setup.freeSpace,
+            automatic: rangeM == null,
+          }
+        : null,
+    [setup, half, rangeM],
+  );
+
+  const [fields, setFields] = useState<{ grid: ExposureGrid; electric: Sample[]; magnetic: Sample[] } | 'failed' | null>(null);
+  useEffect(() => {
+    setFields(null);
+    if (!view) return;
+    let live = true;
+    const { project, options } = useApp.getState();
+    const ask = (kind: 'electric' | 'magnetic') => transport.nearField({ project, options, spec: exposureSpec(view.grid, kind, view.offset) });
+    Promise.all([ask('electric'), ask('magnetic')]).then(
+      ([e, h]) => live && setFields({ grid: view.grid, electric: e.samples, magnetic: h.samples }),
+      () => live && setFields('failed'),
+    );
+    return () => {
+      live = false;
+    };
+  }, [view]);
+
+  const map = useMemo(() => {
+    if (!view || !result || !fields || fields === 'failed' || fields.grid !== view.grid) return null;
+    const unsure = unsurePoints(view.grid, result.segmentedWires);
+    return exposureMap(fields.electric, fields.magnetic, view.grid, unsure, { averageW, peakW, heightM, rangeM }, view.limits);
+  }, [view, result, fields, averageW, peakW, heightM, rangeM]);
+
+  if (!view) return null;
+  if (map) return { status: 'ready', map, ...view };
+  return { status: fields === 'failed' || (fields && fields.grid === view.grid) ? 'failed' : 'busy', ...view };
+}
+
+type Sample = NearFieldResponse['samples'][number];
+
 export function AntennaView() {
   const project = useApp((s) => s.project);
   const antenna = project.antenna;
@@ -76,10 +181,14 @@ export function AntennaView() {
   const stale = useApp((s) => s.resultStale);
   const showCurrents = useApp((s) => s.showCurrents);
   const setShowCurrents = useApp((s) => s.setShowCurrents);
+  const exposureOn = useExposure((s) => s.on);
+  const setExposureOn = useExposure((s) => s.setOn);
+  const exposure = useExposureMap();
   const fileName = useApp((s) => s.fileName);
   const editable = useApp((s) => !s.elementEditorOpen && !s.optimizer.running && !s.optimizer.dialogOpen && !s.optimizer.resultsOpen);
   const preview = useEditor((s) => s.preview);
   const step = useEditor((s) => s.step);
+  const exposurePlane = exposure?.status === 'ready' && !preview ? exposure : null;
   const scheme = useComputedColorScheme('light');
   const [preset, setPreset] = useState<{ p: Preset; n: number }>({ p: 'iso', n: 0 });
   /** Framing takes in the ground as well as the antenna. */
@@ -129,6 +238,10 @@ export function AntennaView() {
             onChange={(e) => setShowCurrents(e.currentTarget.checked)}
             mr="xs"
           />
+          <Tooltip label="人のいる高さの水平面で、電波の強さを電波防護の基準値（電波法施行規則 別表第二号の三の三）と比べます">
+            <Switch label="電波防護" checked={exposureOn} disabled={!result} onChange={(e) => setExposureOn(e.currentTarget.checked)} />
+          </Tooltip>
+          <ExposureSettingsButton freeSpace={environment.ground === 'freeSpace'} frequencyMhz={frequencyMhz} />
           {viewButtons.map((b) => (
             <Tooltip key={b.p} label={b.label}>
               <ActionIcon aria-label={b.label} onClick={() => go(b.p)}>
@@ -177,6 +290,7 @@ export function AntennaView() {
             feeds={feeds}
             offset={offset}
           />
+          {exposurePlane && <ExposurePlane grid={exposurePlane.grid} map={exposurePlane.map} />}
           {/* picking and snapping use the wires as they are, not a drag in progress */}
           <EditScene
             wires={antenna.wires}
@@ -197,6 +311,12 @@ export function AntennaView() {
           {stale && result && showCurrents && (
             <Text size="xs" c="dimmed">
               編集後は再計算すると電流分布を表示します
+            </Text>
+          )}
+          {exposure && <ExposureLegend exposure={exposure} />}
+          {stale && result && exposureOn && (
+            <Text size="xs" c="dimmed">
+              編集後は再計算すると電波防護の評価を表示します
             </Text>
           )}
           <SceneLegend grid={grid} autoStep={autoStep} ground={environment.ground} box={box} />
@@ -241,6 +361,161 @@ function EditOverlay() {
         </div>
       )}
     </>
+  );
+}
+
+const watts = (w: number) => `${Number(w.toPrecision(4))} W`;
+const pct = (r: number) => (r >= 0.1 ? `${Math.round(r * 100)} %` : `${Number((r * 100).toPrecision(2))} %`);
+
+/** The powers, the height and the range of the radio-protection check. */
+function ExposureSettingsButton({ freeSpace, frequencyMhz }: { freeSpace: boolean; frequencyMhz: number }) {
+  const s = useExposure();
+  const instantaneous = limits(frequencyMhz).instantaneous != null;
+  return (
+    <Popover position="bottom-end" shadow="md" withinPortal width={250}>
+      <Popover.Target>
+        <Tooltip label="電波防護の評価の設定">
+          <ActionIcon aria-label="電波防護の評価の設定" mr="xs">
+            <IconAdjustmentsHorizontal size={15} />
+          </ActionIcon>
+        </Tooltip>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs">
+          <FieldNumber
+            label="平均電力 (W)"
+            description="アンテナに入る電力。6 分間平均の基準値と比べます"
+            size="xs"
+            min={0.001}
+            decimalScale={3}
+            value={s.averageW}
+            onCommit={(v) => v > 0 && s.set({ averageW: v })}
+          />
+          {instantaneous && (
+            <FieldNumber
+              label="尖頭電力 PEP (W)"
+              description="10 MHz 以下の瞬時値の基準値（第 2 表）と比べます。平均電力より小さいときは平均電力を使います"
+              size="xs"
+              min={0.001}
+              decimalScale={3}
+              value={s.peakW}
+              onCommit={(v) => v > 0 && s.set({ peakW: v })}
+            />
+          )}
+          <FieldNumber
+            label={freeSpace ? '評価面の Z (m)' : '評価面の地上高 (m)'}
+            size="xs"
+            decimalScale={3}
+            value={s.heightM}
+            onCommit={(v) => s.set({ heightM: v })}
+          />
+          <RangeField value={s.rangeM} onCommit={(rangeM) => s.set({ rangeM })} />
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+/** The half width of the plane; left empty, it is chosen from the power and the gain. */
+function RangeField({ value, onCommit }: { value: number | null; onCommit: (v: number | null) => void }) {
+  const [v, setV] = useState<string | number>(value ?? '');
+  useEffect(() => setV(value ?? ''), [value]);
+  const commit = () => {
+    if (v === '') return value != null && onCommit(null);
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!(Number.isFinite(n) && n > 0)) return setV(value ?? '');
+    if (n !== value) onCommit(n);
+  };
+  return (
+    <NumberInput
+      label="範囲（中心から, m）"
+      description="空欄で自動（電力と利得から）"
+      placeholder="自動"
+      size="xs"
+      min={0.1}
+      decimalScale={2}
+      value={v}
+      onChange={setV}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && commit()}
+      classNames={{ input: 'num' }}
+    />
+  );
+}
+
+/** What the map shows, the largest field and how far out the limit is exceeded. */
+function ExposureLegend({ exposure }: { exposure: Exposure }) {
+  const s = useExposure();
+  const { limits: lim, grid } = exposure;
+  const half = ((grid.n - 1) / 2) * grid.step;
+  const powers = lim.instantaneous ? `平均 ${watts(s.averageW)}・PEP ${watts(peakPower(s))}` : `平均 ${watts(s.averageW)}`;
+  const where = exposure.freeSpace ? `Z = ${metres(s.heightM)}` : `地上 ${metres(s.heightM)}`;
+  const limitText = [
+    lim.average && `E ${Number(lim.average.e.toPrecision(3))} V/m・H ${Number(lim.average.h.toPrecision(3))} A/m（6 分間平均）`,
+    lim.instantaneous && `E ${lim.instantaneous.e} V/m・H ${lim.instantaneous.h} A/m（瞬時）`,
+  ].filter(Boolean);
+  return (
+    <div className="num">
+      <div style={{ marginBottom: 3 }}>
+        電波防護（{where}・{powers}）
+      </div>
+      {limitText.length === 0 ? (
+        <Text size="xs" c="dimmed">
+          この周波数には基準値がありません
+        </Text>
+      ) : (
+        <>
+          <div
+            style={{
+              width: 140,
+              height: 8,
+              borderRadius: 4,
+              background: `linear-gradient(90deg, transparent, ${EXPOSURE_COLORS.low} 50%, ${EXPOSURE_COLORS.high} 92%, ${EXPOSURE_COLORS.exceed} 92%)`,
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: 150, marginTop: 2 }}>
+            <span>1 %</span>
+            <span>10 %</span>
+            <span>基準値</span>
+          </div>
+          <div title={limitText.join('\n')}>基準値 {limitText.join(' / ')}</div>
+        </>
+      )}
+      {exposure.status === 'busy' && (
+        <Text size="xs" c="dimmed">
+          電界と磁界を計算しています…
+        </Text>
+      )}
+      {exposure.status === 'failed' && (
+        <Text size="xs" c="red">
+          電界と磁界を計算できませんでした
+        </Text>
+      )}
+      {exposure.status === 'ready' && limitText.length > 0 && (
+        <>
+          <div>
+            最大 E {Number(exposure.map.maxE.toPrecision(3))} V/m・H {Number(exposure.map.maxH.toPrecision(3))} A/m（基準値の {pct(exposure.map.maxRatio)}）
+          </div>
+          {exposure.map.exceedReach == null ? (
+            <div>基準値を超える場所はありません</div>
+          ) : (
+            <Text size="xs" c="red" fw={600}>
+              基準値を超える範囲: 中心から {metres(exposure.map.exceedReach)} まで
+            </Text>
+          )}
+          {exposure.map.exceedsEdge && (
+            <Text size="xs" c="red">
+              範囲の端でも超えています。設定で範囲を広げてください
+            </Text>
+          )}
+        </>
+      )}
+      <div style={{ color: 'var(--mantine-color-dimmed)' }}>
+        範囲 ±{metres(half)}
+        {exposure.automatic ? '（自動）' : ''}・斜線はワイヤーに近く計算が不確か
+        {exposure.freeSpace ? '・大地の反射を含みません' : '・大地は完全導体として計算'}
+      </div>
+    </div>
   );
 }
 
