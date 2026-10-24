@@ -607,10 +607,14 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       }
     };
 
+    // the last pointer over the view, for redrawing the cursor without a move
+    let pointer: PointerEvent | null = null;
     const onMove = (e: PointerEvent) => {
+      pointer = e;
       if (!drag && e.buttons === 0) updateHover(e);
     };
     const onLeave = () => {
+      pointer = null;
       if (drag) return;
       setHover(null);
       useEditor.getState().set({ cursor: null, feedHover: null });
@@ -662,6 +666,11 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
       }
     };
 
+    // a plane switched from the keyboard moves the cursor and the grid onto it at once
+    const unsubscribe = useEditor.subscribe((ed, prev) => {
+      if ((ed.plane !== prev.plane || ed.draftPlane !== prev.draftPlane) && pointer && !drag && isDrawTool(ed.tool)) updateHover(pointer);
+    });
+
     el.addEventListener('pointerdown', onDown, true);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerleave', onLeave);
@@ -669,6 +678,7 @@ function PointerController({ wires, display, offset, step, editable, feeds, layo
     el.addEventListener('contextmenu', onContextMenu);
     window.addEventListener('keydown', onKey, true);
     return () => {
+      unsubscribe();
       endDrag(true);
       el.style.cursor = '';
       el.removeEventListener('pointerdown', onDown, true);
