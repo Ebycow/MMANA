@@ -1467,6 +1467,11 @@ export interface components {
         };
         Wire: {
             end: components["schemas"]["Point3"];
+            /**
+             * @description Name of the group the wire list shows it in (the port's own, saved in
+             *     the comment like the note); empty for none. Not used in calculation.
+             */
+            group?: string;
             note?: string;
             /**
              * Format: double
