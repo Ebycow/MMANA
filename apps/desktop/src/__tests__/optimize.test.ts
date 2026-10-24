@@ -174,6 +174,17 @@ describe('optimisation in the store', () => {
     expect(useApp.getState().options.frequencyMhz).toBe(14.3);
   });
 
+  it('undoes and redoes a sheet changed with the antenna', () => {
+    const before = useApp.getState().optimizer.setup;
+    const after = { ...before, goals: { ...before.goals, currentPulse: 'w2c' } };
+    useApp.getState().edit((p) => void (p.antenna.wires[0].end.z += 1), { setup: after });
+    expect(useApp.getState().optimizer.setup).toBe(after);
+    useApp.getState().undo();
+    expect(useApp.getState().optimizer.setup).toBe(before);
+    useApp.getState().redo();
+    expect(useApp.getState().optimizer.setup).toBe(after);
+  });
+
   it('leaves the antenna alone when no trial finished', async () => {
     vi.spyOn(transport, 'optimize').mockResolvedValue({ ...outcome(), best: null, stop: { kind: 'cancelled' } });
     const before = useApp.getState().project;
