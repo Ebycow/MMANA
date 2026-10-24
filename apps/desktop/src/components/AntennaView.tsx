@@ -34,6 +34,9 @@ const PRESET_DIRS: Record<Preset, [number, number, number]> = {
 
 // Sequential ramp (reference palette, blue) for current magnitude.
 // Light mode runs light -> dark; dark mode dark -> light, so low current recedes.
+/** X, Y and Z: the view cube and the axis lines on the ground grid. */
+const AXIS_COLORS: [string, string, string] = ['#e34948', '#1baf7a', '#2a78d6'];
+
 const RAMP_LIGHT = ['#86b6ef', '#5598e7', '#2a78d6', '#1c5cab', '#104281', '#0d366b'];
 const RAMP_DARK = ['#184f95', '#1c5cab', '#2a78d6', '#5598e7', '#86b6ef', '#cde2fb'];
 
@@ -419,7 +422,14 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
       />
 
       {/* the ground (real / perfect ground) or the Z = 0 plane; lines on round coordinates, fixed in place */}
-      <GroundGrid grid={grid} cellColor={colors.grid} sectionColor={colors.section} fill={groundColor} />
+      <GroundGrid
+        grid={grid}
+        cellColor={colors.grid}
+        sectionColor={colors.section}
+        fill={groundColor}
+        xAxisColor={AXIS_COLORS[0]}
+        yAxisColor={AXIS_COLORS[1]}
+      />
       {groundColor && <HeightDimension at={box.center} groundZ={grid.z} near={box.radius * 0.5} color={colors.dimension} />}
 
       {/* picking is done in screen space by EditScene */}
@@ -469,7 +479,7 @@ function Scene({ wires, box, frame, currents, preset, scheme, grid, ground, feed
       ))}
 
       <GizmoHelper alignment="bottom-right" margin={[56, 56]} onUpdate={() => invalidate()}>
-        <GizmoViewport axisColors={['#e34948', '#1baf7a', '#2a78d6']} labelColor="#ffffff" />
+        <GizmoViewport axisColors={AXIS_COLORS} labelColor="#ffffff" />
       </GizmoHelper>
     </>
   );
