@@ -144,6 +144,10 @@ export function App() {
       'tool.polygon': tool('polygon'),
       'tool.feed': tool('feed'),
       drawPlane: () => useEditor.getState().cyclePlane(),
+      'drawPlane.auto': () => useEditor.getState().setPlane('auto'),
+      'drawPlane.xy': () => useEditor.getState().setPlane('xy'),
+      'drawPlane.xz': () => useEditor.getState().setPlane('xz'),
+      'drawPlane.yz': () => useEditor.getState().setPlane('yz'),
     },
     // calculating must also work while typing in a cell
     ['calculate'],
