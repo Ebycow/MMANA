@@ -50,3 +50,57 @@ export const ungroupWires = (wires: Wire[], selection: number[]): Wire[] =>
 /** Renames a group; the name of another group joins them. */
 export const renameGroup = (wires: Wire[], from: string, to: string): Wire[] =>
   wires.map((w) => (from && groupOf(w) === from ? withGroup(w, to) : w));
+
+/** Where the pointer is during a drag: a half of a shown row, or below the last. */
+export type DropSpot = { row: number; lower: boolean } | 'end';
+
+/** What is dragged: wires (the selection), or the run of wires under a group heading. */
+export type Dragged = { kind: 'wires' } | { kind: 'group'; name: string; wires: number[] };
+
+/**
+ * Where a drop puts the dragged wires: the gap before wire `at`, the group
+ * they join (`undefined` keeps theirs), and the edge of the shown row the
+ * line is drawn at.
+ */
+export interface Drop {
+  at: number;
+  group: string | undefined;
+  line: { row: number; edge: 'top' | 'bottom'; indent: boolean };
+}
+
+/**
+ * The drop for a spot in the shown rows (`collapsed` groups show only their
+ * heading). Wires join the group of the wire they are dropped next to; on a
+ * heading they go before the group (upper half) or into it (lower half). A
+ * group is kept whole: dropped inside another it goes before that one.
+ */
+export function dropTarget(rows: ListRow[], spot: DropSpot, wireCount: number, dragged: Dragged, collapsed: (name: string) => boolean): Drop | null {
+  if (rows.length === 0) return null;
+  let d: Drop;
+  if (spot === 'end') {
+    d = { at: wireCount, group: '', line: { row: rows.length - 1, edge: 'bottom', indent: false } };
+  } else {
+    const r = rows[spot.row];
+    if (!r) return null;
+    const edge = spot.lower ? 'bottom' : 'top';
+    if (r.kind === 'wire') {
+      d = { at: r.wire + (spot.lower ? 1 : 0), group: r.group, line: { row: spot.row, edge, indent: r.group !== '' } };
+    } else if (!spot.lower) {
+      d = { at: r.wires[0], group: '', line: { row: spot.row, edge, indent: false } };
+    } else {
+      d = { at: collapsed(r.name) ? r.wires.at(-1)! + 1 : r.wires[0], group: r.name, line: { row: spot.row, edge, indent: true } };
+    }
+  }
+  if (dragged.kind === 'wires') return d;
+  const own = dragged.wires;
+  if (d.group && d.group !== dragged.name) {
+    // before the heading of the run the spot is in
+    let h = spot === 'end' ? -1 : spot.row;
+    while (h >= 0 && rows[h].kind !== 'group') h--;
+    const head = rows[h];
+    if (head?.kind !== 'group') return null;
+    d = { at: head.wires[0], group: undefined, line: { row: h, edge: 'top', indent: false } };
+  }
+  if (d.at >= own[0] && d.at <= own.at(-1)! + 1) return null;
+  return { ...d, group: undefined };
+}
