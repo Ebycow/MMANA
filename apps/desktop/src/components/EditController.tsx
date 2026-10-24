@@ -69,11 +69,13 @@ const fmt = (v: number) => Number(v.toFixed(4)).toString();
 const fmtPoint = (p: Point3) => `(${fmt(p.x)}, ${fmt(p.y)}, ${fmt(p.z)})`;
 const PLANE_LABEL: Record<Plane, string> = { xy: 'XY', xz: 'XZ', yz: 'YZ' };
 
-/** Mantine keeps some closed modals mounted; an open one has a box. */
+type Modifiers = Pick<MouseEvent, 'shiftKey' | 'altKey' | 'ctrlKey' | 'metaKey'>;
+
 /** Whether a key of the viewer's mouse setting is held. */
-const held = (setting: 'boxSelect' | 'addToSelection' | 'constrain' | 'followToggle', e: MouseEvent) =>
+const held = (setting: 'boxSelect' | 'addToSelection' | 'constrain' | 'followToggle', e: Modifiers) =>
   isHeld(useInput.getState().mouse[setting], e);
 
+/** Mantine keeps some closed modals mounted; an open one has a box. */
 const modalOpen = () => [...document.querySelectorAll('.mantine-Modal-content')].some((e) => e.getClientRects().length > 0);
 
 export interface EditSceneProps {
@@ -725,8 +727,22 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
   const invalidate = useThree((s) => s.invalidate);
   const pivot = useRef<Group>(null);
   const start = useRef<{ base: Wire[]; sel: number[]; center: Point3; pos: Vector3 } | null>(null);
+  // the gizmo's events carry no keys; window capture listeners see the
+  // pointer before the gizmo does, so a drag reads the keys of its own event
+  const keys = useRef<Modifiers>({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false });
   const center = useMemo(() => selectionCenter(wires, selected), [wires, selected]);
   const active = (tool === 'move' || tool === 'rotate') && center != null && editable;
+
+  useEffect(() => {
+    if (!active) return;
+    const track = ({ shiftKey, altKey, ctrlKey, metaKey }: PointerEvent) => (keys.current = { shiftKey, altKey, ctrlKey, metaKey });
+    window.addEventListener('pointerdown', track, true);
+    window.addEventListener('pointermove', track, true);
+    return () => {
+      window.removeEventListener('pointerdown', track, true);
+      window.removeEventListener('pointermove', track, true);
+    };
+  }, [active]);
 
   const place = () => {
     const g = pivot.current;
@@ -743,15 +759,16 @@ function SelectionGizmo({ wires, offset, step, editable, gizmo }: EditSceneProps
     const g = pivot.current;
     if (!s || !g) return;
     const ed = useEditor.getState();
+    const follow = ed.follow !== held('followToggle', keys.current);
     if (tool === 'move') {
       const d = pt(g.position.clone().sub(s.pos));
-      ed.set({ preview: transformWires(s.base, s.sel, translation(d), ed.follow), hud: `移動 ΔX ${fmt(d.x)}  ΔY ${fmt(d.y)}  ΔZ ${fmt(d.z)} m` });
+      ed.set({ preview: transformWires(s.base, s.sel, translation(d), follow), hud: `移動 ΔX ${fmt(d.x)}  ΔY ${fmt(d.y)}  ΔZ ${fmt(d.z)} m` });
     } else {
       const q = g.quaternion.clone();
       const c = v3(s.center);
       const f = (p: Point3) => pt(v3(p).sub(c).applyQuaternion(q).add(c));
       const deg = (2 * Math.acos(Math.min(1, Math.abs(q.w))) * 180) / Math.PI;
-      ed.set({ preview: transformWires(s.base, s.sel, f, ed.follow), hud: `回転 ${fmt(deg)}°` });
+      ed.set({ preview: transformWires(s.base, s.sel, f, follow), hud: `回転 ${fmt(deg)}°` });
     }
   };
   return (
