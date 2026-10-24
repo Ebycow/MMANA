@@ -45,7 +45,7 @@
 | `src/api` | 生成型 + `Transport` | Tauri / wasm（Web Worker）/ HTTP の切り替え、エラーを problem+json の形にそろえる |
 | `src/state` | zustand | プロジェクト、元に戻す・やり直す（最大 200 手）、計算結果と「古い」状態、自動計算 |
 | `src/components` | React 19 + Mantine 9 | ワイヤー表（数式入力・Enter で下へ）、エレメント編集ダイアログ、各種フォーム、結果パネル |
-| `src/components/AntennaView` | three.js（react-three-fiber） | 3D 表示（Z 軸上向き）、電流分布の色分け、視点プリセット。別チャンクで遅延読み込み |
+| `src/components/AntennaView` | three.js（react-three-fiber） | 3D 表示（Z 軸上向き）、電流分布の色分け、電波防護の評価（近傍界を基準値と比べた面、`ExposurePlane`）、視点プリセット。別チャンクで遅延読み込み |
 | `src/components/EditController` | three.js + drei | 3D での直接編集。選択（複数・範囲）、ワイヤー・端点のドラッグ、移動・回転ギズモ、ワイヤーとループの描画、スナップ。当たり判定は画面座標で行い、キャプチャ段階のリスナーでカメラ操作より先に受け取ります。ドラッグ中は表示だけを変え、離したときに 1 回の編集として確定します |
 | `src/charts` | SVG | 指向性図（MMANA と同じ向きと 10^(dB/40) スケール）、周波数特性（十字線を全グラフで共有） |
 
