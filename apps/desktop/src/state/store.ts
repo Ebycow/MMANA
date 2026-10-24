@@ -84,19 +84,23 @@ const freshOptimizer = (): OptimizerState => ({
 /**
  * A step of the undo history: the project before it, and the calculation
  * options before it when the step changed them too (an optimisation that
- * moved the frequency). Other changes of the options are not undone.
+ * moved the frequency). Other changes of the options are not undone. The
+ * optimisation sheet is kept the same way, for steps that renumber the
+ * wires it refers to.
  */
 export interface HistoryEntry {
   project: Project;
   options?: CalcOptions;
+  setup?: OptimizerSetup;
   /** What the step did, for the history list. */
   label: string;
 }
 
-/** How an edit is recorded: its name when its difference does not say it, and options it changes with the project. */
+/** How an edit is recorded: its name when its difference does not say it, and options and the sheet it changes with the project. */
 export interface EditStep {
   label?: string;
   options?: Partial<CalcOptions>;
+  setup?: OptimizerSetup;
 }
 
 export interface AppState {
@@ -212,6 +216,20 @@ export const useApp = create<AppState>()((set, get) => {
     return { selectedWires: selectedWires.filter((i) => i < n), selectedWire: selectedWire != null && selectedWire < n ? selectedWire : null };
   };
 
+  /** The history entry for leaving the current state, keeping the options and sheet when `like` has them. */
+  const entryFrom = (like: { options?: CalcOptions; setup?: OptimizerSetup }, label: string): HistoryEntry => ({
+    project: get().project,
+    label,
+    ...(like.options && { options: get().options }),
+    ...(like.setup && { setup: get().optimizer.setup }),
+  });
+
+  /** Puts the options and sheet of a history entry back. */
+  const restore = (entry: HistoryEntry) => ({
+    ...(entry.options && { options: entry.options }),
+    ...(entry.setup && { optimizer: { ...get().optimizer, setup: entry.setup } }),
+  });
+
   /** Marks the result and sweep of the current document as out of date. */
   const staleFlags = () => ({
     resultStale: get().result != null,
@@ -251,15 +269,16 @@ export const useApp = create<AppState>()((set, get) => {
     elementEditorOpen: false,
 
     edit: (recipe, step = {}) => {
-      const { project, past, options } = get();
+      const { project, past, options, optimizer } = get();
       const draft = structuredClone(project);
       recipe(draft);
       const label = step.label ?? describeChange(project, draft);
       const patch = step.options;
-      const entries = [...past, patch ? { project, options, label } : { project, label }];
+      const entries = [...past, entryFrom({ options: patch && options, setup: step.setup }, label)];
       set({
         project: draft,
         ...(patch && { options: { ...options, ...patch } }),
+        ...(step.setup && { optimizer: { ...optimizer, setup: step.setup } }),
         past: entries.slice(-HISTORY_LIMIT),
         historyTrimmed: get().historyTrimmed || entries.length > HISTORY_LIMIT,
         future: [],
@@ -269,27 +288,27 @@ export const useApp = create<AppState>()((set, get) => {
       });
     },
     undo: () => {
-      const { past, project, future, options } = get();
+      const { past, future } = get();
       const prev = past.at(-1);
       if (!prev) return;
       set({
+        future: [entryFrom(prev, prev.label), ...future],
         project: prev.project,
-        ...(prev.options && { options: prev.options }),
+        ...restore(prev),
         past: past.slice(0, -1),
-        future: [prev.options ? { project, options, label: prev.label } : { project, label: prev.label }, ...future],
         dirty: true,
         ...staleFlags(),
         ...keepSelection(prev.project),
       });
     },
     redo: () => {
-      const { past, project, future, options } = get();
+      const { past, future } = get();
       const next = future[0];
       if (!next) return;
       set({
+        past: [...past, entryFrom(next, next.label)],
         project: next.project,
-        ...(next.options && { options: next.options }),
-        past: [...past, next.options ? { project, options, label: next.label } : { project, label: next.label }],
+        ...restore(next),
         future: future.slice(1),
         dirty: true,
         ...staleFlags(),

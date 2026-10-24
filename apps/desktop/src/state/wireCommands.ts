@@ -8,6 +8,7 @@ import {
   connectedWires,
   mirrorCopy,
   mirrorInPlace,
+  moveWires,
   removeWires,
   rotateSelection,
   rotation,
@@ -17,7 +18,10 @@ import {
   unitAxis,
   type Axis,
   type Edited,
+  type Moved,
 } from '../domain/wireEdit';
+import { followWires } from '../domain/optimize';
+import { copyName, duplicateGroup, groupMembers, groupWires, newGroupName, renameGroup, ungroupWires } from '../domain/wireGroups';
 import type { FeedRef } from '../domain/feed';
 import { fixJunctions, joinTouched, type JunctionIssue, type Split } from '../domain/junctions';
 import { useEditor } from './editor';
@@ -182,3 +186,82 @@ export const transformSelected = (t: NumericTransform) =>
     if (t.copies > 0) commitEdited(appendCopies(wires(), sel, t.copies, (p, k) => step(k)(p)));
     else commitWires(transformWires(wires(), sel, step(1), follow()));
   })();
+
+/**
+ * Puts a reordering in place as one undoable step: the optimisation sheet's
+ * wire references follow, and the moved wires stay selected.
+ */
+function commitMoved(r: Moved, label: string) {
+  const app = useApp.getState();
+  if (JSON.stringify(r.antenna.wires) === JSON.stringify(app.project.antenna.wires)) return;
+  const setup = followWires(app.optimizer.setup, r.moved);
+  const changed = JSON.stringify(setup) !== JSON.stringify(app.optimizer.setup);
+  app.edit((p) => void (p.antenna = structuredClone(r.antenna)), { label, ...(changed && { setup }) });
+  app.setSelection(r.selection);
+  if (r.warnings.length) notifications.show({ color: 'yellow', title: '給電点・負荷を更新しました', message: r.warnings.join('\n') });
+}
+
+/** Moves wires into the gap before wire `at`, into `group` when given ('' takes them out). */
+export function reorderWires(sel: number[], at: number, group?: string) {
+  if (sel.length === 0 || !canEditWires()) return;
+  const r = moveWires(useApp.getState().project.antenna, sel, at, group);
+  const n = sel.length;
+  commitMoved(r, group ? `ワイヤー ${n} 本を「${group}」へ移動` : `ワイヤー ${n} 本を移動`);
+}
+
+/** Moves the wires under a group heading into the gap before wire `at`. */
+export function moveGroup(name: string, members: number[], at: number) {
+  if (members.length === 0 || !canEditWires()) return;
+  commitMoved(moveWires(useApp.getState().project.antenna, members, at), `グループ「${name}」を移動`);
+}
+
+/** Copies the wires under a group heading into a new group after them, selects the copies and starts naming it. */
+export function duplicateWireGroup(name: string, run: number[]) {
+  if (run.length === 0 || !canEditWires()) return;
+  const app = useApp.getState();
+  const copy = copyName(wires(), name);
+  const r = duplicateGroup(app.project.antenna, run, copy);
+  app.edit((p) => void (p.antenna = structuredClone(r.antenna)), { label: `グループ「${name}」を複製` });
+  app.setSelection(r.selection);
+  useEditor.getState().set({ renamingGroup: copy });
+  if (r.warnings.length) notifications.show({ color: 'yellow', title: '給電点・負荷を更新しました', message: r.warnings.join('\n') });
+}
+
+/** Puts the selection in a new group, gathered where its first wire is; returns the name. */
+export function groupSelected(): string | null {
+  const sel = selection();
+  if (sel.length === 0 || !canEditWires()) return null;
+  const name = newGroupName(wires());
+  commitMoved(groupWires(useApp.getState().project.antenna, sel, name), `グループ「${name}」を作成`);
+  useEditor.getState().set({ renamingGroup: name });
+  return name;
+}
+
+/** Takes the selected wires out of their groups. */
+export const ungroupSelected = withSelection((sel) => {
+  if (sel.every((i) => !wires()[i]?.group)) return;
+  useApp.getState().edit((p) => void (p.antenna.wires = ungroupWires(p.antenna.wires, sel)), { label: 'グループを解除' });
+});
+
+/** Takes every wire of the group out of it. */
+export function dissolveGroup(name: string) {
+  if (!canEditWires()) return;
+  const members = groupMembers(wires(), name);
+  if (members.length === 0) return;
+  useApp.getState().edit((p) => void (p.antenna.wires = ungroupWires(p.antenna.wires, members)), { label: `グループ「${name}」を解除` });
+}
+
+export function renameWireGroup(from: string, to: string) {
+  const name = to.trim();
+  if (!name || name === from || groupMembers(wires(), from).length === 0 || !canEditWires()) return;
+  useApp.getState().edit((p) => void (p.antenna.wires = renameGroup(p.antenna.wires, from, name)), { label: `グループ名を「${name}」に変更` });
+}
+
+/** Selects the wires of the group; with `add`, adds them, or takes them out when all are selected. */
+export function selectGroup(name: string, add: boolean) {
+  const app = useApp.getState();
+  const members = groupMembers(wires(), name);
+  if (!add) return app.setSelection(members, members[0] ?? null);
+  const all = members.every((i) => app.selectedWires.includes(i));
+  app.setSelection(all ? app.selectedWires.filter((i) => !members.includes(i)) : [...app.selectedWires, ...members]);
+}

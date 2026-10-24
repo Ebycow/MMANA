@@ -15,8 +15,11 @@ function moveDown(input: HTMLInputElement) {
   const tr = td?.parentElement;
   if (!td || !tr) return;
   const col = Array.from(tr.children).indexOf(td);
-  const next = tr.nextElementSibling?.children[col]?.querySelector('input');
-  (next as HTMLInputElement | null)?.focus();
+  // past rows without this column (the wire list's group headings)
+  for (let row = tr.nextElementSibling; row; row = row.nextElementSibling) {
+    const next = row.children[col]?.querySelector('input');
+    if (next) return next.focus();
+  }
 }
 
 interface NumCellProps extends CellBaseProps {

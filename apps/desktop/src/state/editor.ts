@@ -1,6 +1,7 @@
 // State of direct editing in the 3D view: the tool, snapping, the wire
-// clipboard and what a drag in progress shows. None of it is part of the
-// document or its undo history.
+// clipboard and what a drag in progress shows; and the groups folded or being
+// renamed in the wire list. None of it is part of the document or its undo
+// history.
 import { create } from 'zustand';
 import type { Point3, PulsePoint, Wire } from '../api/types';
 import type { FeedRef } from '../domain/feed';
@@ -63,6 +64,10 @@ export interface EditorState {
   /** Places the connection check marks in the view, and the one pointed at in its list. */
   issueMarks: Point3[];
   issueHot: number | null;
+  /** Wire groups shown folded in the wire list, by name. */
+  collapsedGroups: string[];
+  /** The group whose name is being edited in the wire list (a new one starts so). */
+  renamingGroup: string | null;
 
   set: (patch: Partial<EditorState>) => void;
   setTool: (tool: Tool) => void;
@@ -94,6 +99,8 @@ export const useEditor = create<EditorState>()((set, get) => ({
   transformOpen: false,
   issueMarks: [],
   issueHot: null,
+  collapsedGroups: [],
+  renamingGroup: null,
 
   set: (patch) => set(patch),
   setTool: (tool) => set({ tool, draft: [], draftPlane: null, typed: '', cursor: null, hud: null, feedHover: null, feedDrag: null }),

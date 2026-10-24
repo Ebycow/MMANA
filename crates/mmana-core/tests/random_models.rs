@@ -100,6 +100,7 @@ fn wire() -> impl Strategy<Value = Wire> {
         radius,
         segmentation,
         note: String::new(),
+        group: String::new(),
     })
 }
 
@@ -248,6 +249,7 @@ prop_compose! {
                 radius: e.radius * wavelength,
                 segmentation: e.segmentation,
                 note: String::new(),
+                group: String::new(),
             });
         }
         let n = elements.len();

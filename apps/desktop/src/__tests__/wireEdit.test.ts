@@ -11,6 +11,7 @@ import {
   mirrorCopy,
   mirrorInPlace,
   moveEndpoint,
+  moveWires,
   niceStep,
   polygonPoints,
   polylineWires,
@@ -167,6 +168,50 @@ describe('inserting wires', () => {
     expect(r.antenna.wires[1].start).toEqual(p(5, 0, 0));
     expect(r.antenna.sources[0].pulse).toBe('w3c');
     expect(r.antenna.loads[0].pulse).toBe('w1c');
+  });
+});
+
+describe('moving wires', () => {
+  const antenna = () => {
+    const a = newProject().antenna;
+    a.wires = square();
+    a.sources = [{ pulse: 'w5c', phaseDeg: 0, voltage: 1 }];
+    a.loads = [{ pulse: 'w1b', kind: 'impedance', r: 50, x: 0 }];
+    return a;
+  };
+
+  it('moves the selection into a gap in its order and renumbers pulses', () => {
+    const a = antenna();
+    // wires 5 and 1 into the gap before wire 3
+    const r = moveWires(a, [4, 0], 2);
+    expect(r.antenna.wires).toEqual([a.wires[1], a.wires[0], a.wires[4], a.wires[2], a.wires[3]]);
+    expect(r.moved).toEqual([1, 0, 3, 4, 2]);
+    expect(r.selection).toEqual([1, 2]);
+    expect(r.antenna.sources[0].pulse).toBe('w3c');
+    expect(r.antenna.loads[0].pulse).toBe('w2b');
+    expect(r.warnings).toEqual([]);
+  });
+
+  it('moves to the end and to the start', () => {
+    const a = antenna();
+    expect(moveWires(a, [0], 5).antenna.wires.at(-1)).toBe(a.wires[0]);
+    expect(moveWires(a, [4], 0).antenna.wires[0]).toBe(a.wires[4]);
+  });
+
+  it('leaves the order alone when the gap is next to the selection', () => {
+    const a = antenna();
+    expect(moveWires(a, [1, 2], 1).antenna.wires).toEqual(a.wires);
+    expect(moveWires(a, [1, 2], 3).antenna.wires).toEqual(a.wires);
+    expect(moveWires(a, [1, 2], 2).antenna.sources).toEqual(a.sources);
+  });
+
+  it('puts the moved wires in a group, or takes them out of it', () => {
+    const a = antenna();
+    const r = moveWires(a, [0, 1], 5, 'Loop');
+    expect(r.antenna.wires.slice(3).map((x) => x.group)).toEqual(['Loop', 'Loop']);
+    expect(r.antenna.wires.slice(0, 3).every((x) => x.group === undefined)).toBe(true);
+    const back = moveWires(r.antenna, [3], 0, '');
+    expect('group' in back.antenna.wires[0]).toBe(false);
   });
 });
 
