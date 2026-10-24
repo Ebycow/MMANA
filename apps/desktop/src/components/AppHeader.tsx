@@ -16,6 +16,7 @@ import {
   IconListDetails,
   IconMoon,
   IconPencil,
+  IconPlus,
   IconPrinter,
   IconPlayerPlay,
   IconSun,
@@ -25,6 +26,7 @@ import { useRef, useState } from 'react';
 import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
+import { useNewWire } from '../state/newWire';
 import { usePrint } from '../state/print';
 import { useApp } from '../state/store';
 import { AboutModal } from './AboutModal';
@@ -118,6 +120,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const shownCount = PANES.filter(([id]) => shown[id]).length;
   const openSettings = useInput((s) => s.setDialogOpen);
   const openChecks = useChecks((s) => s.setDialogOpen);
+  const openNewWire = useNewWire((s) => s.setDialogOpen);
   const undoKey = useKeyText('undo');
   const redoKey = useKeyText('redo');
   const { colorScheme, setColorScheme } = useMantineColorScheme();
@@ -195,6 +198,9 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Menu.Item>
           <Menu.Item leftSection={<IconAlertTriangle size={14} />} onClick={() => openChecks(true)}>
             警告の表示…
+          </Menu.Item>
+          <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => openNewWire(true)}>
+            ワイヤーの追加…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>

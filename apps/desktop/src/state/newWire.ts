@@ -1,10 +1,12 @@
-// Where the wire list's 追加 button puts a new wire. Remembered per viewer like
-// the display settings; not part of the document.
+// Where the wire list's 追加 button puts a new wire (設定 → ワイヤーの追加…).
+// Remembered per viewer like the display settings; not part of the document.
 import { create } from 'zustand';
 import type { NewWireSettings } from '../domain/wireEdit';
 
 interface NewWireState extends NewWireSettings {
+  dialogOpen: boolean;
   set: (patch: Partial<NewWireSettings>) => void;
+  setDialogOpen: (open: boolean) => void;
 }
 
 const KEY = 'mmana.newWire';
@@ -27,6 +29,7 @@ function load(): NewWireSettings {
 
 export const useNewWire = create<NewWireState>()((set, get) => ({
   ...load(),
+  dialogOpen: false,
   set: (patch) => {
     set(patch);
     const { mode, offset, start, end } = get();
@@ -36,4 +39,5 @@ export const useNewWire = create<NewWireState>()((set, get) => ({
       // not remembered; the defaults apply next time
     }
   },
+  setDialogOpen: (dialogOpen) => set({ dialogOpen }),
 }));
