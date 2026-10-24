@@ -15,6 +15,7 @@ import type { TransformControls as TransformControlsImpl } from 'three-stdlib';
 import type { Point3, PulsePoint, Wire } from '../api/types';
 import { describePulse, feedLabel, pulsesOnWire, type FeedPositions, type FeedRef, type LayoutFor } from '../domain/feed';
 import type { DisplayWire } from '../domain/geometry';
+import { AXIS_COLORS } from './axisColors';
 import { isHeld } from '../domain/shortcuts';
 import { along } from '../domain/junctions';
 import {
@@ -863,6 +864,14 @@ function DrawPreview({ offset, step, radius, center: middle }: { offset: Point3;
         side={2}
         renderOrder={1}
       />
+      {/* the lines of the plane's axes through the origin, where they cross the grid */}
+      {[u, v].map((a) => {
+        const other = a === u ? v : u;
+        if (Math.abs(gridCenter[other]) > extent / 2) return null;
+        const at = { x: 0, y: 0, z: 0, [normal]: through[normal] };
+        const ends = [-1, 1].map((k) => w({ ...at, [a]: gridCenter[a] + (k * extent) / 2 }));
+        return <Line key={a} points={ends} color={AXIS_COLORS[a]} lineWidth={1.5} transparent opacity={0.5} renderOrder={1} raycast={() => null} />;
+      })}
       {draft.length > 1 && tool === 'wire' && <Line points={draft.map(w)} color="#eb6834" lineWidth={2.5} />}
       {outline && <Line points={outline.map(w)} color="#eb6834" lineWidth={2} dashed dashSize={step / 2} gapSize={step / 3} />}
       {draft.map((p, i) => (
