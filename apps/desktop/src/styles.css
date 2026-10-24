@@ -182,7 +182,77 @@ textarea {
   color: var(--text-muted);
   text-align: center;
   width: 34px;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  border-left: 3px solid transparent;
+}
+/* wire groups: a heading over the run of wires, which carry a bar on the left */
+.grid-table tr.in-group td.index {
+  border-left-color: color-mix(in srgb, var(--mantine-primary-color-filled) 55%, transparent);
+}
+.grid-table tr.group-row td {
+  background: color-mix(in srgb, var(--text-muted) 9%, var(--panel-bg));
+  cursor: grab;
+  user-select: none;
+}
+.grid-table tr.group-row:hover td {
+  background: color-mix(in srgb, var(--text-muted) 15%, var(--panel-bg));
+}
+.grid-table tr.group-row.partial td {
+  background: color-mix(in srgb, var(--mantine-primary-color-light) 50%, var(--panel-bg));
+}
+.grid-table tr.group-row.selected td {
+  background: var(--mantine-primary-color-light);
+}
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 2px;
+  font-weight: 600;
+}
+.group-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.wire-dragging,
+body.wire-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+.wire-drop-line {
+  position: fixed;
+  z-index: 1000;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--mantine-primary-color-filled);
+  pointer-events: none;
+}
+.wire-drop-line::before {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
+  border: 2px solid var(--mantine-primary-color-filled);
+  border-radius: 50%;
+  background: var(--panel-bg);
+}
+.wire-drag-label {
+  position: fixed;
+  z-index: 1001;
+  padding: 2px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+  pointer-events: none;
 }
 /* a wire with a problem: the row number takes the colour of the worst one */
 .grid-table td.index.diag-error,
