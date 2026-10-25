@@ -272,8 +272,10 @@ export const useApp = create<AppState>()((set, get) => {
       const { project, past, options, optimizer } = get();
       const draft = structuredClone(project);
       recipe(draft);
-      const label = step.label ?? describeChange(project, draft);
       const patch = step.options;
+      // a move by nothing, a flip of a symmetric selection: no step to undo
+      if (!patch && !step.setup && JSON.stringify(draft) === JSON.stringify(project)) return;
+      const label = step.label ?? describeChange(project, draft);
       const entries = [...past, entryFrom({ options: patch && options, setup: step.setup }, label)];
       set({
         project: draft,
