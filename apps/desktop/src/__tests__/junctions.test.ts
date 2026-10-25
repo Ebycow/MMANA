@@ -1,6 +1,7 @@
+import fc from 'fast-check';
 import { describe, expect, it } from 'vitest';
 import type { Antenna, Point3, Wire } from '../api/types';
-import { findJunctionIssues, fixJunctions, isMistake, joinTouched, splitWires } from '../domain/junctions';
+import { along, findJunctionIssues, fixJunctions, isMistake, joinTouched, splitWires } from '../domain/junctions';
 import { newProject, newWire } from '../domain/project';
 
 const p = (x: number, y: number, z: number): Point3 => ({ x, y, z });
@@ -110,6 +111,53 @@ describe('splitting wires', () => {
     ws[0].radius = -1;
     expect(splitWires(antenna(ws), [{ wire: 0, at: p(0, 0, 10) }]).antenna.wires).toHaveLength(2);
     expect(splitWires(antenna(tee()), [{ wire: 0, at: p(0, 5, 10) }]).antenna.wires).toHaveLength(2);
+  });
+});
+
+describe('splitting wires at random', () => {
+  const grid = fc.integer({ min: -4, max: 4 });
+  const end = fc.record({ x: grid, y: grid, z: grid });
+  const wire = fc.tuple(end, end).filter(([a, b]) => a.x !== b.x || a.y !== b.y || a.z !== b.z).map(([a, b]) => w(a, b));
+  const pulse = (n: number) => fc.tuple(fc.integer({ min: 1, max: n }), fc.constantFrom('', 'c', 'b', 'e', 'b2', 'e3')).map(([k, s]) => `w${k}${s}`);
+  const lerp = (a: Point3, b: Point3, t: number) => p(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
+  const same = (a: Point3, b: Point3) => a.x === b.x && a.y === b.y && a.z === b.z;
+  const split = fc.array(wire, { minLength: 1, maxLength: 4 }).chain((ws) =>
+    fc.record({
+      ws: fc.constant(ws),
+      sources: fc.array(pulse(ws.length), { maxLength: 3 }),
+      cuts: fc.array(fc.record({ wire: fc.nat(ws.length - 1), t: fc.oneof(fc.integer({ min: 1, max: 7 }).map((k) => k / 8), fc.double({ min: 0.01, max: 0.99, noNaN: true })) }), { maxLength: 4 }),
+    }),
+  );
+
+  it('keeps each wire as a chain of pieces, and its pulses at the same place on them', () => {
+    fc.assert(
+      fc.property(split, ({ ws, sources, cuts }) => {
+        const r = splitWires(antenna(ws, sources), cuts.map((c) => ({ wire: c.wire, at: lerp(ws[c.wire].start, ws[c.wire].end, c.t) })));
+        const out = r.antenna.wires;
+        ws.forEach((old, i) => {
+          const pieces = r.pieces[i].map((k) => out[k]);
+          expect(same(pieces[0].start, old.start) && same(pieces.at(-1)!.end, old.end)).toBe(true);
+          pieces.slice(1).forEach((piece, k) => expect(same(piece.start, pieces[k].end)).toBe(true));
+        });
+        expect(r.antenna.sources).toHaveLength(sources.length);
+        sources.forEach((before, i) => {
+          const [, n, kind, count] = /^w(\d+)([bce]?)(\d*)$/.exec(before)!;
+          const [, m, kindAfter, countAfter] = /^w(\d+)([bce]?)(\d*)$/.exec(r.antenna.sources[i].pulse)!;
+          const old = ws[Number(n) - 1];
+          const piece = out[Number(m) - 1];
+          expect(r.pieces[Number(n) - 1]).toContain(Number(m) - 1);
+          if (kind === 'b') expect(same(piece.start, old.start) && kindAfter === 'b' && countAfter === count).toBe(true);
+          else if (kind === 'e') expect(same(piece.end, old.end) && kindAfter === 'e' && countAfter === count).toBe(true);
+          else {
+            // the centre: on the piece across it, or the end of the piece before it when the cut is there
+            const mid = lerp(old.start, old.end, 0.5);
+            const a = along(piece, mid);
+            if (kindAfter === 'e') expect(a.t).toBeCloseTo(1, 9);
+            else expect(a.dist < 1e-9 && a.t >= 0 && a.t <= 1).toBe(true);
+          }
+        });
+      }),
+    );
   });
 });
 

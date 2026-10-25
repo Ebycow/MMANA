@@ -124,9 +124,15 @@ export const deleteSelected = withSelection((sel) => {
   if (r.warnings.length) notifications.show({ color: 'yellow', title: '給電点・負荷を更新しました', message: r.warnings.join('\n') });
 });
 
-/** Copies in place and selects them, ready to be moved (MMANA's copy and paste). */
+/**
+ * Copies in place and selects them, ready to be moved (MMANA's copy and
+ * paste). The copies are exact, not rounded, so they lie on the originals
+ * and automatic joining leaves them alone.
+ */
 export const duplicateSelected = withSelection((sel) => {
-  commitEdited(appendCopies(wires(), sel, 1, (p) => p, false));
+  const ws = wires();
+  const src = [...sel].sort((a, b) => a - b);
+  commitWires([...ws, ...src.map((i) => structuredClone(ws[i]))], src.map((_, k) => ws.length + k));
   useEditor.getState().setTool('move');
 });
 
