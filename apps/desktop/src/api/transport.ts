@@ -80,6 +80,13 @@ export interface Files {
   saveText(contents: string, suggestedName: string, filter: { name: string; extension: string }): Promise<boolean>;
 }
 
+/** Plain text on the system clipboard, shared with other windows and apps. */
+export interface ClipboardText {
+  write(text: string): Promise<void>;
+  /** Rejects when the browser does not allow reading it. */
+  read(): Promise<string>;
+}
+
 function toEngineError(e: unknown): EngineError {
   if (e instanceof EngineError) return e;
   if (e && typeof e === 'object' && 'type' in e && 'detail' in e) {
@@ -158,6 +165,18 @@ export const tauriFiles: Files = {
     if (!path) return false;
     await tauriInvoke('save_text', { path, contents });
     return true;
+  },
+};
+
+// the plugin reads without the confirmation the macOS webview shows for navigator.clipboard
+export const tauriClipboard: ClipboardText = {
+  async write(text) {
+    const { writeText } = await import('@tauri-apps/plugin-clipboard-manager');
+    await writeText(text);
+  },
+  async read() {
+    const { readText } = await import('@tauri-apps/plugin-clipboard-manager');
+    return readText();
   },
 };
 
@@ -333,9 +352,16 @@ async function wasmExportMaa(project: Project): Promise<Blob> {
 
 const API_URL = (import.meta.env.VITE_MMANA_API as string | undefined) ?? 'http://127.0.0.1:8080';
 /** `vite --mode web`: the static build for GitHub Pages, with the engine in wasm. */
+// browsers may ask the first time (Chrome) or every time (Safari, Firefox) before a read
+export const browserClipboard: ClipboardText = {
+  write: (text) => navigator.clipboard.writeText(text),
+  read: () => navigator.clipboard.readText(),
+};
+
 const WEB = import.meta.env.MODE === 'web';
 
 export const transport: Transport = isTauri() ? tauriTransport : WEB ? wasmTransport : httpTransport(API_URL);
 export const files: Files = isTauri()
   ? tauriFiles
   : browserFiles(transport, WEB ? wasmExportMaa : httpExportMaa(API_URL));
+export const clipboardText: ClipboardText = isTauri() ? tauriClipboard : browserClipboard;

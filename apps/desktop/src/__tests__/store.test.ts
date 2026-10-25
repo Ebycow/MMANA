@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalcResult, ParsedProject, ResonanceSearch, SweepRequest, SweepResponse } from '../api/types';
-import { files, transport } from '../api/transport';
+import { clipboardText, files, transport } from '../api/transport';
 import { newProject } from '../domain/project';
 import { useEditor } from '../state/editor';
 import { useApp } from '../state/store';
-import { previewSelectionCommand, runSelectionCommand, type SelectionCommand } from '../state/wireCommands';
+import { copySelected, paste, previewSelectionCommand, runSelectionCommand, type SelectionCommand } from '../state/wireCommands';
 
 /** A promise the test resolves by hand, to finish a request at a chosen moment. */
 function deferred<T>() {
@@ -329,5 +329,54 @@ describe('wire selection', () => {
     useApp.getState().selectWire(0);
     useApp.getState().load(parsed('other'), 'other.maa', null);
     expect(useApp.getState().selectedWires).toEqual([]);
+  });
+});
+
+describe('copy and paste through the system clipboard', () => {
+  const wires = () => useApp.getState().project.antenna.wires;
+  // the system clipboard as another window or app leaves it
+  let board = '';
+  beforeEach(() => {
+    board = '';
+    useEditor.getState().set({ clipboard: [], clipboardText: '' });
+    vi.spyOn(clipboardText, 'write').mockImplementation(async (t) => void (board = t));
+    vi.spyOn(clipboardText, 'read').mockImplementation(async () => board);
+  });
+  const copyFirst = () => {
+    useApp.getState().edit((p) => void (p.antenna.wires[0].note = '給電'));
+    useApp.getState().setSelection([0]);
+    copySelected();
+  };
+
+  it('puts .maa wire lines on it and pastes its own copy whole', async () => {
+    copyFirst();
+    expect(board).toMatch(/^-?[\d.]+,\t.*\r\n$/);
+    await paste();
+    expect(wires()).toHaveLength(2);
+    expect(wires()[1]).toEqual(wires()[0]);
+    expect(useApp.getState().selectedWires).toEqual([1]);
+  });
+
+  it('pastes wire lines copied in another window', async () => {
+    board = '0, 0, 1, 0, 2, 1, 0.001, 11\r\n0, 0, 2, 0, 2, 2, 0.001, 11\r\n';
+    await paste();
+    expect(wires()).toHaveLength(3);
+    expect(wires()[2]).toEqual({ start: { x: 0, y: 0, z: 2 }, end: { x: 0, y: 2, z: 2 }, radius: 0.001, segmentation: { kind: 'fixed', count: 11 } });
+    expect(useApp.getState().selectedWires).toEqual([1, 2]);
+  });
+
+  it('pastes nothing from other text', async () => {
+    copyFirst();
+    board = 'some notes';
+    await paste();
+    expect(wires()).toHaveLength(1);
+  });
+
+  it("falls back to this window's copy when the clipboard cannot be read", async () => {
+    copyFirst();
+    vi.spyOn(clipboardText, 'read').mockRejectedValue(new Error('denied'));
+    await paste();
+    expect(wires()).toHaveLength(2);
+    expect(wires()[1].note).toBe('給電');
   });
 });
