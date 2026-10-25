@@ -2,11 +2,15 @@ name: Quality
 
 # The long versions of the quality checks (docs/guarantees.md): many more
 # random models, element edits and optimisations, and mutation testing of
-# the input checks. Too slow for every push.
+# all of mmana-core, a fourteenth of it each night. Too slow for every push.
 on:
   schedule:
     - cron: '0 18 * * *'
   workflow_dispatch:
+    inputs:
+      night:
+        description: Which fourteenth of the mutants to run (0 to 13); empty for tonight's
+        required: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,12 +31,14 @@ jobs:
 
   mutants:
     runs-on: ubuntu-latest
-    # about 270 mutants of 30 s each: in one job they took past two hours
+    # about 7500 mutants of 30 s each: night n runs those whose index is n
+    # mod 14, so every mutant runs once in two weeks, split over six jobs of
+    # about 90
     strategy:
       fail-fast: false
       matrix:
-        shard: [0, 1, 2]
-    timeout-minutes: 90
+        job: [0, 1, 2, 3, 4, 5]
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -40,13 +46,21 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-mutants
+      - id: night
+        run: echo "n=${NIGHT:-$(( $(date -u +%s) / 86400 % 14 ))}" >> "$GITHUB_OUTPUT"
+        env:
+          NIGHT: ${{ inputs.night }}
       # one job at a time: a mutant that breaks a limit runs the inputs in
-      # allocation.rs, which the test allocator stops at 256 MB
-      - run: >
-          cargo mutants -p mmana-core -j 1 --timeout 120 --shard ${{ matrix.shard }}/3
-          -f crates/mmana-core/src/validate.rs -f crates/mmana-core/src/engine/pulse.rs
+      # allocation.rs, which the test allocator stops at 256 MB. A mutant that
+      # makes the tests run past the timeout counts as caught.
+      - run: |
+          status=0
+          cargo mutants -p mmana-core -j 1 --timeout 120 --sharding round-robin \
+            --shard $(( ${{ matrix.job }} * 14 + ${{ steps.night.outputs.n }} ))/84 || status=$?
+          if [ -s mutants.out/missed.txt ]; then exit 2; fi
+          [ "$status" -eq 0 ] || [ "$status" -eq 3 ]
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mutants.out-${{ matrix.shard }}
+          name: mutants.out-night${{ steps.night.outputs.n }}-${{ matrix.job }}
           path: mutants.out
