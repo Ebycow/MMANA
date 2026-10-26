@@ -178,7 +178,7 @@ Feeder TEST では計算 850 回で \|Z\| の 0.015 % になります。許容�
 
 ## 旧版との一致
 
-[golden.rs](../crates/mmana-core/tests/golden.rs)（計算 149 件）、[elements.rs](../crates/mmana-core/tests/elements.rs)、[optimize.rs](../crates/mmana-core/tests/optimize.rs) が
+[golden.rs](../crates/mmana-core/tests/golden.rs)（計算 160 件）、[elements.rs](../crates/mmana-core/tests/elements.rs)、[optimize.rs](../crates/mmana-core/tests/optimize.rs) が
 オリジナルの C++ と比べます。比べ方は [アーキテクチャ](architecture.md#検証の仕組みoracle-テスト) を、意図的な違いは [移植メモ](porting-notes.md) を参照してください。
 
 ## 検証コードのテスト
@@ -191,6 +191,14 @@ Feeder TEST では計算 850 回で \|Z\| の 0.015 % になります。許容�
 夜間の CI では、検証コードに限らず mmana-core 全体（約 7,300 個）を 14 夜に分けて壊します。第 n 夜は番号を 14 で割った余りが n のもの（約 520 個）で、
 6 つのジョブに分けて実行するので、どのミュータントも 2 週間に 1 回実行されます。特定の夜の分は、手動の実行で `night` に 0〜13 を指定して実行できます。
 テストが時間切れになったものは検出とみなし、見逃したものがあればジョブが失敗します（`mutants.out` の `missed.txt` に一覧があります）。
+
+第 0 夜（2026-10-25、519 個）は 75 個を見逃しました。27 個は境界値・テンプレートの形・エディタの変数登録などの単体テストを足して、
+23 個は golden で検出するようにしました。golden には、サンプルが通らない計算の経路のモデル（`testdata/models`：テーパーの片端、
+組み合わせワイヤの各型、±45° で大地に接する斜めのワイヤとその近傍界、160 m の細い銅線、分母に奇数次のある s 領域の負荷）と、
+媒質 2 つの実大地・ラジアルを足しています。移植はそのすべてでオリジナルとビット単位で一致しました。
+残る 25 個は結果を変えない等価ミュータントで、どこからも届かない分岐や冗長な判定は消し、消せないものは理由を書いて
+[`.cargo/mutants.toml`](../.cargo/mutants.toml) で除外しています。golden を許容誤差だけで比べる（Linux の CI と同じ）条件でも、
+直したものはすべて検出されます。
 
 上限が壊れたときのテストは、数 GB の確保や終わらない計算になります。そうした入力は [allocation.rs](../crates/mmana-core/tests/allocation.rs) と
 API のテストにだけ置き、どちらのテストバイナリも 256 MB を超える確保をその場で失敗させるので、上限が壊れてもメモリを使い果たす前に止まります。
