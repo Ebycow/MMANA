@@ -1,5 +1,7 @@
 #!/bin/sh
-# Regenerates testdata/golden from testdata/maa with the reference oracle.
+# Regenerates testdata/golden from testdata/maa (the samples MMANA ships)
+# and testdata/models (models for engine paths no sample takes) with the
+# reference oracle.
 # Each case: <stem>.json (file as-is) plus ground/frequency variants for a
 # subset so every engine path (free space, perfect, real ground) is covered.
 set -eu
@@ -8,7 +10,7 @@ ORACLE="$ROOT/reference/oracle/build/oracle"
 OUT="$ROOT/testdata/golden"
 mkdir -p "$OUT"
 rm -f "$OUT"/*.json
-for f in "$ROOT"/testdata/maa/*.MAA; do
+for f in "$ROOT"/testdata/maa/*.MAA "$ROOT"/testdata/models/*.MAA; do
 	stem=$(basename "$f" .MAA)
 	"$ORACLE" "$f" > "$OUT/$stem.json"
 done
@@ -30,6 +32,10 @@ for stem in 3EL20 DP20 GP40 MAGLOOP; do
 	"$ORACLE" "$f" --near H > "$OUT/$stem@nearH.json"
 	"$ORACLE" "$f" --far 1 > "$OUT/$stem@far.json"
 	"$ORACLE" "$f" --ground 0 --far 1 > "$OUT/$stem@ground0far.json"
+done
+# grounded slopers: the near field next to wires that meet their image
+for k in E H; do
+	"$ORACLE" "$ROOT/testdata/models/GNDSLOPE.MAA" --near $k > "$OUT/GNDSLOPE@near$k.json"
 done
 # real grounds of more than one medium, and a radial screen (program
 # settings, not in the files; the golden carries them for the test)

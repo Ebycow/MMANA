@@ -1,8 +1,9 @@
 //! Compares the Rust engine with the original C++ MININEC3 engine.
 //!
 //! `testdata/golden/*.json` is produced by `reference/oracle` (the unmodified
-//! mininec3.cpp compiled with clang) for every sample in `testdata/maa`, plus
-//! ground / height / frequency variants. File names are `STEM[@variant].json`.
+//! mininec3.cpp compiled with clang) for every sample in `testdata/maa` and
+//! model in `testdata/models`, plus ground / height / frequency variants.
+//! File names are `STEM[@variant].json`.
 
 use mmana_core::model::{GroundScreen, Medium};
 use mmana_core::{AxisRange, CalcOptions, GroundKind, NearFieldKind, NearFieldSpec, Project, calculate, maa, solve};
@@ -64,7 +65,9 @@ fn worst_case_figures_exact(r: &mmana_core::CalcResult, g: &Value) -> bool {
 /// and the real ground the oracle was given (not part of a `.maa` file).
 fn load_project(name: &str, golden: &Value) -> Project {
     let stem = name.split('@').next().unwrap();
-    let bytes = std::fs::read(root().join(format!("testdata/maa/{stem}.MAA"))).unwrap();
+    // a shipped sample, or a model for an engine path no sample takes
+    let path = ["maa", "models"].map(|dir| root().join(format!("testdata/{dir}/{stem}.MAA")));
+    let bytes = std::fs::read(path.iter().find(|p| p.exists()).unwrap()).unwrap();
     let mut project = maa::parse_bytes(&bytes).project;
     if let Some(variant) = name.split('@').nth(1) {
         if let Some(gr) = variant.strip_prefix("ground") {
