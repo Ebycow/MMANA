@@ -646,6 +646,24 @@ mod tests {
     }
 
     #[test]
+    fn a_file_without_a_frequency_measures_wavelengths_at_14_05_mhz() {
+        let at = |fq: &str| parse(&DP.replace("\r\n14.05\r\n", &format!("\r\n{fq}\r\n")).replace("\t5.0,", "\tR/4,"));
+        let y = |p: ParsedMaa| p.project.antenna.wires[0].end.y;
+        assert_eq!(y(at("7.0")), SPEED_OF_LIGHT_MMANA / 7.0 / 4.0);
+        assert_eq!(y(at("0")), SPEED_OF_LIGHT_MMANA / 14.05 / 4.0);
+        assert_eq!(y(at("-3")), SPEED_OF_LIGHT_MMANA / 14.05 / 4.0);
+    }
+
+    #[test]
+    fn wire_materials_round_trip() {
+        for code in 0..=6 {
+            let mut p = parse(DP).project;
+            p.environment.wire_material = WireMaterial::from_code(code);
+            assert_eq!(reread(&p).project.environment.wire_material.code(), code);
+        }
+    }
+
+    #[test]
     fn full_width_pulse_names_are_converted() {
         let p = parse(&DP.replace("w1c,", "ｗ１ｃ,")).project;
         assert_eq!(p.antenna.sources[0].pulse, "w1c");

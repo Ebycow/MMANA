@@ -1,0 +1,35 @@
+# cargo-mutants (docs/guarantees.md, 検証コードのテスト). Mutants listed here
+# change nothing a test could see; each says why.
+exclude_re = [
+    # the bits or'ed together never overlap (15-bit fields, a sign bit; F/B
+    # ranges are validated to at most 360 and 180)
+    'replace \| with \^ in Segmentation::to_code$',
+    'replace \| with \^ in Environment::fbr_code$',
+    # a maximum or bound replaced by an equal value
+    'replace < with <= in PatternState::horizontal_maxima$',
+    'elements\.rs:\d+:34: replace [<>] with [<>]= in Group::ana_type$',
+    # a polar wire is compared to 1e-9 of its length and of 360°: rounding
+    # stays far below either, and a value that cannot be set (an azimuth
+    # turned round, a length below 0) misses by far more
+    "optimize\\.rs:\\d+:79: replace \\* with / in Search<'_, F>::breaks$",
+    # exactly at a threshold, where it makes no difference or no wire lands:
+    # a field of exactly 1e-30 (its dB value is kept only above it), a section
+    # exactly as long as what is left of the wire (cut to it either way), a
+    # section's segments exactly 1/DM2DEF of the longest allowed
+    'farfield\.rs:\d+:15: replace > with >= in Mininec::far_field_at$',
+    'segment\.rs:\d+:34: replace > with >= in comb_wire$',
+    'segment\.rs:\d+:60: replace > with >= in comb_wire$',
+    # rows per parallel block: the elements are the same however many
+    'replace / with [*%] in Mininec::fill_rows$',
+    # the sign of 0 sets the phase of a field of 0, which nothing reads
+    'replace [<>] with [<>]= in sgn_f$',
+    # R = 0 gives an infinite Q, which the check after it refuses as well
+    'resonance\.rs:\d+:35: replace > with >= in series_circuit$',
+    # S87's shortcut for the self term only answers early what L135's exact
+    # kernel answers too; these make the midpoint an integer or -1/2, which
+    # the half-integer observation point never is, so it only falls through
+    'kernel\.rs:\d+:(76|82): replace [+/] with [-*] in Mininec::s87$',
+    # pulses come wire by wire: a pulse starts on the last wire only when the
+    # pulse is on it, and L1270 then goes on to L1279 too
+    'geometry\.rs:\d+:31: replace > with >= in Mininec::number_pulses$',
+]

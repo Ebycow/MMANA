@@ -93,25 +93,16 @@ impl PsiCache {
 const NO_SOURCE: u32 = u32::MAX;
 
 /// `POW`: integer power by repeated multiplication (not `powi`, whose
-/// rounding differs).
+/// rounding differs). The loads raise to no negative power.
 fn pow_n(d: f64, n: i32) -> f64 {
-    match n {
-        0 => 1.0,
-        n if n > 0 => {
-            let mut dd = d;
-            for _ in 1..n {
-                dd *= d;
-            }
-            dd
-        }
-        n => {
-            let mut dd = d;
-            for _ in 1..-n {
-                dd *= d;
-            }
-            1.0 / dd
-        }
+    if n == 0 {
+        return 1.0;
     }
+    let mut dd = d;
+    for _ in 1..n {
+        dd *= d;
+    }
+    dd
 }
 
 impl Mininec {
@@ -413,10 +404,12 @@ impl Mininec {
                 while jj < ld.ls {
                     let j = jj as usize;
                     s = -s;
-                    u1 = u1 + ld.la[1][j] * s * pow_n(f5, jj);
-                    d1 = d1 + ld.la[2][j] * s * pow_n(f5, jj);
-                    u2 = u2 + ld.la[1][j + 1] * s * pow_n(f5, jj + 1);
-                    d2 = d2 + ld.la[2][j + 1] * s * pow_n(f5, jj + 1);
+                    // (`a * s * w` as `a * (s * w)`, the same: s is ±1)
+                    let (w0, w1) = (s * pow_n(f5, jj), s * pow_n(f5, jj + 1));
+                    u1 = u1 + ld.la[1][j] * w0;
+                    d1 = d1 + ld.la[2][j] * w0;
+                    u2 = u2 + ld.la[1][j + 1] * w1;
+                    d2 = d2 + ld.la[2][j + 1] * w1;
                     jj += 2;
                 }
                 let d = d1 * d1 + d2 * d2;

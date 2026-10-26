@@ -1,9 +1,11 @@
 //! Compares the Rust engine with the original C++ MININEC3 engine.
 //!
 //! `testdata/golden/*.json` is produced by `reference/oracle` (the unmodified
-//! mininec3.cpp compiled with clang) for every sample in `testdata/maa`, plus
-//! ground / height / frequency variants. File names are `STEM[@variant].json`.
+//! mininec3.cpp compiled with clang) for every sample in `testdata/maa` and
+//! model in `testdata/models`, plus ground / height / frequency variants.
+//! File names are `STEM[@variant].json`.
 
+use mmana_core::model::{GroundScreen, Medium};
 use mmana_core::{AxisRange, CalcOptions, GroundKind, NearFieldKind, NearFieldSpec, Project, calculate, maa, solve};
 use serde_json::Value;
 use std::f64::consts::PI;
@@ -59,10 +61,13 @@ fn worst_case_figures_exact(r: &mmana_core::CalcResult, g: &Value) -> bool {
     .all(|(a, b)| *a as f64 == f32v(b))
 }
 
-/// Loads the sample for `STEM[@variant]` and applies ground/height variants.
-fn load_project(name: &str) -> Project {
+/// Loads the sample for `STEM[@variant]` and applies ground/height variants,
+/// and the real ground the oracle was given (not part of a `.maa` file).
+fn load_project(name: &str, golden: &Value) -> Project {
     let stem = name.split('@').next().unwrap();
-    let bytes = std::fs::read(root().join(format!("testdata/maa/{stem}.MAA"))).unwrap();
+    // a shipped sample, or a model for an engine path no sample takes
+    let path = ["maa", "models"].map(|dir| root().join(format!("testdata/{dir}/{stem}.MAA")));
+    let bytes = std::fs::read(path.iter().find(|p| p.exists()).unwrap()).unwrap();
     let mut project = maa::parse_bytes(&bytes).project;
     if let Some(variant) = name.split('@').nth(1) {
         if let Some(gr) = variant.strip_prefix("ground") {
@@ -71,6 +76,23 @@ fn load_project(name: &str) -> Project {
             project.environment.ground = GroundKind::Real;
             project.environment.height = h.parse().unwrap();
         }
+    }
+    if let Some(rg) = golden.get("real_ground") {
+        let real_ground = &mut project.environment.real_ground;
+        real_ground.media = rg["media"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| Medium {
+                permittivity: f(&m[0]),
+                conductivity: f(&m[1]),
+                boundary: m[2].as_f64(),
+                height: m[3].as_f64(),
+            })
+            .collect();
+        real_ground.screen = rg["screen"]
+            .as_array()
+            .map(|s| GroundScreen { radials: s[0].as_i64().unwrap() as i32, radial_radius: f(&s[1]) });
     }
     project
 }
@@ -132,7 +154,7 @@ fn engine_matches_original() {
     let mut exact = 0;
 
     for case in &cases {
-        let project = load_project(&case.name);
+        let project = load_project(&case.name, &case.golden);
         let g = &case.golden;
         let opts = CalcOptions { frequency_mhz: Some(f(&g["freq"])), max_pulses: 4096, ..Default::default() };
         let r = match calculate(&project, &opts) {
@@ -273,7 +295,7 @@ fn exports_match_original() {
         if g.get("near").is_none() && g.get("far").is_none() {
             continue;
         }
-        let project = load_project(&case.name);
+        let project = load_project(&case.name, &case.golden);
         let opts = CalcOptions { frequency_mhz: Some(f(&g["freq"])), max_pulses: 4096, ..Default::default() };
         let solved = solve(&project, &opts).unwrap();
 

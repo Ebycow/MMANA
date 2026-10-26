@@ -157,3 +157,44 @@ fn a_numbered_pulse_is_the_same_place_on_every_stacked_copy() {
         }
     }
 }
+
+#[test]
+fn a_stacked_antenna_is_laid_out_as_its_first_copy_in_every_direction() {
+    // in free space, so that no copy reaches the ground
+    let mut p = sample("3EL20.MAA");
+    p.environment.ground = GroundKind::FreeSpace;
+    let opts = CalcOptions::default();
+    let alone = pulse_layout(&p, &opts).unwrap();
+    for direction in [StackDirection::Up, StackDirection::Down, StackDirection::Centered] {
+        let mut q = p.clone();
+        q.antenna.stack.vertical = 3;
+        q.antenna.stack.vertical_spacing = 10.0;
+        q.antenna.stack.direction = direction;
+        let stacked = pulse_layout(&q, &opts).unwrap();
+        assert_eq!(stacked.pulse_count, 3 * alone.pulse_count, "{direction:?}");
+        // (moved back from the copy, so within rounding)
+        let near = |a: &Point3, b: &Point3| (a.x - b.x).abs() + (a.y - b.y).abs() + (a.z - b.z).abs() < 1e-9;
+        let points = |l: &mmana_core::PulseLayout| {
+            l.wires.iter().flat_map(|w| w.pulses.iter().map(|pt| (pt.name.clone(), pt.position))).collect::<Vec<_>>()
+        };
+        let (a, b) = (points(&stacked), points(&alone));
+        assert_eq!(a.len(), b.len(), "{direction:?}");
+        for ((na, pa), (nb, pb)) in a.iter().zip(&b) {
+            assert!(na == nb && near(pa, pb), "{direction:?}: {na} at {pa:?}, alone {nb} at {pb:?}");
+        }
+        let source = |l: &mmana_core::PulseLayout| l.sources[0].unwrap();
+        assert!(near(&source(&stacked), &source(&alone)), "{direction:?}");
+    }
+}
+
+#[test]
+fn a_current_names_the_wire_it_is_on() {
+    let p = sample("3EL20.MAA");
+    let r = calculate(&p, &CalcOptions::default()).unwrap();
+    let layout = pulse_layout(&p, &CalcOptions::default()).unwrap();
+    for w in &layout.wires {
+        for pt in &w.pulses {
+            assert_eq!(r.currents[pt.pulse - 1].wire, w.wire, "{}", pt.name);
+        }
+    }
+}

@@ -211,22 +211,16 @@ fn parse_float_prefix(s: &[u8]) -> Option<f64> {
     if matches!(s.first(), Some(b'+' | b'-')) {
         i = 1;
     }
-    let digits_start = i;
     while s.get(i).is_some_and(u8::is_ascii_digit) {
         i += 1;
     }
-    let mut mantissa_digits = i - digits_start;
     if s.get(i) == Some(&b'.') {
         i += 1;
-        let frac_start = i;
         while s.get(i).is_some_and(u8::is_ascii_digit) {
             i += 1;
         }
-        mantissa_digits += i - frac_start;
     }
-    if mantissa_digits == 0 {
-        return None;
-    }
+    // (a mantissa without digits, such as "-." or ".e5", fails the parse)
     if matches!(s.get(i), Some(b'e' | b'E')) {
         let mut j = i + 1;
         if matches!(s.get(j), Some(b'+' | b'-')) {
@@ -268,6 +262,20 @@ mod tests {
         assert_eq!(ev("2*I"), 0.0508);
         assert_eq!(ev("１．５"), 1.5);
         assert_eq!(ev("1/0"), f64::MAX);
+    }
+
+    #[test]
+    fn a_number_needs_a_digit() {
+        for s in ["", "+", "-", ".", "-.", "+.e5", ".e5", "e5", "-x"] {
+            assert_eq!(parse_float_prefix(s.as_bytes()), None, "{s:?}");
+        }
+        assert_eq!(parse_float_prefix(b"-.5e1x"), Some(-5.0));
+        assert_eq!(parse_float_prefix(b"5.e"), Some(5.0));
+    }
+
+    #[test]
+    fn full_width_marks_become_ascii() {
+        assert_eq!(to_halfwidth("０９ＡＺａｚ．。，、＋－ー＊／（）＃＝あ"), b"09AZaz..,,+--*/()#= ");
     }
 
     #[test]
