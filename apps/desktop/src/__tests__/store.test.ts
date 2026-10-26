@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CalcResult, ParsedProject, ResonanceSearch, SweepRequest, SweepResponse } from '../api/types';
 import { clipboardText, files, transport } from '../api/transport';
-import { newProject } from '../domain/project';
+import { newProject, newWire } from '../domain/project';
 import { useEditor } from '../state/editor';
 import { useApp } from '../state/store';
-import { copySelected, paste, previewSelectionCommand, runSelectionCommand, type SelectionCommand } from '../state/wireCommands';
+import { copySelected, duplicateSelected, paste, previewSelectionCommand, runSelectionCommand, transformSelected, type SelectionCommand } from '../state/wireCommands';
 
 /** A promise the test resolves by hand, to finish a request at a chosen moment. */
 function deferred<T>() {
@@ -139,6 +139,33 @@ describe('previewing a selection command', () => {
     useApp.getState().selectWire(null);
     previewSelectionCommand({ kind: 'flip', axis: 'y' });
     expect(useEditor.getState().preview).toBeNull();
+  });
+});
+
+describe('edits that change nothing', () => {
+  it('leave no step in the history', () => {
+    useApp.getState().selectWire(0);
+    transformSelected({ kind: 'move', offset: { x: 0, y: 0, z: 0 }, copies: 0 });
+    // the dipole lies along Y at X = 0, so flipping it in X leaves it as it is
+    runSelectionCommand({ kind: 'flip', axis: 'x' });
+    expect(useApp.getState().past).toEqual([]);
+    expect(useApp.getState().dirty).toBe(false);
+  });
+});
+
+describe('duplicating in place', () => {
+  afterEach(() => useEditor.getState().setTool('select'));
+
+  it('makes exact copies, which automatic joining leaves whole', () => {
+    // a wire off the 1 nm grid points are rounded to, with an end of another on its middle
+    useApp.getState().edit((p) => {
+      p.antenna.wires = [newWire({ x: 0.1 + 0.2, y: -2, z: 10 }, { x: 0.1 + 0.2, y: 2, z: 10 }), newWire({ x: 0.3, y: 0, z: 10 }, { x: 0.3, y: 0, z: 12 })];
+    });
+    useApp.getState().selectWire(0);
+    duplicateSelected();
+    const ws = useApp.getState().project.antenna.wires;
+    expect(ws).toHaveLength(3);
+    expect(ws[2]).toEqual(ws[0]);
   });
 });
 

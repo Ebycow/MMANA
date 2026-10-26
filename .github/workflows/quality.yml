@@ -1,8 +1,9 @@
 name: Quality
 
 # The long versions of the quality checks (docs/guarantees.md): many more
-# random models, element edits and optimisations, and mutation testing of
-# all of mmana-core, a fourteenth of it each night. Too slow for every push.
+# random models, element edits and optimisations, wire commands of the front
+# end, and mutation testing of all of mmana-core, a fourteenth of it each
+# night. Too slow for every push.
 on:
   schedule:
     - cron: '0 18 * * *'
@@ -28,6 +29,25 @@ jobs:
         env:
           PROPTEST_CASES: 20000
           CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS: true
+
+  random-commands:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - run: npm ci
+      # about 2 minutes
+      - run: npx vitest run src/__tests__/randomCommands.test.ts
+        env:
+          FC_RUNS: 20000
 
   mutants:
     runs-on: ubuntu-latest
