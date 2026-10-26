@@ -162,17 +162,17 @@ impl Mininec {
                     st.set_cur((i - 1) as usize, r, im, magnitude(r, im));
                 }
             }
-            // L532
-            let mut c = self.ci_at(n2, 2) as f64;
-            if n1 == 0 && n2 == 0 {
-                c = ki as f64;
-            }
+            // L532 (the original sets C to K when the wire has no pulses,
+            // where L537 goes on to L543 whatever C is)
             let at_543 = if self.g != 1 && self.j1[k] == 1 {
                 true
+            } else if (n1 == 0 && n2 == 0) || n1 > n2 {
+                false
             } else {
                 // L537
+                let c = self.ci_at(n2, 2) as f64;
                 let (_, _, junction) = self.s572(k, c, n2, 2);
-                !((n1 == 0 && n2 == 0) || n1 > n2) && (c == ki as f64 || !junction)
+                c == ki as f64 || !junction
             };
             if at_543 && n2 >= 1 {
                 let (r, im) = self.cr_at(n2);
