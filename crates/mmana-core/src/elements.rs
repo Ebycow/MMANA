@@ -570,7 +570,7 @@ impl Group {
             (0.0, w)
         } else if hi == 0.0 {
             (-w, 0.0)
-        } else if lo < 0.0 && hi > 0.0 && (hi - lo) != 0.0 {
+        } else if lo < 0.0 && hi > 0.0 {
             (lo * (w / (hi - lo)), hi * (w / (hi - lo)))
         } else {
             (self.c[axis] - (w / 2.0), self.c[axis] + (w / 2.0))
@@ -1099,13 +1099,11 @@ impl ElementList {
 
     /// `SetNewType`: rebuilds element `n` (or creates it when `n` is the
     /// element count) from the template `kind` (see [`ElementKind::template`]),
-    /// keeping its size, radius and height.
+    /// keeping its size, radius and height. `n` is at most the element count
+    /// and `kind` a template (the callers check).
     fn set_kind(&mut self, n: usize, kind: ElementKind) {
         use ElementKind::*;
         let len = self.groups.len();
-        if n > len || !kind.is_template() {
-            return;
-        }
         let rmd = if self.wavelength != 0.0 { self.wavelength } else { 23.0 };
         let (mut z, mut round, mut width, mut height, mut rad) = (0.0, rmd, rmd / 2.0, rmd / 2.0, 0.005);
         // the original wires the old element's wires were, in order
@@ -1717,7 +1715,7 @@ impl ElementList {
         let rule = |g: &Group, axis: usize| match (g.lo[axis], g.hi[axis]) {
             (0.0, _) => 0,
             (_, 0.0) => 1,
-            (lo, hi) if lo < 0.0 && hi > 0.0 && hi - lo != 0.0 => 2,
+            (lo, hi) if lo < 0.0 && hi > 0.0 => 2,
             _ => 3,
         };
         self.groups.iter().map(|g| [rule(g, Y), rule(g, Z)]).collect()
@@ -1998,6 +1996,10 @@ mod tests {
         assert!(list.apply(&ElementOp::Insert { row: 3 }));
         assert!(list.apply(&ElementOp::SetInterval { row: 4, value: 0.0 }));
         assert_eq!(list.duplicate(), Some((3, 4)));
+        // the copies are new wires: the sources and loads stay on the originals
+        let out = list.wires();
+        let copies = out.elements.iter().zip(&out.origins).filter(|(e, _)| **e >= 3);
+        assert!(copies.clone().count() > 0 && copies.clone().all(|(_, o)| o.is_none()), "{:?}", out.origins);
     }
 
     #[test]
@@ -2151,5 +2153,83 @@ mod tests {
         assert!(!list.apply(&ElementOp::SetWidth { row, value: width * 0.9, scale_all: false }));
         // scaling every coordinate moves every point, so that one is fine
         assert!(list.apply(&ElementOp::SetWidth { row, value: width * 0.9, scale_all: true }));
+    }
+
+    #[test]
+    fn templates_are_tapered_loops_sized_from_the_old_element() {
+        use ElementKind::*;
+        for kind in [
+            VerticalSquare,
+            VerticalDiamond,
+            VerticalTriangle,
+            VerticalInvertedTriangle,
+            VerticalOctagon,
+            HorizontalSquare,
+            HorizontalDiamond,
+            HorizontalTriangle,
+            HorizontalInvertedTriangle,
+            VerticalDoubleSquare,
+            VerticalDoubleTriangle,
+        ] {
+            let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+            assert!(list.apply(&ElementOp::SetKind { row: 0, kind }), "{kind:?}");
+            assert!(list.wires().wires.iter().all(|w| w.segmentation == Segmentation::Taper), "{kind:?}");
+        }
+        // a dipole has no perimeter: the double triangle takes 1.42 times its width
+        let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: VerticalDoubleTriangle }));
+        let row = &list.rows()[0];
+        assert!((row.width - 14.2).abs() < 1e-9 && (row.height - 7.1).abs() < 1e-9, "{row:?}");
+    }
+
+    #[test]
+    fn moving_the_last_element_leaves_no_interval_beyond_it() {
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        assert!(list.apply(&ElementOp::SetPosition { row: 2, value: 6.0 }));
+        assert_eq!(list.rows().iter().map(|r| r.position).collect::<Vec<_>>(), [0.0, 2.0, 6.0]);
+        assert_eq!(list.intervals.len(), 3);
+    }
+
+    #[test]
+    fn edits_at_the_limits_of_the_table() {
+        let round = |decimals| ElementOp::RoundValues {
+            decimals,
+            in_wavelengths: false,
+            in_millimetres: false,
+            scale_all: false,
+        };
+        let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+        assert!(list.apply_as_original(&round(9)));
+        assert!(!list.apply_as_original(&round(10)));
+        // the first element is where positions are measured from
+        assert!(!list.apply_as_original(&ElementOp::SetPosition { row: 0, value: 1.0 }));
+        assert!(!list.apply_as_original(&ElementOp::SetPosition { row: 2, value: -1.0 }));
+        assert!(list.apply_as_original(&ElementOp::SetPosition { row: 2, value: 1.0 }));
+    }
+
+    #[test]
+    fn rounding_leaves_a_wire_without_a_radius_without_one() {
+        // R = 0 marks a wire left out of the calculation
+        let mut w = wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0));
+        w.radius = 0.0;
+        for in_wavelengths in [false, true] {
+            let mut list = ElementList::new(std::slice::from_ref(&w), 21.3);
+            let op = ElementOp::RoundValues { decimals: 2, in_wavelengths, in_millimetres: false, scale_all: false };
+            assert!(list.apply_as_original(&op));
+            assert_eq!(list.wires().wires[0].radius, 0.0, "in wavelengths: {in_wavelengths}");
+        }
+    }
+
+    #[test]
+    fn wires_are_compared_to_10_ppm_of_the_element() {
+        let near = |half: f64| {
+            let list = ElementList::new(&[wire((0.0, -half, 0.0), (0.0, half, 0.0))], 21.3);
+            list.groups[0].extent(&list.slots).1
+        };
+        let large = near(10.0);
+        assert!(large(0.0, 1.9e-4) && !large(0.0, 2.1e-4));
+        // at least 0.01 mm
+        let small = near(0.1);
+        assert!(small(0.0, 0.9e-5) && !small(0.0, 1.1e-5));
     }
 }
