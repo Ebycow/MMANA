@@ -7,6 +7,9 @@
 // RunCurrentCalculation) with the VCL form fields replaced by plain variables.
 //
 // usage: oracle <file.maa> [--freq MHz] [--ground 0|1|2] [--height m] [--near E|H] [--far 1]
+//        [--media rel,cond,intval,height;...] [--screen count,radius]
+// (the real ground's media and radial screen are program settings, not part
+// of the file; `-` leaves an interval or height unset)
 #include "ComLib.h"
 #include "mininec3.h"
 #include "Main.h"
@@ -387,12 +390,15 @@ int main(int argc, char **argv)
 	int optGround = -1;
 	char optNear = 0;
 	int optFar = 0;
+	const char *optMedia = NULL, *optScreen = NULL;
 	for( int i = 2; i + 1 < argc; i += 2 ){
 		if( !strcmp(argv[i], "--freq") ) optFreq = atof(argv[i+1]);
 		else if( !strcmp(argv[i], "--ground") ) optGround = atoi(argv[i+1]);
 		else if( !strcmp(argv[i], "--height") ) optHeight = atof(argv[i+1]);
 		else if( !strcmp(argv[i], "--near") ) optNear = argv[i+1][0];
 		else if( !strcmp(argv[i], "--far") ) optFar = atoi(argv[i+1]);
+		else if( !strcmp(argv[i], "--media") ) optMedia = argv[i+1];
+		else if( !strcmp(argv[i], "--screen") ) optScreen = argv[i+1];
 	}
 
 	// TMainWnd::LoadAntFile: fgets per line, ClipLF, append CRLF
@@ -450,6 +456,27 @@ int main(int argc, char **argv)
 	if( optFreq > 0 ) ant.cfq = optFreq;
 	if( optGround >= 0 ) env.type = optGround;
 	if( optHeight >= 0 ) env.antheight = optHeight;
+	if( optMedia ){
+		env.mmax = 0;
+		for( const char *m = optMedia; *m && env.mmax < EMAX; ){
+			char f[4][64] = {{0}};
+			int k = 0, n = 0;
+			for( ; *m && *m != ';'; m++ ){
+				if( *m == ',' ){ k++; n = 0; }
+				else if( (k < 4) && (n < 63) ) f[k][n++] = *m;
+			}
+			if( *m == ';' ) m++;
+			env.rel[env.mmax] = atof(f[0]);
+			env.cond[env.mmax] = atof(f[1]);
+			env.intval[env.mmax] = (f[2][0] && strcmp(f[2], "-")) ? atof(f[2]) : NULLV;
+			env.height[env.mmax] = (f[3][0] && strcmp(f[3], "-")) ? atof(f[3]) : NULLV;
+			env.mmax++;
+		}
+	}
+	if( optScreen ){
+		env.mtype = 1;
+		sscanf(optScreen, "%d,%lf", &env.gscrcnt, &env.gscrr);
+	}
 	if( ant.cfq == 0.0 ) ant.cfq = ant.fq;
 
 	// TMainWnd::SetStackAnt
@@ -463,6 +490,17 @@ int main(int argc, char **argv)
 	printf("{");
 	PutStr("name", ant.Name);
 	printf(",\"freq\":%.17g", pCalAnt->cfq);
+	if( optMedia || optScreen ){
+		// for the test to set up the same ground (null: unset)
+		printf(",\"real_ground\":{\"media\":[");
+		for( int i = 0; i < env.mmax; i++ ){
+			printf("%s[%.17g,%.17g,", i ? "," : "", env.rel[i], env.cond[i]);
+			if( env.intval[i] == NULLV ) printf("null,"); else printf("%.17g,", env.intval[i]);
+			if( env.height[i] == NULLV ) printf("null]"); else printf("%.17g]", env.height[i]);
+		}
+		if( env.mtype ) printf("],\"screen\":[%d,%.17g]}", env.gscrcnt, env.gscrr);
+		else printf("],\"screen\":null}");
+	}
 	if( !InitAntData(pCalAnt) ){
 		printf(",\"error\":\"InitAntData failed\"}\n");
 		return 0;

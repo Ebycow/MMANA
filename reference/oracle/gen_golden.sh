@@ -31,4 +31,10 @@ for stem in 3EL20 DP20 GP40 MAGLOOP; do
 	"$ORACLE" "$f" --far 1 > "$OUT/$stem@far.json"
 	"$ORACLE" "$f" --ground 0 --far 1 > "$OUT/$stem@ground0far.json"
 done
+# real grounds of more than one medium, and a radial screen (program
+# settings, not in the files; the golden carries them for the test)
+"$ORACLE" "$ROOT/testdata/maa/GP40.MAA" --ground 2 --media '5,0.001,8,-;13,0.005,-,-0.5' --screen 30,8 > "$OUT/GP40@ground2screen.json"
+"$ORACLE" "$ROOT/testdata/maa/GP40.MAA" --ground 2 --media '5,0.001,8,-;13,0.005,-,-0.5' --screen 30,8 --far 1 > "$OUT/GP40@ground2screenfar.json"
+"$ORACLE" "$ROOT/testdata/maa/VERT20M.MAA" --ground 2 --media '5,0.001,15,-;80,4,-,-1' > "$OUT/VERT20M@ground2media.json"
+"$ORACLE" "$ROOT/testdata/maa/VERT20M.MAA" --ground 2 --media '5,0.001,15,-;80,4,-,-1' --far 1 > "$OUT/VERT20M@ground2mediafar.json"
 ls "$OUT" | wc -l
