@@ -627,11 +627,10 @@ fn get_deg(x: f64, y: f64) -> f64 {
     } else {
         0.0
     };
+    // (from -180 to 270 before this: the original's turn up from below -180
+    // and `GetWirePoll`'s further turns never apply)
     if deg > 180.0 {
         deg -= 360.0;
-    }
-    if deg < -180.0 {
-        deg += 360.0;
     }
     deg
 }
@@ -642,21 +641,7 @@ fn polar(w: &Wire) -> (f64, f64, f64) {
     let yy = w.end.y - w.start.y;
     let zz = w.end.z - w.start.z;
     let wl = (xx * xx + yy * yy + zz * zz).sqrt();
-    let mut xyd = get_deg(xx, yy);
-    let mut yzd = get_deg(zz, (xx * xx + yy * yy).sqrt());
-    while xyd > 180.0 {
-        xyd -= 360.0;
-    }
-    while xyd < -180.0 {
-        xyd += 360.0;
-    }
-    while yzd > 180.0 {
-        yzd -= 360.0;
-    }
-    while yzd < -180.0 {
-        yzd += 360.0;
-    }
-    (wl, xyd, yzd)
+    (wl, get_deg(xx, yy), get_deg(zz, (xx * xx + yy * yy).sqrt()))
 }
 
 /// `A[0]` and `B[0]` of a load: L and C, R and jX, or the s⁰ coefficients.
@@ -1303,10 +1288,6 @@ fn c_abs(c: f64) -> f64 {
     if c < 0.0 { -c } else { c }
 }
 
-fn c_abs32(c: f32) -> f32 {
-    if c < 0.0 { -c } else { c }
-}
-
 enum Stop {
     Cancelled,
     Failed(CalcError),
@@ -1499,7 +1480,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         let goal = &self.setup.goals.current_pulse;
         let current = if self.trade[6] != 0.0 && !goal.is_empty() {
             let n = solved.pulse_no(goal);
-            (n >= 1).then(|| r.current_display.get(n as usize - 1).map(|&c| c_abs32(c))).flatten()
+            (n >= 1).then(|| r.current_display.get(n as usize - 1).map(|&c| c.abs())).flatten()
         } else {
             None
         };
@@ -1545,7 +1526,8 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             gain = g.max_gain_dbi + (gain / g.max_gain_dbi).ln();
         }
         gain *= tg;
-        let mut jx = c_abs32(rd.jx) as f64;
+        // (the sign of a zero, which the original's ABS keeps, adds nothing)
+        let mut jx = rd.jx.abs() as f64;
         if jx < g.min_jx {
             jx = (g.min_jx - ((g.min_jx - jx) / 20.0)) * tjx;
         } else {
@@ -2219,8 +2201,9 @@ impl Editor {
                     self.add(Self::element(i, ElementPart::Interval), Link::Independent, d, 100.0);
                 }
             } else {
+                // (the last is at `last_x`)
                 let d = position(self, i);
-                if i < gmax - 1 && d != last_x {
+                if d != last_x {
                     self.add(Self::element(i, ElementPart::Position), Link::Independent, d, 500.0);
                 }
             }
@@ -2899,5 +2882,92 @@ mod tests {
         let w = &written.antenna.wires[0];
         let near = |a: f64, b: f64| (a - b).abs() < 1e-12;
         assert!(near(w.start.x, 0.5) && near(w.end.x, 0.5) && near(w.end.y - w.start.y, 11.0), "{w:?}");
+    }
+
+    #[test]
+    fn angles_of_a_wire() {
+        assert_eq!(get_deg(0.0, 0.0), 0.0);
+        assert_eq!(get_deg(0.0, 2.0), 90.0);
+        assert_eq!(get_deg(0.0, -2.0), -90.0);
+        assert_eq!(get_deg(-1.0, 0.0), 180.0);
+        assert!((get_deg(-1.0, -1.0) + 135.0).abs() < 1e-12);
+        // a vertical wire points nowhere along the ground
+        let mut w = sample("DP20.MAA").antenna.wires[0].clone();
+        (w.start, w.end) = (crate::model::Point3::new(0.0, 0.0, 0.0), crate::model::Point3::new(0.0, 0.0, 5.0));
+        assert_eq!(polar(&w), (5.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn probes_step_by_square_roots_of_primes() {
+        assert_eq!((0..8).map(nth_prime).collect::<Vec<_>>(), [2, 3, 5, 7, 11, 13, 17, 19]);
+    }
+
+    #[test]
+    fn as_many_variables_as_the_limit_can_be_varied() {
+        let project = sample("DP20.MAA");
+        let too_many = |n: usize| {
+            let mut setup = dipole_length();
+            setup.variables = vec![setup.variables[0].clone(); n];
+            let (errors, _) = check(&mut Model::new(&project, &CalcOptions::default()), &setup);
+            errors.iter().any(|e| e.code == IssueCode::TooManyVariables)
+        };
+        assert!(!too_many(MAX_VARIABLES));
+        assert!(too_many(MAX_VARIABLES + 1));
+    }
+
+    #[test]
+    fn a_jx_below_its_goal_counts_a_twentieth() {
+        // only jX is weighted, and |jX| of the dipole is below every goal
+        let project = sample("DP20.MAA");
+        let score = |min_jx: f64| {
+            let mut setup = dipole_length();
+            setup.weights = Weights { gain: 0, fb: 0, jx: 100, swr: 0, elevation: 0, matching: 0, current: 0 };
+            setup.goals.min_jx = min_jx;
+            first_score(&project, &CalcOptions::default(), &setup)
+        };
+        // -(goal - (goal - |jX|) / 20) · 100 / 50
+        let slope = (score(2000.0) - score(1000.0)) / 1000.0;
+        assert!((slope + 2.0 * 19.0 / 20.0).abs() < 1e-9, "{slope}");
+    }
+
+    /// The variables `AllElements` registers (with intervals), and how they are linked.
+    fn all_elements(project: &Project) -> Vec<(VariableTarget, Link)> {
+        let op = SetupOp::AllElements { intervals: true, scale_all: false, combination: None };
+        let edit = edit_setup(project, &CalcOptions::default(), &OptimizerSetup::default(), &[op]);
+        edit.setup.variables.iter().map(|v| (v.target, v.link)).collect()
+    }
+
+    #[test]
+    fn every_size_of_every_element_is_registered_unlinked() {
+        use ElementPart::*;
+        // the dipole (the radiator, first) has only a width: the combination
+        // is asked at the inverted V behind it, which has a height too
+        let mut project = sample("DP20.MAA");
+        let w = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+            let mut w = project.antenna.wires[0].clone();
+            (w.start, w.end) = (crate::model::Point3::new(a.0, a.1, a.2), crate::model::Point3::new(b.0, b.1, b.2));
+            w
+        };
+        let wires = vec![
+            w((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+            w((-2.0, -5.0, 0.0), (-2.0, 0.0, 1.0)),
+            w((-2.0, 0.0, 1.0), (-2.0, 5.0, 0.0)),
+        ];
+        project.antenna.wires = wires;
+        let parts = |e| {
+            all_elements(&project)
+                .into_iter()
+                .filter_map(|(t, _)| match t {
+                    VariableTarget::Element { element, part } if element == e => Some(part),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(parts(0), [Width, Height, Interval]);
+        assert_eq!(parts(1), [Width]);
+        // width, height and X width of the same size stay apart
+        let vars = all_elements(&sample("2ELVP15.MAA"));
+        assert!(vars.iter().any(|(t, _)| matches!(t, VariableTarget::Element { part: Perimeter, .. })));
+        assert!(vars.iter().all(|(_, l)| *l == Link::Independent), "{vars:?}");
     }
 }
