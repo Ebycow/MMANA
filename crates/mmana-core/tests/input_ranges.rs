@@ -437,6 +437,14 @@ fn combined_wires() {
             |p, _| combined(p, 1.0, -0.01),
             out_of_range("combined wire 1 section 2 radius", "0 or more", -0.01),
         ),
+        case(
+            "a radius no combined wire has",
+            |p, _| {
+                combined(p, 1.0, 0.02);
+                p.antenna.wires[0].radius = -2.0;
+            },
+            Err(CalcError::CombinedWireNotFound { wire: 1, radius: -2.0 }),
+        ),
     ]);
 }
 
@@ -634,6 +642,9 @@ fn sweep_points() {
     let o = CalcOptions::default();
     let invalid = Err(CalcError::InvalidSweepPoints { max: MAX_SWEEP_POINTS });
     assert_eq!(mmana_core::sweep(&p, &o, 14.0, 14.1, 1).unwrap().len(), 1);
+    let frequencies: Vec<f64> =
+        mmana_core::sweep(&p, &o, 14.0, 14.2, 3).unwrap().iter().map(|pt| pt.frequency_mhz).collect();
+    assert_eq!(frequencies, [14.0, 14.1, 14.2]);
     assert_eq!(mmana_core::sweep(&p, &o, 14.0, 14.1, 0).map(|_| ()), invalid);
     assert_eq!(mmana_core::sweep(&p, &o, 14.0, 14.1, MAX_SWEEP_POINTS + 1).map(|_| ()), invalid);
     let req = |points, indices| SweepRequest {

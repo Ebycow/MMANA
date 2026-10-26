@@ -405,6 +405,19 @@ fn an_end_an_ulp_off_the_ground_is_on_it() {
     // a millimetre is a gap
     p.antenna.wires[2].end.z = 0.001;
     assert!(rel(calc(&p).impedance, on.impedance) > 0.5);
+
+    // "an ulp" is a billionth of the wire's length: a 2 m vertical fed at
+    // the ground, which is also the longest wire the warning measures by
+    let mut p = project(vec![wire((0.0, 0.0, 0.0), (0.0, 0.0, 2.0), 10)], vec![source("w1b", 1.0, 0.0)]);
+    p.environment.ground = GroundKind::Perfect;
+    p.environment.height = 0.0;
+    let on = calc(&p);
+    p.antenna.wires[0].start.z = -1.5e-9;
+    let off = calc(&p);
+    assert_eq!(off.impedance, on.impedance);
+    assert!(off.warnings.is_empty(), "{:?}", off.warnings);
+    p.antenna.wires[0].start.z = -3e-9;
+    assert_eq!(warned_wires(&p, WarningCode::BelowGround), Some(vec![1]));
 }
 
 #[test]
@@ -640,6 +653,13 @@ fn warnings_name_the_wires_they_are_about() {
     );
     low.environment.ground = GroundKind::Perfect;
     low.environment.height = 0.0;
+    assert_eq!(warned_wires(&low, WarningCode::BelowGround), Some(vec![2]));
+    // the height lifts every wire
+    for w in &mut low.antenna.wires {
+        w.start.z -= 1.0;
+        w.end.z -= 1.0;
+    }
+    low.environment.height = 1.0;
     assert_eq!(warned_wires(&low, WarningCode::BelowGround), Some(vec![2]));
     low.antenna.stack.horizontal = 2;
     low.antenna.stack.horizontal_spacing = 8.0;
