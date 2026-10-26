@@ -51,6 +51,9 @@ fn a_series_circuit_is_recovered_from_two_frequencies() {
     assert_eq!(series_circuit(z(14.0), z(14.0)), None);
     let falling = |mhz: f64| (mhz, Complex { re: r, im: -z(mhz).1.im });
     assert_eq!(series_circuit(falling(14.0), falling(14.3)), None);
+    // nor is one without a resistance (its Q would be infinite)
+    let lossless = |mhz: f64| (mhz, Complex { re: 0.0, im: z(mhz).1.im });
+    assert_eq!(series_circuit(lossless(14.0), lossless(14.3)), None);
 }
 
 #[test]
@@ -67,7 +70,9 @@ fn finds_where_the_reactance_of_a_dipole_crosses_zero() {
     let c = r.circuit.expect("fitted near resonance");
     assert!((5.0..20.0).contains(&c.q), "{c:?}");
     assert!((c.resonance_mhz / f - 1.0).abs() < 1e-3, "{c:?}");
-    assert!(found.calculations <= 12, "{} calculations", found.calculations);
+    // the fitted circuit's guesses take it there in 4 (halving alone, or
+    // stepping away from them, takes twice as many)
+    assert!(found.calculations <= 6, "{} calculations", found.calculations);
 }
 
 #[test]
@@ -94,6 +99,9 @@ fn reports_no_resonance_when_there_is_none_in_range() {
 #[test]
 fn rejects_a_start_outside_the_range() {
     let range = ResonanceRange { start_mhz: Some(30.0), max_mhz: Some(20.0), ..Default::default() };
+    assert!(mmana_core::resonance::find_resonance(&dipole(5.0), &CalcOptions::default(), &range).is_err());
+    // nor can a range reach down to 0 MHz
+    let range = ResonanceRange { min_mhz: Some(0.0), ..Default::default() };
     assert!(mmana_core::resonance::find_resonance(&dipole(5.0), &CalcOptions::default(), &range).is_err());
 }
 
