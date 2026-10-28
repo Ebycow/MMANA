@@ -262,6 +262,14 @@ mod tests {
         assert_eq!(ev("2*I"), 0.0508);
         assert_eq!(ev("１．５"), 1.5);
         assert_eq!(ev("1/0"), f64::MAX);
+        assert_eq!(ev("5-3"), 2.0);
+        assert_eq!(ev("10-2*3"), 4.0);
+        assert_eq!(ev("F"), 0.0254 * 12.0);
+        // an operator after a closing parenthesis
+        assert_eq!(ev("(2)*3"), 6.0);
+        assert_eq!(ev("(1+1) * (2+1)"), 6.0);
+        // a second operator there takes the place of the first, as in the original
+        assert_eq!(ev("(2)*-3"), -1.0);
     }
 
     #[test]

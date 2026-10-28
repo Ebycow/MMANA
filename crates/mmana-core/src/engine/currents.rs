@@ -182,3 +182,15 @@ impl Mininec {
         st.finish()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_current_in_phase_has_its_real_part_as_magnitude() {
+        assert_eq!(magnitude(2.0, 0.0), 2.0);
+        assert_eq!(magnitude(0.0, -3.0), 3.0);
+        assert_eq!(magnitude(0.0, 0.0), 0.0);
+    }
+}

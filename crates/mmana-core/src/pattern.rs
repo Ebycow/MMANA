@@ -245,3 +245,21 @@ pub(crate) fn rescan_horizontal(e: &Mininec, r: &mut PatternState, elevation_deg
     r.horizontal_maxima();
     r.calc_fb(fbr);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn of_equal_maxima_the_first_half_keeps_the_lowest_angle() {
+        // below the zenith the first of equal maxima counts, beyond it the last
+        let mut s = PatternState::new(2);
+        s.ptn_v[2] = [-50.0; 181];
+        s.ptn_v[2][10] = 3.0;
+        s.ptn_v[2][20] = 3.0;
+        assert_eq!(s.get_vmax(), 20);
+        s.ptn_v[2][80] = 3.0;
+        s.ptn_v[2][85] = 3.0;
+        assert_eq!(s.get_vmax(), 170);
+    }
+}

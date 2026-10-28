@@ -2023,6 +2023,52 @@ mod tests {
     }
 
     #[test]
+    fn duplicates_are_found_before_the_base_element() {
+        // two reflectors behind the element at X = 0, the second made the same
+        // as the first and moved onto it
+        let wires = [
+            wire((-6.0, -4.0, 0.0), (-6.0, 4.0, 0.0)),
+            wire((-3.0, -5.0, 0.0), (-3.0, 5.0, 0.0)),
+            wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+        ];
+        let mut list = ElementList::new(&wires, 21.3);
+        assert_eq!(list.base, 2);
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 10.0, scale_all: false }));
+        assert_eq!(list.duplicate(), None);
+        assert!(list.apply(&ElementOp::SetInterval { row: 0, value: 0.0 }));
+        assert_eq!(list.duplicate(), Some((1, 0)));
+    }
+
+    #[test]
+    fn elements_sharing_one_end_are_not_the_same() {
+        // a 5 m vertical moved onto the 10 m one: one end in common
+        let wires = [wire((0.0, 0.0, 0.0), (0.0, 0.0, 10.0)), wire((2.0, 0.0, 0.0), (2.0, 0.0, 5.0))];
+        let mut list = ElementList::new(&wires, 21.3);
+        assert!(list.apply_as_original(&ElementOp::SetInterval { row: 1, value: 0.0 }));
+        assert_eq!(list.duplicate(), None);
+    }
+
+    #[test]
+    fn an_element_of_no_size_is_rebuilt_a_wavelength_across() {
+        // a wire of no length has no perimeter, width or height: the double
+        // triangle takes 1.42 λ
+        let mut list = ElementList::new(&[wire((0.0, 1.0, 2.0), (0.0, 1.0, 2.0))], 20.0);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: ElementKind::VerticalDoubleTriangle }));
+        let row = &list.rows()[0];
+        assert!((row.width - 28.4).abs() < 1e-9 && (row.height - 14.2).abs() < 1e-9, "{row:?}");
+    }
+
+    #[test]
+    fn the_editor_takes_the_wavelength_of_the_antenna() {
+        // a new loop is a wavelength around
+        let ant =
+            Antenna { frequency_mhz: 14.0, wires: vec![wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], ..Antenna::default() };
+        let e = edit_antenna(&ant, &[ElementOp::SetKind { row: 1, kind: ElementKind::VerticalSquare }]);
+        assert_eq!(e.applied, vec![true]);
+        assert!((e.elements[1].perimeter - SPEED_OF_LIGHT_MMANA / 14.0).abs() < 1e-9, "{:?}", e.elements[1]);
+    }
+
+    #[test]
     fn empty_antenna_starts_in_the_new_row() {
         let mut list = ElementList::new(&[], 21.3);
         assert!(list.is_empty());

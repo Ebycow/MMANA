@@ -72,7 +72,7 @@ fn finds_where_the_reactance_of_a_dipole_crosses_zero() {
     assert!((c.resonance_mhz / f - 1.0).abs() < 1e-3, "{c:?}");
     // the fitted circuit's guesses take it there in 4 (halving alone, or
     // stepping away from them, takes twice as many)
-    assert!(found.calculations <= 6, "{} calculations", found.calculations);
+    assert!(found.calculations <= 4, "{} calculations", found.calculations);
 }
 
 #[test]
@@ -145,4 +145,40 @@ fn every_sample_ends_at_a_resonance_or_at_none() {
     }
     eprintln!("converged {converged}, jumps {jumps}, none {none}");
     assert!(converged > 30, "converged {converged}, jumps {jumps}, none {none}");
+}
+
+/// A square loop of `side` m at 14.05 MHz, fed in one side.
+fn small_loop(side: f64) -> Project {
+    let mut p = dipole(1.0);
+    let h = side / 2.0;
+    let w = p.antenna.wires[0].clone();
+    let corner = [(-h, -h), (h, -h), (h, h), (-h, h)];
+    p.antenna.wires = (0..4)
+        .map(|i| {
+            let (a, b) = (corner[i], corner[(i + 1) % 4]);
+            Wire { start: Point3::new(0.0, a.0, a.1), end: Point3::new(0.0, b.0, b.1), ..w.clone() }
+        })
+        .collect();
+    p
+}
+
+#[test]
+fn a_search_steps_down_a_quarter_at_a_time() {
+    // a small loop is inductive with no series resonance below: from
+    // 14.05 MHz, 0.5 % and then four steps of at most 1.25 times reach the
+    // limit at 7.025 MHz
+    let found = search(&small_loop(1.0), None);
+    assert_eq!(found.resonance, None);
+    assert_eq!(found.calculations, 6);
+}
+
+#[test]
+fn halving_ends_a_fit_that_stalls() {
+    // the fitted circuit closes in from one side only on 12EL23CM; halving
+    // the interval when a step did not halve it saves one calculation
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa/12EL23CM.MAA");
+    let p = maa::parse_bytes(&std::fs::read(path).unwrap()).project;
+    let found = mmana_core::resonance::find_resonance(&p, &CalcOptions::default(), &ResonanceRange::default()).unwrap();
+    assert!(found.resonance.as_ref().is_some_and(|r| r.converged), "{found:?}");
+    assert_eq!(found.calculations, 6);
 }

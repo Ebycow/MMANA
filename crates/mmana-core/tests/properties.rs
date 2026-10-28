@@ -418,6 +418,16 @@ fn an_end_an_ulp_off_the_ground_is_on_it() {
     assert!(off.warnings.is_empty(), "{:?}", off.warnings);
     p.antenna.wires[0].start.z = -3e-9;
     assert_eq!(warned_wires(&p, WarningCode::BelowGround), Some(vec![1]));
+    // exactly a billionth of the longest wire (4 m) down is still on it
+    let mut p = project(
+        vec![wire((0.0, -2.0, 5.0), (0.0, 2.0, 5.0), 10), wire((3.0, 0.0, -4e-9), (3.0, 0.0, 1.0), 10)],
+        vec![source("w1c", 1.0, 0.0)],
+    );
+    p.environment.ground = GroundKind::Perfect;
+    p.environment.height = 0.0;
+    assert_eq!(warned_wires(&p, WarningCode::BelowGround), None);
+    p.antenna.wires[1].start.z = -4.1e-9;
+    assert_eq!(warned_wires(&p, WarningCode::BelowGround), Some(vec![2]));
 }
 
 #[test]
@@ -647,8 +657,13 @@ fn warnings_name_the_wires_they_are_about() {
     );
     assert_eq!(warned_wires(&halves, WarningCode::TooManySegments), Some(vec![1, 3]));
     // a stacked copy counts as the wire it copies
+    // (and not one that ends on the ground)
     let mut low = project(
-        vec![wire((0.0, -5.2, 1.0), (0.0, 5.2, 1.0), 20), wire((3.0, -1.0, 1.0), (3.0, 1.0, -0.5), 10)],
+        vec![
+            wire((0.0, -5.2, 1.0), (0.0, 5.2, 1.0), 20),
+            wire((3.0, -1.0, 1.0), (3.0, 1.0, -0.5), 10),
+            wire((6.0, 0.0, 0.0), (6.0, 0.0, 1.0), 10),
+        ],
         vec![source("w1c", 1.0, 0.0)],
     );
     low.environment.ground = GroundKind::Perfect;

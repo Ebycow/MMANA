@@ -135,3 +135,15 @@ fn wire_loss_f(f: f64, wp: &WDef, material: WireMaterial) -> f64 {
     }
     r
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_impedance_with_either_part_missing_has_no_swr() {
+        assert_eq!(calc_swr(NULLV, 10.0, 50.0, 0.0), NULLV);
+        assert_eq!(calc_swr(50.0, NULLV, 50.0, 0.0), NULLV);
+        assert_eq!(calc_swr(50.0, 0.0, 50.0, 0.0), 1.0);
+    }
+}
