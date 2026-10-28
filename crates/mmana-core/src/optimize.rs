@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::calc::{CalcOptions, Complex, PatternResolution};
+use crate::calc::{CalcOptions, Complex, PatternResolution, WarningCode};
 use crate::elements::{ElementList, ElementRow, round_up};
 use crate::engine::PAI;
 use crate::error::CalcError;
@@ -1499,13 +1499,10 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             current,
             horizontal: every(&r.patterns.horizontal.total),
             vertical: every(&r.patterns.vertical.total),
-            takes_power: crate::calc::takes_power(
-                r.total_power_w,
-                r.sources
-                    .iter()
-                    .map(|s| s.voltage.re.hypot(s.voltage.im) * s.current.re.hypot(s.current.im) / 2.0)
-                    .sum(),
-            ),
+            takes_power: !r
+                .warnings
+                .iter()
+                .any(|w| matches!(w.code, WarningCode::NonPositivePower | WarningCode::NegligiblePower)),
         })
     }
 

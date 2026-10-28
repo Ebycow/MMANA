@@ -265,7 +265,7 @@ struct WireRef {
     zz: f64,
     vxy: f64,
     vyz: f64,
-    /// 1-based place in the loop, 0 = not visited, -1 = dead end.
+    /// 1-based place in the loop, 0 = not visited.
     lcf: i32,
 }
 
@@ -331,7 +331,8 @@ impl Group {
             if o == next || self.ana_loop(slots, n + 1, o, next) {
                 return true;
             }
-            self.refs[i].lcf = -1;
+            // (the original marks the wire a dead end here, -1; a chain that
+            // fails is never read again, as the search gives up)
             return false;
         }
         // (here the original also marks the slot after the last wire as a dead end)
@@ -1337,8 +1338,8 @@ impl ElementList {
         let len = self.groups.len();
         let resized: Vec<(usize, Described)> = match *op {
             RoundValues { .. } => (0..len).map(|row| (row, described(self, row))).collect(),
-            // a rebuilt element is a template, which the table describes
-            SetKind { row, .. } if row <= len => vec![(row, ([true; 4], ([0.0; 3], [0.0; 3])))],
+            // (a rebuilt element is a template, which the table describes:
+            // there is nothing for it to stop describing)
             // an edit in the new row first copies the last element, and a copy
             // is analysed again
             SetInterval { row, .. }

@@ -543,7 +543,8 @@ fn factor(zr: &mut [f32], zi: &mut [f32], n: usize) -> Vec<usize> {
             let kk = (k - 1) * n + k - 1;
             let mut t = (zr[kk] * zr[kk] + zi[kk] * zi[kk]) as f64;
             let mut i1 = k;
-            for i in k + 1..=n {
+            // (from K itself, which keeps I1 = K, as the original from K + 1)
+            for i in k..=n {
                 let ik = (i - 1) * n + k - 1;
                 let t1 = (zr[ik] * zr[ik] + zi[ik] * zi[ik]) as f64;
                 if t1 >= t {

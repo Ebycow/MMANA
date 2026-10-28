@@ -154,7 +154,8 @@ impl Mininec {
             // imaginary / real part of the electric field
             let u7 = -self.m * u7 / self.s0;
             let u8 = self.m * u8 / self.s0;
-            let s1 = if u7 != 0.0 || u8 != 0.0 { (u7 * u7 + u8 * u8).sqrt() } else { 0.0 };
+            // (the original takes 0 when both are 0, which the root gives too)
+            let s1 = (u7 * u7 + u8 * u8).sqrt();
             let mut s2 = 0.0;
             if u8 != 0.0 {
                 s2 = (u7 / u8).atan() / self.p0;
@@ -237,7 +238,7 @@ impl Mininec {
             }
         }
         for (i, comp) in [(1usize, 'X'), (3, 'Y'), (5, 'Z')] {
-            let s1 = if h[i] != 0.0 || h[i + 1] != 0.0 { (h[i] * h[i] + h[i + 1] * h[i + 1]).sqrt() } else { 0.0 };
+            let s1 = (h[i] * h[i] + h[i + 1] * h[i + 1]).sqrt();
             let mut s2 = 0.0;
             if h[i] != 0.0 {
                 s2 = (h[i + 1] / h[i]).atan() / self.p0;
