@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
-use crate::calc::{CalcOptions, Complex, PatternResolution};
+use crate::calc::{CalcOptions, Complex, PatternResolution, WarningCode};
 use crate::elements::{ElementList, ElementRow, round_up};
 use crate::engine::PAI;
 use crate::error::CalcError;
@@ -1499,13 +1499,10 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             current,
             horizontal: every(&r.patterns.horizontal.total),
             vertical: every(&r.patterns.vertical.total),
-            takes_power: crate::calc::takes_power(
-                r.total_power_w,
-                r.sources
-                    .iter()
-                    .map(|s| s.voltage.re.hypot(s.voltage.im) * s.current.re.hypot(s.current.im) / 2.0)
-                    .sum(),
-            ),
+            takes_power: !r
+                .warnings
+                .iter()
+                .any(|w| matches!(w.code, WarningCode::NonPositivePower | WarningCode::NegligiblePower)),
         })
     }
 
@@ -2969,5 +2966,296 @@ mod tests {
         let vars = all_elements(&sample("2ELVP15.MAA"));
         assert!(vars.iter().any(|(t, _)| matches!(t, VariableTarget::Element { part: Perimeter, .. })));
         assert!(vars.iter().all(|(_, l)| *l == Link::Independent), "{vars:?}");
+    }
+
+    type Ends = ((f64, f64, f64), (f64, f64, f64));
+
+    /// DP20 with other wires (its radius and segmentation).
+    fn with_wires(ends: &[Ends]) -> Project {
+        let mut project = sample("DP20.MAA");
+        let wire = project.antenna.wires[0].clone();
+        project.antenna.wires = ends
+            .iter()
+            .map(|&(a, b)| Wire {
+                start: crate::model::Point3::new(a.0, a.1, a.2),
+                end: crate::model::Point3::new(b.0, b.1, b.2),
+                ..wire.clone()
+            })
+            .collect();
+        project
+    }
+
+    fn setup_of(project: &Project, ops: &[SetupOp]) -> SetupEdit {
+        edit_setup(project, &CalcOptions::default(), &OptimizerSetup::default(), ops)
+    }
+
+    fn targets(edit: &SetupEdit) -> Vec<(VariableTarget, Link)> {
+        edit.setup.variables.iter().map(|v| (v.target, v.link)).collect()
+    }
+
+    /// Every value a sweep of `setup`'s first variable calculates.
+    fn swept(project: &Project, setup: &OptimizerSetup) -> Vec<f64> {
+        let mut values = Vec::new();
+        optimize(project, &CalcOptions::default(), setup, Some(30), |p| {
+            values.push(p.values[0]);
+            true
+        })
+        .unwrap();
+        values
+    }
+
+    #[test]
+    fn a_slanted_wire_reads_its_zenith_from_all_of_its_run() {
+        let w = &with_wires(&[((0.0, 0.0, 0.0), (3.0, 0.0, 4.0))]).antenna.wires[0];
+        let (l, a, z) = polar(w);
+        assert_eq!((l, a), (5.0, 0.0));
+        assert!((z - 3f64.atan2(4.0).to_degrees()).abs() < 1e-12, "{z}");
+    }
+
+    #[test]
+    fn a_polar_length_about_the_centre_keeps_the_direction_and_the_centre() {
+        // 10 m at 30° azimuth and 60° zenith, centred on (1, 2, 3), made 4 m
+        let (a, z) = (30f64.to_radians(), 60f64.to_radians());
+        let half = |l: f64| (l / 2.0 * z.sin() * a.cos(), l / 2.0 * z.sin() * a.sin(), l / 2.0 * z.cos());
+        let (dx, dy, dz) = half(10.0);
+        let project = with_wires(&[((1.0 - dx, 2.0 - dy, 3.0 - dz), (1.0 + dx, 2.0 + dy, 3.0 + dz))]);
+        let target =
+            VariableTarget::PolarWire { wire: 0, quantity: PolarQuantity::Length, anchor: PolarAnchor::Center };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 1.0, max: 20.0, ..Variable::new(target) }],
+            ..Default::default()
+        };
+        let (written, _) = apply_trial(&project, &CalcOptions::default(), &setup, &[4.0]).unwrap();
+        let w = &written.antenna.wires[0];
+        let (dx, dy, dz) = half(4.0);
+        let want = [1.0 - dx, 2.0 - dy, 3.0 - dz, 1.0 + dx, 2.0 + dy, 3.0 + dz];
+        let got = [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z];
+        assert!(want.iter().zip(&got).all(|(a, b)| (a - b).abs() < 1e-12), "{got:?}");
+    }
+
+    #[test]
+    fn a_trap_keeps_its_resonance_when_one_part_is_set() {
+        let mut project = sample("DP20.MAA");
+        project.antenna.loads = vec![crate::Load {
+            pulse: "w1c".into(),
+            kind: LoadKind::Lc { inductance_uh: 2.0, capacitance_pf: 30.0, q: 0.0 },
+        }];
+        let target = VariableTarget::Load { load: 0, part: LoadPart::Primary };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 0.1, max: 20.0, ..Variable::new(target) }],
+            ..Default::default()
+        };
+        let (written, _) = apply_trial(&project, &CalcOptions::default(), &setup, &[0.5]).unwrap();
+        let LoadKind::Lc { inductance_uh, capacitance_pf, .. } = written.antenna.loads[0].kind else { unreachable!() };
+        assert_eq!(inductance_uh, 0.5);
+        assert!((capacitance_pf - 120.0).abs() < 1e-9, "{capacitance_pf}");
+    }
+
+    #[test]
+    fn variables_on_things_that_are_not_there_or_have_no_size() {
+        let dipole = sample("DP20.MAA");
+        let codes = |ops: &[SetupOp]| setup_of(&dipole, ops).errors.iter().map(|e| e.code).collect::<Vec<_>>();
+        // a wire past the last
+        let wire = VariableTarget::Wire { wire: 1, part: WirePart::Y1 };
+        assert!(codes(&[SetupOp::SetTarget { index: 0, target: wire }]).is_empty());
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 0.1, max: 1.0, ..Variable::new(wire) }],
+            ..Default::default()
+        };
+        let (errors, _) = issues(&Model::new(&dipole, &CalcOptions::default()), &setup);
+        assert!(errors.iter().any(|e| e.code == IssueCode::MissingTarget), "{errors:?}");
+        // the height of a flat dipole is 0, its position 0 is a place
+        let element = |part| VariableTarget::Element { element: 0, part };
+        let issue = |part| {
+            let setup = OptimizerSetup {
+                variables: vec![Variable { pitch: 0.1, max: 10.0, ..Variable::new(element(part)) }],
+                ..Default::default()
+            };
+            issues(&Model::new(&dipole, &CalcOptions::default()), &setup).0.iter().map(|e| e.code).collect::<Vec<_>>()
+        };
+        assert_eq!(issue(ElementPart::Height), [IssueCode::ZeroValue]);
+        assert!(!issue(ElementPart::Position).contains(&IssueCode::ZeroValue));
+    }
+
+    #[test]
+    fn more_bands_than_the_table_holds_are_refused() {
+        let project = sample("DP20.MAA");
+        let mut setup = dipole_length();
+        let band = |f| Band { frequency_mhz: f, sources: project.antenna.sources.clone() };
+        setup.bands = (0..MAX_BANDS).map(|i| band(14.0 + i as f64 * 0.01)).collect();
+        let too_many = |s: &OptimizerSetup| {
+            issues(&Model::new(&project, &CalcOptions::default()), s)
+                .0
+                .iter()
+                .any(|e| e.code == IssueCode::TooManyBands)
+        };
+        assert!(!too_many(&setup));
+        setup.bands.push(band(14.3));
+        assert!(too_many(&setup));
+    }
+
+    #[test]
+    fn ends_that_meet_and_wires_too_short_to_tell() {
+        let project = with_wires(&[
+            ((0.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            ((0.0, 1.0, 0.0), (0.0, 2.0, 0.0)),
+            ((0.0, 5.0, 1.0), (0.0, 5.0, 1.0 + 1e-12)),
+        ]);
+        let wires = &project.antenna.wires;
+        assert_eq!(joints(wires), [0, 1, 1, 3, 4, 5]);
+        assert_eq!(short_wires(wires), 1);
+    }
+
+    #[test]
+    fn a_minimum_swr_reached_exactly_counts_as_reached() {
+        let project = sample("DP20.MAA");
+        let opts = CalcOptions::default();
+        let swr =
+            crate::calculate(&project, &CalcOptions { pattern_resolution: PatternResolution::Coarse, ..opts.clone() })
+                .unwrap()
+                .swr as f32 as f64;
+        let mut setup = dipole_length();
+        let reached = first_score(&project, &opts, &setup);
+        setup.goals.min_swr = swr;
+        assert_eq!(first_score(&project, &opts, &setup), reached);
+    }
+
+    #[test]
+    fn a_radius_cannot_be_made_negative() {
+        let target = VariableTarget::Wire { wire: 0, part: WirePart::Radius };
+        let edit = setup_of(&sample("DP20.MAA"), &[SetupOp::SetTarget { index: 0, target }]);
+        assert_eq!(edit.setup.variables[0].min, 0.0);
+        let target = VariableTarget::Wire { wire: 0, part: WirePart::Y1 };
+        let edit = setup_of(&sample("DP20.MAA"), &[SetupOp::SetTarget { index: 0, target }]);
+        assert_eq!(edit.setup.variables[0].min, -2000.0);
+    }
+
+    #[test]
+    fn all_elements_by_position_include_every_reflector_but_the_first() {
+        let project = with_wires(&[
+            ((-2.0, -5.0, 0.0), (-2.0, 5.0, 0.0)),
+            ((-1.0, -5.2, 0.0), (-1.0, 5.2, 0.0)),
+            ((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+        ]);
+        let op = SetupOp::AllElements { intervals: false, scale_all: false, combination: None };
+        let positions: Vec<usize> = targets(&setup_of(&project, &[op]))
+            .into_iter()
+            .filter_map(|(t, _)| match t {
+                VariableTarget::Element { element, part: ElementPart::Position } => Some(element),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(positions, [1]);
+    }
+
+    #[test]
+    fn the_combination_is_asked_at_the_first_element_with_two_sizes() {
+        // the vertical at X = 0 has only a height: the inverted V behind it is asked about
+        let project = with_wires(&[
+            ((0.0, 0.0, 1.0), (0.0, 0.0, 11.0)),
+            ((-2.0, -5.0, 0.0), (-2.0, 0.0, 1.0)),
+            ((-2.0, 0.0, 1.0), (-2.0, 5.0, 0.0)),
+        ]);
+        let parts: Vec<ElementPart> = all_elements(&project)
+            .into_iter()
+            .filter_map(|(t, _)| match t {
+                VariableTarget::Element { element: 0, part } => Some(part),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(parts, [ElementPart::Width, ElementPart::Height, ElementPart::Interval]);
+    }
+
+    #[test]
+    fn elements_on_the_same_x_are_linked_only_when_equal() {
+        // two dipoles stacked at X = 0, then one of them wider
+        let stacked = |half: f64| {
+            with_wires(&[
+                ((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+                ((0.0, -half, 4.0), (0.0, half, 4.0)),
+                ((3.0, -4.0, 0.0), (3.0, 4.0, 0.0)),
+            ])
+        };
+        let widths = |project: &Project| {
+            all_elements(project)
+                .into_iter()
+                .filter(|(t, _)| matches!(t, VariableTarget::Element { part: ElementPart::Width, .. }))
+                .map(|(_, l)| l)
+                .collect::<Vec<_>>()
+        };
+        assert!(widths(&stacked(5.0)).contains(&Link::Same { variable: 0 }), "{:?}", widths(&stacked(5.0)));
+        assert!(widths(&stacked(6.0)).iter().all(|l| *l == Link::Independent), "{:?}", widths(&stacked(6.0)));
+    }
+
+    #[test]
+    fn linking_wire_ends_skips_the_ones_already_moved() {
+        // the dipole's tip, where the vertical starts, already follows Y2
+        let project = with_wires(&[((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)), ((0.0, 5.0, 0.0), (0.0, 5.0, 3.0))]);
+        let y2 = VariableTarget::Wire { wire: 0, part: WirePart::Y2 };
+        let edit = setup_of(&project, &[SetupOp::SetTarget { index: 0, target: y2 }, SetupOp::LinkSame { index: 0 }]);
+        let w = |wire, part| VariableTarget::Wire { wire, part };
+        assert_eq!(
+            targets(&edit),
+            [
+                (y2, Link::Independent),
+                (w(0, WirePart::Y1), Link::Negated { variable: 0 }),
+                (w(1, WirePart::Y2), Link::Same { variable: 0 }),
+            ]
+        );
+        // radii link to equal radii, and X coordinates to equal X coordinates
+        let mut project = with_wires(&[((1.0, -5.0, 0.0), (1.0, 5.0, 0.0)), ((1.0, -3.0, 2.0), (2.0, 3.0, 2.0))]);
+        project.antenna.wires[1].radius = project.antenna.wires[0].radius;
+        let radius = w(0, WirePart::Radius);
+        let edit =
+            setup_of(&project, &[SetupOp::SetTarget { index: 0, target: radius }, SetupOp::LinkSame { index: 0 }]);
+        assert_eq!(targets(&edit), [(radius, Link::Independent), (w(1, WirePart::Radius), Link::Same { variable: 0 })]);
+        // a radius added so cannot go below 0, a coordinate can
+        assert_eq!(edit.setup.variables[1].min, 0.0);
+        let x1 = w(0, WirePart::X1);
+        let edit = setup_of(&project, &[SetupOp::SetTarget { index: 0, target: x1 }, SetupOp::LinkSame { index: 0 }]);
+        assert_eq!(
+            targets(&edit),
+            [
+                (x1, Link::Independent),
+                (w(0, WirePart::X2), Link::Same { variable: 0 }),
+                (w(1, WirePart::X1), Link::Same { variable: 0 })
+            ]
+        );
+        assert_eq!(edit.setup.variables[1].min, -2000.0);
+    }
+
+    #[test]
+    fn a_size_turns_where_a_bound_would_reach_0() {
+        // a vertical dipole from 1 to 3 m swept in height: at 4 m its bottom
+        // reaches 0, from where heights would count, and the sweep turns
+        let height = VariableTarget::Element { element: 0, part: ElementPart::Height };
+        for (lo, hi) in [(1.0, 3.0), (-3.0, -1.0)] {
+            let project = with_wires(&[((0.0, 0.0, lo), (0.0, 0.0, hi))]);
+            let setup = OptimizerSetup {
+                variables: vec![Variable { pitch: 1.0, min: 0.5, max: 6.0, ..Variable::new(height) }],
+                sweep_only: true,
+                absolute_pitch: true,
+                ..Default::default()
+            };
+            let values = swept(&project, &setup);
+            assert!(values.contains(&3.0) && !values.contains(&4.0), "{values:?}");
+        }
+    }
+
+    #[test]
+    fn a_zenith_turns_before_it_passes_the_vertical() {
+        // past 180° the wire would read back as 170° the other way round
+        let (s, c) = (170f64.to_radians().sin(), 170f64.to_radians().cos());
+        let project =
+            with_wires(&[((0.0, -5.0, 10.0), (0.0, 5.0, 10.0)), ((0.0, 0.0, 10.0), (5.0 * s, 0.0, 10.0 + 5.0 * c))]);
+        let zenith = VariableTarget::PolarWire { wire: 1, quantity: PolarQuantity::Zenith, anchor: PolarAnchor::Start };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 5.0, min: 100.0, max: 260.0, ..Variable::new(zenith) }],
+            sweep_only: true,
+            absolute_pitch: true,
+            ..Default::default()
+        };
+        let values = swept(&project, &setup);
+        assert!(values.iter().all(|&v| v <= 180.0 + 1e-9) && values.iter().any(|&v| v < 170.0), "{values:?}");
     }
 }

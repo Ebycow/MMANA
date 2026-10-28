@@ -265,7 +265,7 @@ struct WireRef {
     zz: f64,
     vxy: f64,
     vyz: f64,
-    /// 1-based place in the loop, 0 = not visited, -1 = dead end.
+    /// 1-based place in the loop, 0 = not visited.
     lcf: i32,
 }
 
@@ -331,7 +331,8 @@ impl Group {
             if o == next || self.ana_loop(slots, n + 1, o, next) {
                 return true;
             }
-            self.refs[i].lcf = -1;
+            // (the original marks the wire a dead end here, -1; a chain that
+            // fails is never read again, as the search gives up)
             return false;
         }
         // (here the original also marks the slot after the last wire as a dead end)
@@ -578,35 +579,26 @@ impl Group {
     }
 
     /// Moves the coordinates at (or beyond) the bounds to new bounds
-    /// (the edge-only `SetXWidth` / `SetWidth` / `SetHeight`).
+    /// (the edge-only `SetXWidth` / `SetWidth` / `SetHeight`). Each point
+    /// moves once, by where it was: the original tests each case after the
+    /// one before, so a point beyond a bound that the move lands exactly on
+    /// the old bound moves again (a 5 cm stub below a loop that shrinks by
+    /// 5 cm vanishes).
     fn move_ends(&mut self, slots: &mut [Slot], axis: usize, nl: f64, nh: f64) {
         let (lo, hi) = (self.lo[axis], self.hi[axis]);
         for r in &self.refs {
             let w = &mut slots[r.slot].wire;
-            let (s, e) = (&mut w.start, &mut w.end);
-            if *coord(s, axis) > hi {
-                *coord(s, axis) += nh - hi;
-            }
-            if *coord(e, axis) > hi {
-                *coord(e, axis) += nh - hi;
-            }
-            if *coord(s, axis) < lo {
-                *coord(s, axis) -= lo - nl;
-            }
-            if *coord(e, axis) < lo {
-                *coord(e, axis) -= lo - nl;
-            }
-            if *coord(s, axis) == lo {
-                *coord(s, axis) = nl;
-            }
-            if *coord(e, axis) == lo {
-                *coord(e, axis) = nl;
-            }
-            if *coord(s, axis) == hi {
-                *coord(s, axis) = nh;
-            }
-            if *coord(e, axis) == hi {
-                *coord(e, axis) = nh;
+            for p in [&mut w.start, &mut w.end] {
+                let t = coord(p, axis);
+                if *t > hi {
+                    *t += nh - hi;
+                } else if *t < lo {
+                    *t -= lo - nl;
+                } else if *t == lo {
+                    *t = nl;
+                } else if *t == hi {
+                    *t = nh;
+                }
             }
         }
         self.lo[axis] = nl;
@@ -1346,8 +1338,8 @@ impl ElementList {
         let len = self.groups.len();
         let resized: Vec<(usize, Described)> = match *op {
             RoundValues { .. } => (0..len).map(|row| (row, described(self, row))).collect(),
-            // a rebuilt element is a template, which the table describes
-            SetKind { row, .. } if row <= len => vec![(row, ([true; 4], ([0.0; 3], [0.0; 3])))],
+            // (a rebuilt element is a template, which the table describes:
+            // there is nothing for it to stop describing)
             // an edit in the new row first copies the last element, and a copy
             // is analysed again
             SetInterval { row, .. }
@@ -1894,6 +1886,34 @@ mod tests {
     }
 
     #[test]
+    fn a_stub_beyond_a_bound_moves_with_it_once() {
+        // a square loop from -1 to 1 m with a 25 cm stub below its bottom
+        // (the bounds are the loop's, as the skydoor sample's)
+        let wires = vec![
+            wire((0.0, -1.0, -1.0), (0.0, -0.1, -1.0)),
+            wire((0.0, -0.1, -1.0), (0.0, 0.1, -1.0)),
+            wire((0.0, 0.1, -1.0), (0.0, 1.0, -1.0)),
+            wire((0.0, -1.0, 1.0), (0.0, 1.0, 1.0)),
+            wire((0.0, -1.0, -1.0), (0.0, -1.0, 1.0)),
+            wire((0.0, 1.0, -1.0), (0.0, 1.0, 1.0)),
+            wire((0.0, -0.1, -1.0), (0.0, -0.1, -1.25)),
+            wire((0.0, 0.1, -1.0), (0.0, 0.1, -1.25)),
+            wire((0.0, -0.1, -1.25), (0.0, 0.1, -1.25)),
+        ];
+        let mut list = ElementList::new(&wires, 21.3);
+        assert_eq!((list.groups[0].lo[Z], list.groups[0].hi[Z]), (-1.0, 1.0));
+        // the bottom 25 cm higher: the stub moves with it, its end onto the old
+        // bottom, and stays there
+        assert!(list.apply_as_original(&ElementOp::SetHeight { row: 0, value: 1.5, scale_all: false }));
+        let out = list.wires().wires;
+        let bars: Vec<_> =
+            out.iter().filter(|w| w.start.y == -0.1 && w.end.y == 0.1).map(|w| (w.start.z, w.end.z)).collect();
+        assert_eq!(bars.len(), 2);
+        assert!(bars.contains(&(-0.75, -0.75)) && bars.contains(&(-1.0, -1.0)), "{bars:?}");
+        assert!(out.iter().all(|w| w.start != w.end));
+    }
+
+    #[test]
     fn deleting_renumbers_wires_and_pulses() {
         let mut ant = Antenna { wires: yagi_with_quad(), ..Antenna::default() };
         ant.sources = vec![crate::Source { pulse: "w3c".into(), phase_deg: 0.0, voltage: 1.0 }];
@@ -2000,6 +2020,52 @@ mod tests {
         let out = list.wires();
         let copies = out.elements.iter().zip(&out.origins).filter(|(e, _)| **e >= 3);
         assert!(copies.clone().count() > 0 && copies.clone().all(|(_, o)| o.is_none()), "{:?}", out.origins);
+    }
+
+    #[test]
+    fn duplicates_are_found_before_the_base_element() {
+        // two reflectors behind the element at X = 0, the second made the same
+        // as the first and moved onto it
+        let wires = [
+            wire((-6.0, -4.0, 0.0), (-6.0, 4.0, 0.0)),
+            wire((-3.0, -5.0, 0.0), (-3.0, 5.0, 0.0)),
+            wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+        ];
+        let mut list = ElementList::new(&wires, 21.3);
+        assert_eq!(list.base, 2);
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 10.0, scale_all: false }));
+        assert_eq!(list.duplicate(), None);
+        assert!(list.apply(&ElementOp::SetInterval { row: 0, value: 0.0 }));
+        assert_eq!(list.duplicate(), Some((1, 0)));
+    }
+
+    #[test]
+    fn elements_sharing_one_end_are_not_the_same() {
+        // a 5 m vertical moved onto the 10 m one: one end in common
+        let wires = [wire((0.0, 0.0, 0.0), (0.0, 0.0, 10.0)), wire((2.0, 0.0, 0.0), (2.0, 0.0, 5.0))];
+        let mut list = ElementList::new(&wires, 21.3);
+        assert!(list.apply_as_original(&ElementOp::SetInterval { row: 1, value: 0.0 }));
+        assert_eq!(list.duplicate(), None);
+    }
+
+    #[test]
+    fn an_element_of_no_size_is_rebuilt_a_wavelength_across() {
+        // a wire of no length has no perimeter, width or height: the double
+        // triangle takes 1.42 λ
+        let mut list = ElementList::new(&[wire((0.0, 1.0, 2.0), (0.0, 1.0, 2.0))], 20.0);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: ElementKind::VerticalDoubleTriangle }));
+        let row = &list.rows()[0];
+        assert!((row.width - 28.4).abs() < 1e-9 && (row.height - 14.2).abs() < 1e-9, "{row:?}");
+    }
+
+    #[test]
+    fn the_editor_takes_the_wavelength_of_the_antenna() {
+        // a new loop is a wavelength around
+        let ant =
+            Antenna { frequency_mhz: 14.0, wires: vec![wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], ..Antenna::default() };
+        let e = edit_antenna(&ant, &[ElementOp::SetKind { row: 1, kind: ElementKind::VerticalSquare }]);
+        assert_eq!(e.applied, vec![true]);
+        assert!((e.elements[1].perimeter - SPEED_OF_LIGHT_MMANA / 14.0).abs() < 1e-9, "{:?}", e.elements[1]);
     }
 
     #[test]

@@ -32,4 +32,58 @@ exclude_re = [
     # pulses come wire by wire: a pulse starts on the last wire only when the
     # pulse is on it, and L1270 then goes on to L1279 too
     'geometry\.rs:\d+:31: replace > with >= in Mininec::number_pulses$',
+    # an apex that is level with the other corner: the corners of a loop
+    # with three corners are never level, nor on one line
+    'elements\.rs:\d+:19: replace > with >= in Group::ana_type$',
+    # a bound of 0 is taken by the arms before
+    'replace [<>] with [<>]= in Group::new_bounds$',
+    # from the base element on, the base's own interval is 0 either way
+    'elements\.rs:\d+:28: replace \+ with \* in ElementList::sort$',
+    # no wire has a radius of 0 (set_wz leaves them out)
+    'circuit\.rs:\d+:13: replace < with <= in wire_loss$',
+    'segment\.rs:\d+:21: replace < with <= in AntDef::set_wz$',
+    # the end of a wire on the ground shows the current of its own pulse
+    # there whichever way it is taken, with the same sign
+    'currents\.rs:\d+:23: replace != with == in Mininec::current_distribution$',
+    # a pulse end with no length adds 0 to the field
+    'farfield\.rs:\d+:43: replace < with <= in Mininec::far_field_at$',
+    # at the last pulse, going round once more for the last wire sets what
+    # was just set
+    'geometry\.rs:\d+:100: replace < with <= in Mininec::number_pulses$',
+    # the arrays have room for 2 more points per wire than any wire uses
+    'geometry\.rs:\d+:82: replace \+ with \* in Mininec::build_wires$',
+    # the ends of a wire with no pulse: nothing reads them, and the next
+    # wire writes over where the mutant puts them
+    'geometry\.rs:\d+:39: replace - with \+ in Mininec::build_wires$',
+    # a ratio exactly 1e-9 past 6 or 10, which no geometry lands on
+    'kernel\.rs:\d+:18: replace > with >= in Mininec::l135$',
+    # a cache of PSI: computing it each time gives the same values
+    'matrix\.rs:\d+:21: replace \+ with - in PsiCache::s87$',
+    # a copy is recomputed only when it is exactly 0, which no element of
+    # the k = +1 term is
+    'matrix\.rs:\d+:46: replace % with [+/] in Mininec::fill$',
+    # a real part exactly 0 with an imaginary part that is not
+    'nearfield\.rs:\d+:21: replace > with >= in Mininec::electric_point$',
+    # a section exactly λ/dm2 long
+    'segment\.rs:\d+:45: replace > with >= in AntDef::tei_b$',
+    'segment\.rs:\d+:56: replace < with <= in comb_wire$',
+    # the high nibble shifted left has no bits of the low one
+    'replace \| with \^ in decode_note$',
+    # dividing up to p/2 instead of √p finds the same primes
+    'replace \* with \+ in nth_prime$',
+    # at the minimum jX both ways give the minimum
+    "optimize\\.rs:\\d+:15: replace < with <= in Search<'_, F>::score$",
+    # the two roots of the capacitance match give shunt reactances of the
+    # same size and opposite sign, and the score takes the size
+    "optimize\\.rs:\\d+:38: replace \\+ with - in Search<'_, F>::score$",
+    # the direction is ±1
+    "optimize\\.rs:\\d+:38: replace \\* with / in Search<'_, F>::exec$",
+    # a step already the largest allowed is set to the largest allowed
+    "optimize\\.rs:\\d+:33: replace > with >= in Search<'_, F>::exec$",
+    # one band: the sources and frequency are the antenna's already
+    'optimize\.rs:\d+:25: replace > with >= in optimize$',
+    # an equal value is the value
+    'replace < with <= in PatternState::calc_fb$',
+    # a reactance of exactly 0.1 Ω
+    'resonance\.rs:\d+:42: replace < with <= in find_resonance$',
 ]

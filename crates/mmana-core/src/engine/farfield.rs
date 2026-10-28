@@ -223,9 +223,10 @@ impl Mininec {
             }
             k -= 2;
         }
-        let h2 = -(x1 * t1 + y1 * t2 + z1 * t3) * self.g0;
+        // (the original negates h2 and x4, which only go in squared)
+        let h2 = (x1 * t1 + y1 * t2 + z1 * t3) * self.g0;
         let h1 = (x2 * t1 + y2 * t2 + z2 * t3) * self.g0;
-        let x4 = -(x1 * v1 + y1 * v2) * self.g0;
+        let x4 = (x1 * v1 + y1 * v2) * self.g0;
         let x3 = (x2 * v1 + y2 * v2) * self.g0;
         // pattern in dB
         let (mut pv, mut ph, mut pt) = (-999.0, -999.0, -999.0);

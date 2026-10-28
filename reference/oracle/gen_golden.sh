@@ -33,9 +33,11 @@ for stem in 3EL20 DP20 GP40 MAGLOOP; do
 	"$ORACLE" "$f" --far 1 > "$OUT/$stem@far.json"
 	"$ORACLE" "$f" --ground 0 --far 1 > "$OUT/$stem@ground0far.json"
 done
-# grounded slopers: the near field next to wires that meet their image
+# grounded slopers: the near field next to wires that meet their image;
+# a grid point a centimetre from a wire
 for k in E H; do
 	"$ORACLE" "$ROOT/testdata/models/GNDSLOPE.MAA" --near $k > "$OUT/GNDSLOPE@near$k.json"
+	"$ORACLE" "$ROOT/testdata/models/NEARWIRE.MAA" --near $k > "$OUT/NEARWIRE@near$k.json"
 done
 # real grounds of more than one medium, and a radial screen (program
 # settings, not in the files; the golden carries them for the test)

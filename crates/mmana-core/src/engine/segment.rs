@@ -83,9 +83,9 @@ impl AntDef {
                     xc += (xx * dd * n as f64) / d;
                     yc += (yy * dd * n as f64) / d;
                     zc += (zz * dd * n as f64) / d;
-                    if n <= 4 && (dd / n as f64) * DM2DEF > rmd / dm2 {
-                        n += 2;
-                    }
+                    // (the original adds 2 segments when `(dd / n) * DM2DEF`
+                    // passes λ / dm2 and n <= 4, but `dd` is already one
+                    // segment, under 2 λ / dm2, so it never does)
                     self.add_wz(xxc, yyc, zzc, xc, yc, zc, r, n, wno);
                 }
                 dm *= sc;
@@ -345,45 +345,27 @@ pub(super) fn comb_wire(ap: &AntDef, pp: &PDef, wp: &WDef) -> Vec<WDef> {
                 advance(&mut tbl, n, l);
                 tbl[n].r = if l_at(j + 1) != 0.0 { r_at(j + 1) } else { pp.r[j] };
                 tbl[n].seg = section_seg(wp.seg);
-                d -= l;
                 l = pp.l[j];
                 n += 1;
             }
-            let mut j = 0;
-            while j <= i && d != 0.0 {
-                let mut l = l_at(j);
-                if l == 0.0 || l > d {
-                    l = d;
-                }
-                advance(&mut tbl, n, l);
-                tbl[n].r = if l_at(j) != 0.0 {
-                    r_at(j)
-                } else if j != 0 {
-                    r_at(j - 1)
-                } else {
-                    0.008
-                };
+            // `AdjPdef` ends every list with a 99999.9 m section, so none up
+            // to I has length 0 (the original falls back to the radius before
+            // it, or 8 mm), and the last ends at the wire's end below: the
+            // length the original counts down to cut it there changes nothing
+            for j in 0..=i {
+                advance(&mut tbl, n, l_at(j));
+                tbl[n].r = r_at(j);
                 tbl[n].seg = section_seg(wp.seg);
-                d -= l;
                 n += 1;
-                j += 1;
             }
         }
         _ => {
             let mut i = 0;
+            // (no section has length 0, as above)
             while i < PPMAX && d != 0.0 {
-                let mut l = pp.l[i];
-                if l == 0.0 || l > d {
-                    l = d;
-                }
+                let l = pp.l[i].min(d);
                 advance(&mut tbl, n, l);
-                tbl[n].r = if pp.l[i] != 0.0 {
-                    pp.r[i]
-                } else if i != 0 {
-                    pp.r[i - 1]
-                } else {
-                    0.008
-                };
+                tbl[n].r = pp.r[i];
                 tbl[n].seg = section_seg(wp.seg);
                 d -= l;
                 n += 1;
