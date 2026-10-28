@@ -578,35 +578,26 @@ impl Group {
     }
 
     /// Moves the coordinates at (or beyond) the bounds to new bounds
-    /// (the edge-only `SetXWidth` / `SetWidth` / `SetHeight`).
+    /// (the edge-only `SetXWidth` / `SetWidth` / `SetHeight`). Each point
+    /// moves once, by where it was: the original tests each case after the
+    /// one before, so a point beyond a bound that the move lands exactly on
+    /// the old bound moves again (a 5 cm stub below a loop that shrinks by
+    /// 5 cm vanishes).
     fn move_ends(&mut self, slots: &mut [Slot], axis: usize, nl: f64, nh: f64) {
         let (lo, hi) = (self.lo[axis], self.hi[axis]);
         for r in &self.refs {
             let w = &mut slots[r.slot].wire;
-            let (s, e) = (&mut w.start, &mut w.end);
-            if *coord(s, axis) > hi {
-                *coord(s, axis) += nh - hi;
-            }
-            if *coord(e, axis) > hi {
-                *coord(e, axis) += nh - hi;
-            }
-            if *coord(s, axis) < lo {
-                *coord(s, axis) -= lo - nl;
-            }
-            if *coord(e, axis) < lo {
-                *coord(e, axis) -= lo - nl;
-            }
-            if *coord(s, axis) == lo {
-                *coord(s, axis) = nl;
-            }
-            if *coord(e, axis) == lo {
-                *coord(e, axis) = nl;
-            }
-            if *coord(s, axis) == hi {
-                *coord(s, axis) = nh;
-            }
-            if *coord(e, axis) == hi {
-                *coord(e, axis) = nh;
+            for p in [&mut w.start, &mut w.end] {
+                let t = coord(p, axis);
+                if *t > hi {
+                    *t += nh - hi;
+                } else if *t < lo {
+                    *t -= lo - nl;
+                } else if *t == lo {
+                    *t = nl;
+                } else if *t == hi {
+                    *t = nh;
+                }
             }
         }
         self.lo[axis] = nl;
@@ -1891,6 +1882,34 @@ mod tests {
         assert!(list.apply(&ElementOp::SetPerimeter { row: 1, value: 24.0, scale_all: false }));
         let r = &list.rows()[1];
         assert_eq!((r.width, r.height, r.perimeter), (6.0, 6.0, 24.0));
+    }
+
+    #[test]
+    fn a_stub_beyond_a_bound_moves_with_it_once() {
+        // a square loop from -1 to 1 m with a 25 cm stub below its bottom
+        // (the bounds are the loop's, as the skydoor sample's)
+        let wires = vec![
+            wire((0.0, -1.0, -1.0), (0.0, -0.1, -1.0)),
+            wire((0.0, -0.1, -1.0), (0.0, 0.1, -1.0)),
+            wire((0.0, 0.1, -1.0), (0.0, 1.0, -1.0)),
+            wire((0.0, -1.0, 1.0), (0.0, 1.0, 1.0)),
+            wire((0.0, -1.0, -1.0), (0.0, -1.0, 1.0)),
+            wire((0.0, 1.0, -1.0), (0.0, 1.0, 1.0)),
+            wire((0.0, -0.1, -1.0), (0.0, -0.1, -1.25)),
+            wire((0.0, 0.1, -1.0), (0.0, 0.1, -1.25)),
+            wire((0.0, -0.1, -1.25), (0.0, 0.1, -1.25)),
+        ];
+        let mut list = ElementList::new(&wires, 21.3);
+        assert_eq!((list.groups[0].lo[Z], list.groups[0].hi[Z]), (-1.0, 1.0));
+        // the bottom 25 cm higher: the stub moves with it, its end onto the old
+        // bottom, and stays there
+        assert!(list.apply_as_original(&ElementOp::SetHeight { row: 0, value: 1.5, scale_all: false }));
+        let out = list.wires().wires;
+        let bars: Vec<_> =
+            out.iter().filter(|w| w.start.y == -0.1 && w.end.y == 0.1).map(|w| (w.start.z, w.end.z)).collect();
+        assert_eq!(bars.len(), 2);
+        assert!(bars.contains(&(-0.75, -0.75)) && bars.contains(&(-1.0, -1.0)), "{bars:?}");
+        assert!(out.iter().all(|w| w.start != w.end));
     }
 
     #[test]
