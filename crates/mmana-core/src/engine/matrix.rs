@@ -27,20 +27,15 @@ struct PsiCache {
     slots: [PsiSlot; 2],
 }
 
+/// S87 also reads the source segment's wire (P4) and the source pulse's
+/// wire, but N fixes both: the pulses that ask for N, the one starting
+/// there and the one after, are on one wire, and the segment N to N+1 is
+/// the second half of the one and the first half of the other.
 struct PsiSlot {
     /// P1, K and wire of the observation pulse.
     key: Option<(f64, i32, i32)>,
     /// By N.
-    vals: Vec<Option<PsiEntry>>,
-}
-
-/// (S87 also reads the wire of the source pulse, but N is a point of one
-/// wire: the pulses that ask for it, the one starting at N and the one
-/// before, are on that wire.)
-#[derive(Clone, Copy)]
-struct PsiEntry {
-    p4: usize,
-    psi: (f64, f64),
+    vals: Vec<Option<(f64, f64)>>,
 }
 
 impl PsiCache {
@@ -75,13 +70,11 @@ impl PsiCache {
             }
         };
         let n = p2 as usize;
-        if let Some(c) = slot.vals[n]
-            && c.p4 == p4
-        {
-            return c.psi;
+        if let Some(psi) = slot.vals[n] {
+            return psi;
         }
         let psi = e.s87(p1, p2, p3, p4, k, obs, src);
-        slot.vals[n] = Some(PsiEntry { p4, psi });
+        slot.vals[n] = Some(psi);
         psi
     }
 }
