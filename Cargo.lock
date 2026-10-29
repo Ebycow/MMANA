@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "mmana-api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "axum",
  "http-body",
@@ -2285,7 +2285,7 @@ dependencies = [
 
 [[package]]
 name = "mmana-cli"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "mmana-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "encoding_rs",
  "proptest",
@@ -2308,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "mmana-desktop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "log",
  "mmana-core",
@@ -2323,7 +2323,7 @@ dependencies = [
 
 [[package]]
 name = "mmana-measure"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2332,7 +2332,7 @@ dependencies = [
 
 [[package]]
 name = "mmana-wasm"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "js-sys",
  "mmana-core",

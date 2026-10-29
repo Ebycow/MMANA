@@ -10,7 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 js-sys = "0.3.106"
-mmana-core = { version = "0.2.0", path = "../mmana-core" }
+mmana-core = { version = "0.3.0", path = "../mmana-core" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 wasm-bindgen = "0.2.129"
