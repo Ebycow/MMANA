@@ -584,6 +584,27 @@ fn ground_is_the_antenna_and_its_image_in_free_space() {
     }
 }
 
+#[test]
+fn a_monopole_on_perfect_ground_is_half_its_dipole() {
+    // image theory again, for a thin wire and one thick enough (5 cm) for
+    // MININEC's exact kernel
+    for r in [0.001, 0.05] {
+        let mut monopole = project(
+            vec![Wire { radius: r, ..wire((0.0, 0.0, 0.0), (0.0, 0.0, 5.0), 10) }],
+            vec![source("w1b", 1.0, 0.0)],
+        );
+        monopole.environment.ground = GroundKind::Perfect;
+        monopole.environment.height = 0.0;
+        let dipole = project(
+            vec![Wire { radius: r, ..wire((0.0, 0.0, -5.0), (0.0, 0.0, 5.0), 20) }],
+            vec![source("w1c", 1.0, 0.0)],
+        );
+        let (a, b) = (calc(&monopole).impedance, calc(&dipole).impedance);
+        let half = Complex { re: b.re / 2.0, im: b.im / 2.0 };
+        assert!(rel(a, half) < 2e-4, "radius {r}: {a:?} vs {half:?}");
+    }
+}
+
 /// Feeds element 1 with element 2 shorted (a 0 V source) and the other way
 /// round: I2/V1 and I1/V2, whose difference reciprocity makes 0.
 fn reciprocity_error(first: Wire, second: Wire) -> f64 {

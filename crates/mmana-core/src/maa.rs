@@ -689,6 +689,16 @@ mod tests {
     }
 
     #[test]
+    fn wire_notes_of_no_wire_are_skipped() {
+        let mut p = parse(DP).project;
+        p.antenna.wires[0].note = "給電".into();
+        let begin = format!("{WIRE_NOTE_BEGIN}\r\n");
+        let text = write(&p).replace(&begin, &format!("{begin}0=zero\r\nx=bad\r\n2=two\r\n"));
+        let back = parse(&text).project;
+        assert_eq!(back.antenna.wires.iter().map(|w| w.note.as_str()).collect::<Vec<_>>(), ["給電"]);
+    }
+
+    #[test]
     fn wire_groups_round_trip() {
         let mut p = parse(DP).project;
         p.antenna.wires[0].note = "給電".into();

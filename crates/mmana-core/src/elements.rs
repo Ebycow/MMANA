@@ -2084,6 +2084,10 @@ mod tests {
         assert!(list.apply(&ElementOp::SetKind { row: 0, kind: ElementKind::VerticalDoubleTriangle }));
         let row = &list.rows()[0];
         assert!((row.width - 28.4).abs() < 1e-9 && (row.height - 14.2).abs() < 1e-9, "{row:?}");
+        // and the double square 1.5 λ round
+        let mut list = ElementList::new(&[wire((0.0, 1.0, 2.0), (0.0, 1.0, 2.0))], 20.0);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: ElementKind::VerticalDoubleSquare }));
+        assert_eq!(list.rows()[0].perimeter, 30.0);
     }
 
     #[test]
