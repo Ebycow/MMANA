@@ -638,6 +638,14 @@ mod tests {
     }
 
     #[test]
+    fn a_taper_with_both_divisions_round_trips() {
+        let text = DP.replace("8.000e-04,\t-1\r\n", "8.000e-04,\t400,40\r\n");
+        let p = parse(&text);
+        assert_eq!(p.project.antenna.wires[0].segmentation, Segmentation::TaperCustom { dm1: 400, dm2: Some(40) });
+        assert_eq!(write(&p.project), text);
+    }
+
+    #[test]
     fn frequency_keeps_its_precision() {
         // MMANA rounds it to 0.001 MHz through the display (see porting notes)
         let p = parse(&DP.replace("\r\n14.05\r\n", "\r\n14.05049\r\n")).project;
