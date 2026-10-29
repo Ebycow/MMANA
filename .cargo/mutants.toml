@@ -37,7 +37,10 @@ exclude_re = [
     # S87's shortcut for the self term only answers early what L135's exact
     # kernel answers too; these make the midpoint an integer or -1/2, which
     # the half-integer observation point never is, so it only falls through
-    'kernel\.rs:\d+:(58|64): replace [+/] with [-*] in Mininec::s87$',
+    'kernel\.rs:\d+:(58|64): replace [+/] with [-*%] in Mininec::s87$',
+    # likewise S102's for half a segment: a radius exactly SRM never occurs,
+    # and below it L135 gives the same
+    'kernel\.rs:\d+:33: replace < with (==|<=) in Mininec::s102$',
     # pulses come wire by wire: a pulse starts on the last wire only when the
     # pulse is on it, and L1270 then goes on to L1279 too
     'geometry\.rs:\d+:31: replace > with >= in Mininec::number_pulses$',
@@ -66,6 +69,9 @@ exclude_re = [
     # the ends of a wire with no pulse: nothing reads them, and the next
     # wire writes over where the mutant puts them
     'geometry\.rs:\d+:39: replace - with \+ in Mininec::build_wires$',
+    # which slot of the PSI cache is reused sets only how often PSI is
+    # computed again, not its value
+    'replace <= with > in PsiCache::s87$',
     # a ratio exactly 1e-9 past 1.1, 6 or 10, which no geometry lands on
     'kernel\.rs:\d+:(16|18): replace > with >= in Mininec::l135$',
     # a copy is recomputed only when it is exactly 0, which no element of
