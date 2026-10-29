@@ -45,6 +45,8 @@ exclude_re = [
     # matches only the junction at wire i's other end, whose wires share
     # that junction with wire i already
     'geometry\.rs:\d+:(26|31): delete - in Mininec::connect$',
+    # SNO and SMAX are read only as their difference, on one wire
+    'geometry\.rs:\d+:37: replace - with [+/] in Mininec::number_pulses$',
     # pulses come wire by wire: a pulse starts on the last wire only when the
     # pulse is on it, and L1270 then goes on to L1279 too
     'geometry\.rs:\d+:31: replace > with >= in Mininec::number_pulses$',
@@ -76,6 +78,10 @@ exclude_re = [
     # which slot of the PSI cache is reused sets only how often PSI is
     # computed again, not its value
     'replace <= with > in PsiCache::s87$',
+    # S28 integrates an image from its other end: the two points of each
+    # pair swap, whose sum is the same, and the exact kernel's half-interval
+    # is taken only about a segment's own midpoint, whose halves mirror
+    'kernel\.rs:\d+:33: replace < with (==|>|<=) in Mininec::s28$',
     # a ratio exactly 1e-9 past 1.1, 6 or 10, which no geometry lands on
     'kernel\.rs:\d+:(16|18): replace > with >= in Mininec::l135$',
     # a copy is recomputed only when it is exactly 0, which no element of
