@@ -1842,7 +1842,8 @@ pub fn optimize(
         options,
         trade: setup.weights.trade_off(),
         v: 1.0,
-        am: -f64::MAX,
+        // (set for each variable before it is read)
+        am: f64::MIN,
         vm: -f64::MAX,
         ad,
         trials: VecDeque::new(),

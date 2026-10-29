@@ -48,11 +48,8 @@ impl Mininec {
         if a <= self.srm {
             d = d3.sqrt();
         } else {
-            let mut dd = d3 + a2;
-            if dd > 0.0 {
-                dd = dd.sqrt();
-            }
-            d = dd;
+            // (the original takes the root only above 0, where it is 0 too)
+            d = (d3 + a2).sqrt();
             // criteria for using reduced kernel
             if i6f != 0.0 {
                 // exact kernel calculation with elliptic integral
