@@ -1311,8 +1311,10 @@ impl ElementList {
     /// does too):
     /// - sizes, positions or wires that are not finite (a width of 1e300
     ///   makes the perimeter infinite);
-    /// - a resize, rounding, change of form or copy after which the table
-    ///   no longer describes the element's wires where it did before: a
+    /// - a resize, rounding or copy after which the table no longer
+    ///   describes the element's wires where it did before, or a change of
+    ///   form after which it does not describe them (a double triangle
+    ///   under 2 cm high, whose middle points stay 1 cm off the centre): a
     ///   width that moves only the outermost points (no `scaleAll`) past
     ///   other points of the element shows the new width while the wires
     ///   keep the old one, the moved wires lying over the others;
@@ -1338,8 +1340,10 @@ impl ElementList {
         let len = self.groups.len();
         let resized: Vec<(usize, Described)> = match *op {
             RoundValues { .. } => (0..len).map(|row| (row, described(self, row))).collect(),
-            // (a rebuilt element is a template, which the table describes:
-            // there is nothing for it to stop describing)
+            // a rebuilt element must come out as the table shows it: the
+            // double triangle keeps its middle points 1 cm off the centre,
+            // so one less than 2 cm high spans 2 cm (its bounds are not read)
+            SetKind { row, .. } => vec![(row, ([true; 4], ([0.0; 3], [0.0; 3])))],
             // an edit in the new row first copies the last element, and a copy
             // is analysed again
             SetInterval { row, .. }
@@ -2246,6 +2250,21 @@ mod tests {
         assert!(list.apply(&ElementOp::SetKind { row: 0, kind: VerticalDoubleTriangle }));
         let row = &list.rows()[0];
         assert!((row.width - 14.2).abs() < 1e-9 && (row.height - 7.1).abs() < 1e-9, "{row:?}");
+    }
+
+    #[test]
+    fn a_double_triangle_under_2_cm_high_is_refused() {
+        // its middle points stay 1 cm off the centre: rebuilt from a quad of
+        // perimeter p it is 0.355 p high, so p = 5 cm would span 2 cm
+        let rebuilt = |perimeter, original: bool| {
+            let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+            assert!(list.apply(&ElementOp::SetPerimeter { row: 1, value: perimeter, scale_all: false }));
+            let op = ElementOp::SetKind { row: 1, kind: ElementKind::VerticalDoubleTriangle };
+            if original { list.apply_as_original(&op) } else { list.apply(&op) }
+        };
+        assert!(!rebuilt(0.05, false));
+        assert!(rebuilt(0.05, true));
+        assert!(rebuilt(0.06, false));
     }
 
     #[test]
