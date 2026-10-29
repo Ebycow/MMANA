@@ -1868,6 +1868,30 @@ mod tests {
         assert_eq!([rows[0].interval, rows[1].interval, rows[2].interval], [2.0, 0.0, 3.0]);
         assert_eq!([rows[0].position, rows[1].position, rows[2].position], [0.0, 2.0, 5.0]);
         assert_eq!(rows[0].width, 10.0);
+        // the sizes and the centre along X are those of the wires
+        assert!(list.described().iter().all(|d| *d == [true; 4]), "{:?}", list.described());
+    }
+
+    #[test]
+    fn a_triangle_listed_from_its_apex_points_where_the_apex_is() {
+        use ElementKind::*;
+        for (apex, kind) in [(2.0, VerticalTriangle), (-2.0, VerticalInvertedTriangle)] {
+            let wires = [
+                wire((0.0, 0.0, apex), (0.0, 1.0, 0.0)),
+                wire((0.0, 1.0, 0.0), (0.0, -1.0, 0.0)),
+                wire((0.0, -1.0, 0.0), (0.0, 0.0, apex)),
+            ];
+            assert_eq!(ElementList::new(&wires, 21.3).rows()[0].kind, kind, "apex at {apex}");
+        }
+    }
+
+    #[test]
+    fn a_radius_rounded_to_nothing_takes_the_originals_fallback() {
+        // 0.01 mm to 0.1 mm is 0, which the original replaces by 1000/sc
+        let mut list = ElementList::new(&[Wire { radius: 1e-5, ..wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)) }], 21.3);
+        let op = ElementOp::RoundValues { decimals: 1, in_wavelengths: false, in_millimetres: false, scale_all: false };
+        assert!(list.apply_as_original(&op));
+        assert_eq!(list.wires().wires[0].radius, 100.0);
     }
 
     #[test]
@@ -2243,13 +2267,27 @@ mod tests {
         ] {
             let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
             assert!(list.apply(&ElementOp::SetKind { row: 0, kind }), "{kind:?}");
-            assert!(list.wires().wires.iter().all(|w| w.segmentation == Segmentation::Taper), "{kind:?}");
+            let wires = list.wires().wires;
+            assert!(wires.iter().all(|w| w.segmentation == Segmentation::Taper), "{kind:?}");
+            // closed: every end meets the end of another wire
+            let ends = |i: usize| [wires[i].start, wires[i].end];
+            for i in 0..wires.len() {
+                for e in ends(i) {
+                    let met = (0..wires.len()).any(|j| j != i && ends(j).contains(&e));
+                    assert!(met, "{kind:?}: wire {} ends at {e:?} alone", i + 1);
+                }
+            }
         }
         // a dipole has no perimeter: the double triangle takes 1.42 times its width
         let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
         assert!(list.apply(&ElementOp::SetKind { row: 0, kind: VerticalDoubleTriangle }));
         let row = &list.rows()[0];
         assert!((row.width - 14.2).abs() < 1e-9 && (row.height - 7.1).abs() < 1e-9, "{row:?}");
+        // and the double square 3 times its width round, keeping the width
+        let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: VerticalDoubleSquare }));
+        let row = &list.rows()[0];
+        assert_eq!((row.width, row.height, row.perimeter), (10.0, 5.0, 30.0));
     }
 
     #[test]
