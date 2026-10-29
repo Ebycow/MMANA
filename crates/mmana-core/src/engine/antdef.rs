@@ -247,8 +247,10 @@ fn adj_pdef(pdef: &mut Vec<PDef>) {
                     j -= 1;
                 }
                 pp.l[j] = 99999.9;
+                // (the sections before were given a radius below, so only
+                // the first can still have none)
                 if pp.r[j] == 0.0 {
-                    pp.r[j] = if j != 0 { pp.r[j - 1] } else { 0.0008 };
+                    pp.r[j] = 0.0008;
                 }
                 break;
             } else if j == PPMAX - 1 {

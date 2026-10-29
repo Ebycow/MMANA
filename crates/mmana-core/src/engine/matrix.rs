@@ -27,19 +27,15 @@ struct PsiCache {
     slots: [PsiSlot; 2],
 }
 
+/// S87 also reads the source segment's wire (P4) and the source pulse's
+/// wire, but N fixes both: the pulses that ask for N, the one starting
+/// there and the one after, are on one wire, and the segment N to N+1 is
+/// the second half of the one and the first half of the other.
 struct PsiSlot {
     /// P1, K and wire of the observation pulse.
     key: Option<(f64, i32, i32)>,
     /// By N.
-    vals: Vec<Option<PsiEntry>>,
-}
-
-#[derive(Clone, Copy)]
-struct PsiEntry {
-    p4: usize,
-    /// Wire of the source pulse.
-    wire: i32,
-    psi: (f64, f64),
+    vals: Vec<Option<(f64, f64)>>,
 }
 
 impl PsiCache {
@@ -48,11 +44,9 @@ impl PsiCache {
         Self { slots: [slot(), slot()] }
     }
 
+    /// (`p3` is always `p2 + 1`, see [`Mininec::s87`].)
     #[allow(clippy::too_many_arguments)]
     fn s87(&mut self, e: &Mininec, p1: f64, p2: f64, p3: f64, p4: usize, k: i32, obs: usize, src: usize) -> (f64, f64) {
-        if p3 != p2 + 1.0 {
-            return e.s87(p1, p2, p3, p4, k, obs, src);
-        }
         let key = Some((p1, k, e.wi[obs]));
         let slot = match self.slots.iter().position(|s| s.key == key) {
             Some(s) => &mut self.slots[s],
@@ -76,15 +70,11 @@ impl PsiCache {
             }
         };
         let n = p2 as usize;
-        let wsrc = e.wi[src];
-        if let Some(c) = slot.vals[n]
-            && c.p4 == p4
-            && c.wire == wsrc
-        {
-            return c.psi;
+        if let Some(psi) = slot.vals[n] {
+            return psi;
         }
         let psi = e.s87(p1, p2, p3, p4, k, obs, src);
-        slot.vals[n] = Some(PsiEntry { p4, wire: wsrc, psi });
+        slot.vals[n] = Some(psi);
         psi
     }
 }

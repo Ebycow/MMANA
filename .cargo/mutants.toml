@@ -7,6 +7,7 @@ exclude_re = [
     'replace \| with \^ in Environment::fbr_code$',
     # a maximum or bound replaced by an equal value
     'replace < with <= in PatternState::horizontal_maxima$',
+    'replace > with >= in CurState::set_cur_dir$',
     'elements\.rs:\d+:34: replace [<>] with [<>]= in Group::ana_type$',
     # a polar wire is compared to 1e-9 of its length and of 360°: rounding
     # stays far below either, and a value that cannot be set (an azimuth
@@ -19,16 +20,33 @@ exclude_re = [
     'farfield\.rs:\d+:15: replace > with >= in Mininec::far_field_at$',
     'segment\.rs:\d+:34: replace > with >= in comb_wire$',
     'segment\.rs:\d+:60: replace > with >= in comb_wire$',
+    # a stack of 1 copies the wires once, moved by 0
+    'replace > with >= in AntDef::stack$',
     # rows per parallel block: the elements are the same however many
     'replace / with [*%] in Mininec::fill_rows$',
     # the sign of 0 sets the phase of a field of 0, which nothing reads
     'replace [<>] with [<>]= in sgn_f$',
+    # the sign of an imaginary part of 0 (the root of a lossless medium's
+    # constant) only signs zeros that are added to other terms
+    'farfield\.rs:\d+:77: replace < with <= in csqrt$',
+    # turning the sign of every term of an s-domain load turns its numerator
+    # and denominator alike
+    'matrix\.rs:\d+:29: delete - in Mininec::add_loads$',
     # R = 0 gives an infinite Q, which the check after it refuses as well
     'resonance\.rs:\d+:35: replace > with >= in series_circuit$',
     # S87's shortcut for the self term only answers early what L135's exact
     # kernel answers too; these make the midpoint an integer or -1/2, which
     # the half-integer observation point never is, so it only falls through
-    'kernel\.rs:\d+:(76|82): replace [+/] with [-*] in Mininec::s87$',
+    'kernel\.rs:\d+:(58|64): replace [+/] with [-*%] in Mininec::s87$',
+    # likewise S102's for half a segment: a radius exactly SRM never occurs,
+    # and below it L135 gives the same
+    'kernel\.rs:\d+:33: replace < with (==|<=) in Mininec::s102$',
+    # a free end is marked -i only to be unlike every junction: marked +i it
+    # matches only the junction at wire i's other end, whose wires share
+    # that junction with wire i already
+    'geometry\.rs:\d+:(26|31): delete - in Mininec::connect$',
+    # SNO and SMAX are read only as their difference, on one wire
+    'geometry\.rs:\d+:37: replace - with [+/] in Mininec::number_pulses$',
     # pulses come wire by wire: a pulse starts on the last wire only when the
     # pulse is on it, and L1270 then goes on to L1279 too
     'geometry\.rs:\d+:31: replace > with >= in Mininec::number_pulses$',
@@ -50,23 +68,38 @@ exclude_re = [
     # at the last pulse, going round once more for the last wire sets what
     # was just set
     'geometry\.rs:\d+:100: replace < with <= in Mininec::number_pulses$',
-    # the arrays have room for 2 more points per wire than any wire uses
-    'geometry\.rs:\d+:82: replace \+ with \* in Mininec::build_wires$',
+    # the arrays have room for 2 more points per wire than any wire uses;
+    # with at least one segment per wire, 2 x wires x segments is never
+    # fewer than segments + 2 x wires
+    'geometry\.rs:\d+:(73|82): replace \+ with \* in Mininec::build_wires$',
     # the ends of a wire with no pulse: nothing reads them, and the next
     # wire writes over where the mutant puts them
     'geometry\.rs:\d+:39: replace - with \+ in Mininec::build_wires$',
-    # a ratio exactly 1e-9 past 6 or 10, which no geometry lands on
-    'kernel\.rs:\d+:18: replace > with >= in Mininec::l135$',
-    # a cache of PSI: computing it each time gives the same values
-    'matrix\.rs:\d+:21: replace \+ with - in PsiCache::s87$',
+    # which slot of the PSI cache is reused sets only how often PSI is
+    # computed again, not its value
+    'replace <= with > in PsiCache::s87$',
+    # S28 integrates an image from its other end: the two points of each
+    # pair swap, whose sum is the same, and the exact kernel's half-interval
+    # is taken only about a segment's own midpoint, whose halves mirror
+    'kernel\.rs:\d+:33: replace < with (==|>|<=) in Mininec::s28$',
+    # a ratio exactly 1e-9 past 1.1, 6 or 10, which no geometry lands on
+    'kernel\.rs:\d+:(16|18): replace > with >= in Mininec::l135$',
     # a copy is recomputed only when it is exactly 0, which no element of
     # the k = +1 term is
-    'matrix\.rs:\d+:46: replace % with [+/] in Mininec::fill$',
+    'matrix\.rs:\d+:(34|38|46): replace [/%+] with [-+*/%] in Mininec::fill$',
+    # a pulse whose second half is on a wire run backwards (an end on the
+    # ground, or joined end to end with an earlier wire) is the last on its
+    # wire, so the next pulse is never on that wire and the vertical-wire
+    # test is not reached
+    'matrix\.rs:\d+:(37|52): replace [+!]=? with [-*=]=? in Mininec::copy_sources$',
+    # a pulse on the ground is half the wire and half its image, its own
+    # image: skipping the antenna's term instead of the image's gives the same
+    'nearfield\.rs:\d+:34: replace < with > in Mininec::magnetic_point$',
     # a real part exactly 0 with an imaginary part that is not
     'nearfield\.rs:\d+:21: replace > with >= in Mininec::electric_point$',
     # a section exactly λ/dm2 long
     'segment\.rs:\d+:45: replace > with >= in AntDef::tei_b$',
-    'segment\.rs:\d+:56: replace < with <= in comb_wire$',
+    'segment\.rs:\d+:(52|56): replace < with <= in comb_wire$',
     # the high nibble shifted left has no bits of the low one
     'replace \| with \^ in decode_note$',
     # dividing up to p/2 instead of √p finds the same primes

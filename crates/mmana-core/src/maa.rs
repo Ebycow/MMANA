@@ -638,6 +638,14 @@ mod tests {
     }
 
     #[test]
+    fn a_taper_with_both_divisions_round_trips() {
+        let text = DP.replace("8.000e-04,\t-1\r\n", "8.000e-04,\t400,40\r\n");
+        let p = parse(&text);
+        assert_eq!(p.project.antenna.wires[0].segmentation, Segmentation::TaperCustom { dm1: 400, dm2: Some(40) });
+        assert_eq!(write(&p.project), text);
+    }
+
+    #[test]
     fn frequency_keeps_its_precision() {
         // MMANA rounds it to 0.001 MHz through the display (see porting notes)
         let p = parse(&DP.replace("\r\n14.05\r\n", "\r\n14.05049\r\n")).project;
@@ -678,6 +686,16 @@ mod tests {
         let back = parse(&decode(&encode(&text))).project;
         assert_eq!(back.antenna.wires[0].note, "給電 element");
         assert_eq!(back.antenna.comment, "hello\r\n");
+    }
+
+    #[test]
+    fn wire_notes_of_no_wire_are_skipped() {
+        let mut p = parse(DP).project;
+        p.antenna.wires[0].note = "給電".into();
+        let begin = format!("{WIRE_NOTE_BEGIN}\r\n");
+        let text = write(&p).replace(&begin, &format!("{begin}0=zero\r\nx=bad\r\n2=two\r\n"));
+        let back = parse(&text).project;
+        assert_eq!(back.antenna.wires.iter().map(|w| w.note.as_str()).collect::<Vec<_>>(), ["給電"]);
     }
 
     #[test]

@@ -72,8 +72,13 @@ jobs:
           NIGHT: ${{ inputs.night }}
       # one job at a time: a mutant that breaks a limit runs the inputs in
       # allocation.rs, which the test allocator stops at 256 MB. A mutant that
-      # makes the tests run past the timeout counts as caught.
+      # makes the tests run past the timeout counts as caught. A mutant that
+      # allocates without end (the expression parser never reaching the end
+      # of its text) took the whole runner down, so every process gets 8 GB
+      # of address space: past it the allocation fails and the mutant counts
+      # as caught.
       - run: |
+          ulimit -v 8388608
           status=0
           cargo mutants -p mmana-core -j 1 --timeout 120 --sharding round-robin \
             --shard $(( ${{ matrix.job }} * 14 + ${{ steps.night.outputs.n }} ))/84 || status=$?

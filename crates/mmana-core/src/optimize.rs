@@ -1842,7 +1842,8 @@ pub fn optimize(
         options,
         trade: setup.weights.trade_off(),
         v: 1.0,
-        am: -f64::MAX,
+        // (set for each variable before it is read)
+        am: f64::MIN,
         vm: -f64::MAX,
         ad,
         trials: VecDeque::new(),
@@ -2809,6 +2810,39 @@ mod tests {
     }
 
     #[test]
+    fn a_match_below_the_reference_scores_the_reactance_it_must_cancel() {
+        // R below 50 Ω: a match transforms it up with a shunt reactance of
+        // R·√(50/R − 1), which the antenna's jX adds to (hairpin) or takes
+        // from (capacitance); the score is minus the size of what is left
+        let project = sample("3EL20.MAA");
+        let mut setup = dipole_length();
+        setup.weights = Weights { gain: 0, fb: 0, jx: 0, swr: 0, elevation: 0, matching: 1, current: 0 };
+        let mut first = |matching| {
+            setup.goals.matching = matching;
+            let mut first = None;
+            optimize(&project, &CalcOptions::default(), &setup, None, |p| {
+                first = p.score.map(|s| (s, p.impedance));
+                first.is_none()
+            })
+            .unwrap();
+            first.unwrap()
+        };
+        let (capacitance, z) = first(Matching::Capacitance);
+        let (hairpin, _) = first(Matching::Hairpin);
+        let (r, x) = (z.re as f32 as f64, z.im as f32 as f64);
+        assert!(r < 50.0, "{z:?}");
+        let shunt = r * (50.0 / r - 1.0).sqrt();
+        let ratio = capacitance / hairpin;
+        let expected = (shunt - x).abs() / (shunt + x).abs();
+        assert!((ratio / expected - 1.0).abs() < 1e-9, "{ratio} vs {expected} at {z:?}");
+        // a given R + jX scores minus √(4·ΔR² + ΔX²)
+        let (given, _) = first(Matching::Impedance { r: Some(30.0), x: Some(5.0) });
+        let ratio = given / capacitance;
+        let expected = (4.0 * (r - 30.0).powi(2) + (x - 5.0).powi(2)).sqrt() / (shunt - x).abs();
+        assert!((ratio / expected - 1.0).abs() < 1e-9, "{ratio} vs {expected} at {z:?}");
+    }
+
+    #[test]
     fn a_trial_that_takes_no_power_is_never_the_best() {
         // the HB9CV's feed resistance goes below 0 on the way, where the
         // matching goal took the square root of a negative number
@@ -3167,6 +3201,27 @@ mod tests {
     }
 
     #[test]
+    fn every_element_at_the_radiators_x_comes_first() {
+        // a reflector, the fed dipole with another stacked above it, a director
+        let mut project = with_wires(&[
+            ((-2.0, -5.2, 0.0), (-2.0, 5.2, 0.0)),
+            ((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+            ((0.0, -5.0, 4.0), (0.0, 5.0, 4.0)),
+            ((3.0, -4.0, 0.0), (3.0, 4.0, 0.0)),
+        ]);
+        project.antenna.sources[0].pulse = "w2c".into();
+        let mut order: Vec<usize> = Vec::new();
+        for (t, _) in all_elements(&project) {
+            if let VariableTarget::Element { element, .. } = t
+                && order.last() != Some(&element)
+            {
+                order.push(element);
+            }
+        }
+        assert_eq!(order, [2, 1, 0, 3]);
+    }
+
+    #[test]
     fn elements_on_the_same_x_are_linked_only_when_equal() {
         // two dipoles stacked at X = 0, then one of them wider
         let stacked = |half: f64| {
@@ -3222,6 +3277,20 @@ mod tests {
             ]
         );
         assert_eq!(edit.setup.variables[1].min, -2000.0);
+    }
+
+    #[test]
+    fn linking_loads_takes_only_loads_of_the_same_type() {
+        // an R + jX load of 2 Ω between two coils of 2 µH
+        let mut project = sample("DP20.MAA");
+        let load = |kind| crate::Load { pulse: "w1c".into(), kind };
+        let coil = LoadKind::Lc { inductance_uh: 2.0, capacitance_pf: 0.0, q: 0.0 };
+        project.antenna.loads = vec![load(coil.clone()), load(LoadKind::Impedance { r: 2.0, x: 0.0 }), load(coil)];
+        let first = VariableTarget::Load { load: 0, part: LoadPart::Primary };
+        let edit =
+            setup_of(&project, &[SetupOp::SetTarget { index: 0, target: first }, SetupOp::LinkSame { index: 0 }]);
+        let third = VariableTarget::Load { load: 2, part: LoadPart::Primary };
+        assert_eq!(targets(&edit), [(first, Link::Independent), (third, Link::Same { variable: 0 })]);
     }
 
     #[test]

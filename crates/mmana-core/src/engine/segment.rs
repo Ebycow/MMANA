@@ -404,7 +404,9 @@ pub(super) fn comb_wire(ap: &AntDef, pp: &PDef, wp: &WDef) -> Vec<WDef> {
                     } else if pp.ty & 2 != 0 {
                         if wire_len(&tbl[0]) < dm_len {
                             tbl[0].seg = -1;
-                            tbl[1].seg = if n > 3 { -2 } else { -1 };
+                            // (the original takes -1 for 3 sections or fewer,
+                            // where the end below sets this one again)
+                            tbl[1].seg = -2;
                         } else {
                             tbl[0].seg = -2;
                         }

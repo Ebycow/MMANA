@@ -322,6 +322,38 @@ fn two_loads_on_one_pulse_are_in_series() {
 }
 
 #[test]
+fn a_coil_or_capacitor_with_a_q_has_its_reactance_over_q_as_resistance() {
+    let with = |kind: LoadKind| {
+        let mut p = dipole();
+        p.antenna.loads_enabled = true;
+        p.antenna.loads = vec![Load { pulse: "w1c".into(), kind }];
+        calc(&p).impedance
+    };
+    let w = 2.0 * PI * 14.05e6;
+    for (lc, x) in [((2.0, 0.0), w * 2e-6), ((0.0, 150.0), -1.0 / (w * 150e-12))] {
+        let (inductance_uh, capacitance_pf) = lc;
+        let ours = with(LoadKind::Lc { inductance_uh, capacitance_pf, q: 200.0 });
+        let rx = with(LoadKind::Impedance { r: x.abs() / 200.0, x });
+        assert!(rel(ours, rx) < 1e-6, "L {inductance_uh} µH, C {capacitance_pf} pF: {ours:?} vs {rx:?}");
+    }
+}
+
+#[test]
+fn an_s_domain_term_given_on_one_side_still_counts() {
+    // 1e-99 is the original's empty cell: (0 + 2e-6·s) / (1 + empty·s) is
+    // still of order 1, a coil of 2 µH
+    let with = |kind: LoadKind| {
+        let mut p = dipole();
+        p.antenna.loads_enabled = true;
+        p.antenna.loads = vec![Load { pulse: "w1c".into(), kind }];
+        calc(&p).impedance
+    };
+    let s_domain = with(LoadKind::SDomain { coefficients: vec![[0.0, 1.0], [2e-6, 1e-99]] });
+    let coil = with(LoadKind::Lc { inductance_uh: 2.0, capacitance_pf: 0.0, q: 0.0 });
+    assert!(rel(s_domain, coil) < 1e-6, "{s_domain:?} vs {coil:?}");
+}
+
+#[test]
 fn a_sweep_point_is_the_single_calculation_at_its_frequency() {
     for name in ["DP20.MAA", "3EL20.MAA", "4X12.MAA"] {
         let p = sample(name);
@@ -418,6 +450,17 @@ fn an_end_an_ulp_off_the_ground_is_on_it() {
     assert!(off.warnings.is_empty(), "{:?}", off.warnings);
     p.antenna.wires[0].start.z = -3e-9;
     assert_eq!(warned_wires(&p, WarningCode::BelowGround), Some(vec![1]));
+    // the length is the wire's own, wherever it is and whichever way it
+    // runs: 2.236 m from (3, 0) up to (3, 1, 2)
+    let sloper = |z: f64| {
+        let mut p = project(vec![wire((3.0, 0.0, z), (3.0, 1.0, 2.0), 10)], vec![source("w1b", 1.0, 0.0)]);
+        p.environment.ground = GroundKind::Perfect;
+        p.environment.height = 0.0;
+        calc(&p).impedance
+    };
+    let on = sloper(0.0);
+    assert_eq!(sloper(2.2e-9), on);
+    assert!(rel(sloper(2.3e-9), on) > 0.5, "{:?} vs {on:?}", sloper(2.3e-9));
     // exactly a billionth of the longest wire (4 m) down is still on it
     let mut p = project(
         vec![wire((0.0, -2.0, 5.0), (0.0, 2.0, 5.0), 10), wire((3.0, 0.0, -4e-9), (3.0, 0.0, 1.0), 10)],
@@ -541,6 +584,27 @@ fn ground_is_the_antenna_and_its_image_in_free_space() {
     }
 }
 
+#[test]
+fn a_monopole_on_perfect_ground_is_half_its_dipole() {
+    // image theory again, for a thin wire and one thick enough (5 cm) for
+    // MININEC's exact kernel
+    for r in [0.001, 0.05] {
+        let mut monopole = project(
+            vec![Wire { radius: r, ..wire((0.0, 0.0, 0.0), (0.0, 0.0, 5.0), 10) }],
+            vec![source("w1b", 1.0, 0.0)],
+        );
+        monopole.environment.ground = GroundKind::Perfect;
+        monopole.environment.height = 0.0;
+        let dipole = project(
+            vec![Wire { radius: r, ..wire((0.0, 0.0, -5.0), (0.0, 0.0, 5.0), 20) }],
+            vec![source("w1c", 1.0, 0.0)],
+        );
+        let (a, b) = (calc(&monopole).impedance, calc(&dipole).impedance);
+        let half = Complex { re: b.re / 2.0, im: b.im / 2.0 };
+        assert!(rel(a, half) < 2e-4, "radius {r}: {a:?} vs {half:?}");
+    }
+}
+
 /// Feeds element 1 with element 2 shorted (a 0 V source) and the other way
 /// round: I2/V1 and I1/V2, whose difference reciprocity makes 0.
 fn reciprocity_error(first: Wire, second: Wire) -> f64 {
@@ -633,6 +697,20 @@ fn a_result_that_takes_no_power_says_so() {
     assert!(matches!(solved.near_field(&spec), Err(mmana_core::CalcError::NonPositivePower { .. })));
     // an ordinary antenna has no such warning
     assert!(calc(&yagi()).warnings.is_empty());
+}
+
+#[test]
+fn a_result_whose_power_is_rounding_says_so() {
+    // a 10 cm dipole at 14 MHz: R = 0.004 Ω beside jX = −27 kΩ, under a
+    // millionth of the |V|·|I|/2 the source gives
+    let p = project(vec![wire((0.0, -0.05, 0.0), (0.0, 0.05, 0.0), 2)], vec![source("w1c", 1.0, 0.0)]);
+    let r = calc(&p);
+    let warning = r.warnings.iter().find(|w| w.code == WarningCode::NegligiblePower).expect("warned");
+    let s = &r.sources[0];
+    let apparent = abs(s.voltage) * abs(s.current) / 2.0;
+    let shown: f64 = warning.message.split(" W of ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
+    assert!((shown / apparent - 1.0).abs() < 1e-12, "{} vs {apparent} VA", warning.message);
+    assert!(r.total_power_w > 0.0 && r.total_power_w < 1e-6 * apparent);
 }
 
 fn drift_warned(p: &Project) -> bool {

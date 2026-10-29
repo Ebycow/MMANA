@@ -48,11 +48,8 @@ impl Mininec {
         if a <= self.srm {
             d = d3.sqrt();
         } else {
-            let mut dd = d3 + a2;
-            if dd > 0.0 {
-                dd = dd.sqrt();
-            }
-            d = dd;
+            // (the original takes the root only above 0, where it is 0 too)
+            d = (d3 + a2).sqrt();
             // criteria for using reduced kernel
             if i6f != 0.0 {
                 // exact kernel calculation with elliptic integral
@@ -115,14 +112,9 @@ impl Mininec {
     /// L135: Gaussian quadrature of the kernel over source segment `p4`.
     #[allow(clippy::too_many_arguments)]
     fn l135(&self, sp: Span, p2: f64, p3: f64, p4: usize, fvs: i32, k: i32, obs: usize, src: usize) -> (f64, f64) {
-        let mut d0 = sp.x2 * sp.x2 + sp.y2 * sp.y2 + sp.z2 * sp.z2;
-        if d0 > 0.0 {
-            d0 = d0.sqrt();
-        }
-        let mut d3 = sp.v1 * sp.v1 + sp.v2 * sp.v2 + sp.v3 * sp.v3;
-        if d3 > 0.0 {
-            d3 = d3.sqrt();
-        }
+        // (the original takes the roots only above 0, where they are 0 too)
+        let d0 = (sp.x2 * sp.x2 + sp.y2 * sp.y2 + sp.z2 * sp.z2).sqrt();
+        let d3 = (sp.v1 * sp.v1 + sp.v2 * sp.v2 + sp.v3 * sp.v3).sqrt();
         let a = self.a[p4];
         let seg = self.s[p4];
         let a2 = a * a;
@@ -141,7 +133,8 @@ impl Mininec {
             let j = self.wi[src] as usize;
             let (ji, jj) = (self.j2[i], self.j2[j]);
             if ji[1] == jj[1] || ji[1] == jj[2] || ji[2] == jj[1] || ji[2] == jj[2] {
-                if k > 0 {
+                // (k is 1 for the antenna, -1 for its image)
+                if k == 1 {
                     self.note_shortcut(&sp, seg, a, i, j);
                 }
                 if a > self.srm {
@@ -215,9 +208,10 @@ impl Mininec {
     }
 
     /// S87: PSI for the scalar potential, observation at a segment midpoint.
+    /// The interval is always a whole segment (`p3 = p2 + 1`).
     #[allow(clippy::too_many_arguments)]
     pub(super) fn s87(&self, p1: f64, p2: f64, p3: f64, p4: usize, k: i32, obs: usize, src: usize) -> (f64, f64) {
-        if k >= 1 && self.a[p4] <= self.srm && p3 == p2 + 1.0 && p1 == (p2 + p3) / 2.0 {
+        if k >= 1 && self.a[p4] <= self.srm && p1 == (p2 + p3) / 2.0 {
             return (2.0 * (self.s[p4] / self.a[p4]).ln(), -self.w * self.s[p4]);
         }
         let i4 = int_(p1);
@@ -229,9 +223,10 @@ impl Mininec {
     }
 
     /// S102: PSI for the vector potential, observation at a break point.
+    /// The interval is always half a segment (`p3 = p2 + 0.5`).
     #[allow(clippy::too_many_arguments)]
     pub(super) fn s102(&self, p1: f64, p2: f64, p3: f64, p4: usize, k: i32, obs: usize, src: usize) -> (f64, f64) {
-        if k >= 1 && self.a[p4] < self.srm && obs == src && p3 == p2 + 0.5 {
+        if k >= 1 && self.a[p4] < self.srm && obs == src {
             return ((self.s[p4] / self.a[p4]).ln(), -self.w * self.s[p4] / 2.0);
         }
         let p1i = p1 as usize;

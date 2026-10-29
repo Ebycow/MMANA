@@ -1311,8 +1311,10 @@ impl ElementList {
     /// does too):
     /// - sizes, positions or wires that are not finite (a width of 1e300
     ///   makes the perimeter infinite);
-    /// - a resize, rounding, change of form or copy after which the table
-    ///   no longer describes the element's wires where it did before: a
+    /// - a resize, rounding or copy after which the table no longer
+    ///   describes the element's wires where it did before, or a change of
+    ///   form after which it does not describe them (a double triangle
+    ///   under 2 cm high, whose middle points stay 1 cm off the centre): a
     ///   width that moves only the outermost points (no `scaleAll`) past
     ///   other points of the element shows the new width while the wires
     ///   keep the old one, the moved wires lying over the others;
@@ -1338,8 +1340,10 @@ impl ElementList {
         let len = self.groups.len();
         let resized: Vec<(usize, Described)> = match *op {
             RoundValues { .. } => (0..len).map(|row| (row, described(self, row))).collect(),
-            // (a rebuilt element is a template, which the table describes:
-            // there is nothing for it to stop describing)
+            // a rebuilt element must come out as the table shows it: the
+            // double triangle keeps its middle points 1 cm off the centre,
+            // so one less than 2 cm high spans 2 cm (its bounds are not read)
+            SetKind { row, .. } => vec![(row, ([true; 4], ([0.0; 3], [0.0; 3])))],
             // an edit in the new row first copies the last element, and a copy
             // is analysed again
             SetInterval { row, .. }
@@ -1864,6 +1868,30 @@ mod tests {
         assert_eq!([rows[0].interval, rows[1].interval, rows[2].interval], [2.0, 0.0, 3.0]);
         assert_eq!([rows[0].position, rows[1].position, rows[2].position], [0.0, 2.0, 5.0]);
         assert_eq!(rows[0].width, 10.0);
+        // the sizes and the centre along X are those of the wires
+        assert!(list.described().iter().all(|d| *d == [true; 4]), "{:?}", list.described());
+    }
+
+    #[test]
+    fn a_triangle_points_where_its_apex_is_whichever_corner_comes_first() {
+        use ElementKind::*;
+        for (apex, kind) in [(2.0, VerticalTriangle), (-2.0, VerticalInvertedTriangle)] {
+            let corners = [(0.0, 0.0, apex), (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)];
+            for first in 0..3 {
+                let at = |k: usize| corners[(first + k) % 3];
+                let wires = [wire(at(0), at(1)), wire(at(1), at(2)), wire(at(2), at(0))];
+                assert_eq!(ElementList::new(&wires, 21.3).rows()[0].kind, kind, "apex at {apex}, corner {first} first");
+            }
+        }
+    }
+
+    #[test]
+    fn a_radius_rounded_to_nothing_takes_the_originals_fallback() {
+        // 0.01 mm to 0.1 mm is 0, which the original replaces by 1000/sc
+        let mut list = ElementList::new(&[Wire { radius: 1e-5, ..wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)) }], 21.3);
+        let op = ElementOp::RoundValues { decimals: 1, in_wavelengths: false, in_millimetres: false, scale_all: false };
+        assert!(list.apply_as_original(&op));
+        assert_eq!(list.wires().wires[0].radius, 100.0);
     }
 
     #[test]
@@ -2056,6 +2084,10 @@ mod tests {
         assert!(list.apply(&ElementOp::SetKind { row: 0, kind: ElementKind::VerticalDoubleTriangle }));
         let row = &list.rows()[0];
         assert!((row.width - 28.4).abs() < 1e-9 && (row.height - 14.2).abs() < 1e-9, "{row:?}");
+        // and the double square 1.5 λ round
+        let mut list = ElementList::new(&[wire((0.0, 1.0, 2.0), (0.0, 1.0, 2.0))], 20.0);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: ElementKind::VerticalDoubleSquare }));
+        assert_eq!(list.rows()[0].perimeter, 30.0);
     }
 
     #[test]
@@ -2179,6 +2211,13 @@ mod tests {
         assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: true }));
         let ends = list.wires().wires.iter().flat_map(|w| [w.start.y, w.end.y]).fold(0.0, |m: f64, y| m.max(y));
         assert!((ends - 2.5).abs() < 1e-12 && list.rows()[0].width == 5.0);
+        // and so would rounding 6.53 m to 6.5 m
+        let mut list = ElementList::new(&wires, 21.3);
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 6.53, scale_all: false }));
+        let round =
+            ElementOp::RoundValues { decimals: 1, in_wavelengths: false, in_millimetres: false, scale_all: false };
+        assert!(!list.apply(&round));
+        assert!(list.apply_as_original(&round));
     }
 
     #[test]
@@ -2239,13 +2278,42 @@ mod tests {
         ] {
             let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
             assert!(list.apply(&ElementOp::SetKind { row: 0, kind }), "{kind:?}");
-            assert!(list.wires().wires.iter().all(|w| w.segmentation == Segmentation::Taper), "{kind:?}");
+            let wires = list.wires().wires;
+            assert!(wires.iter().all(|w| w.segmentation == Segmentation::Taper), "{kind:?}");
+            // closed: every end meets the end of another wire
+            let ends = |i: usize| [wires[i].start, wires[i].end];
+            for i in 0..wires.len() {
+                for e in ends(i) {
+                    let met = (0..wires.len()).any(|j| j != i && ends(j).contains(&e));
+                    assert!(met, "{kind:?}: wire {} ends at {e:?} alone", i + 1);
+                }
+            }
         }
         // a dipole has no perimeter: the double triangle takes 1.42 times its width
         let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
         assert!(list.apply(&ElementOp::SetKind { row: 0, kind: VerticalDoubleTriangle }));
         let row = &list.rows()[0];
         assert!((row.width - 14.2).abs() < 1e-9 && (row.height - 7.1).abs() < 1e-9, "{row:?}");
+        // and the double square 3 times its width round, keeping the width
+        let mut list = ElementList::new(&[wire((0.0, -5.0, 0.0), (0.0, 5.0, 0.0))], 21.3);
+        assert!(list.apply(&ElementOp::SetKind { row: 0, kind: VerticalDoubleSquare }));
+        let row = &list.rows()[0];
+        assert_eq!((row.width, row.height, row.perimeter), (10.0, 5.0, 30.0));
+    }
+
+    #[test]
+    fn a_double_triangle_under_2_cm_high_is_refused() {
+        // its middle points stay 1 cm off the centre: rebuilt from a quad of
+        // perimeter p it is 0.355 p high, so p = 5 cm would span 2 cm
+        let rebuilt = |perimeter, original: bool| {
+            let mut list = ElementList::new(&yagi_with_quad(), 21.3);
+            assert!(list.apply(&ElementOp::SetPerimeter { row: 1, value: perimeter, scale_all: false }));
+            let op = ElementOp::SetKind { row: 1, kind: ElementKind::VerticalDoubleTriangle };
+            if original { list.apply_as_original(&op) } else { list.apply(&op) }
+        };
+        assert!(!rebuilt(0.05, false));
+        assert!(rebuilt(0.05, true));
+        assert!(rebuilt(0.06, false));
     }
 
     #[test]
