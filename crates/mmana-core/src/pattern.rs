@@ -225,8 +225,9 @@ pub(crate) fn scan(e: &Mininec, ptn_f: i32, fix_elevation_to_zero: bool, fbr: i3
     r.set_elv(90 - v);
     e.far_field(v as f64, -0.1, 21, 0.0, 0.0, 0, |s| r.set_ptn(s));
 
-    let mut vv = r.get_adj_elv(fix_elevation_to_zero);
-    vv = if vv >= 90.0 { vv - 90.0 } else { 90.0 - vv };
+    // (the original also turns an elevation of 90° or more, which the
+    // adjusted one, below 87°, never is)
+    let vv = 90.0 - r.get_adj_elv(fix_elevation_to_zero);
     r.set_hori();
     e.far_field(vv, 0.0, 0, 0.0, pf, 360, |s| r.set_ptn(s));
     r.calc_ptn(fbr);
