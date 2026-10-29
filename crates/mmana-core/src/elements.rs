@@ -1873,15 +1873,15 @@ mod tests {
     }
 
     #[test]
-    fn a_triangle_listed_from_its_apex_points_where_the_apex_is() {
+    fn a_triangle_points_where_its_apex_is_whichever_corner_comes_first() {
         use ElementKind::*;
         for (apex, kind) in [(2.0, VerticalTriangle), (-2.0, VerticalInvertedTriangle)] {
-            let wires = [
-                wire((0.0, 0.0, apex), (0.0, 1.0, 0.0)),
-                wire((0.0, 1.0, 0.0), (0.0, -1.0, 0.0)),
-                wire((0.0, -1.0, 0.0), (0.0, 0.0, apex)),
-            ];
-            assert_eq!(ElementList::new(&wires, 21.3).rows()[0].kind, kind, "apex at {apex}");
+            let corners = [(0.0, 0.0, apex), (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)];
+            for first in 0..3 {
+                let at = |k: usize| corners[(first + k) % 3];
+                let wires = [wire(at(0), at(1)), wire(at(1), at(2)), wire(at(2), at(0))];
+                assert_eq!(ElementList::new(&wires, 21.3).rows()[0].kind, kind, "apex at {apex}, corner {first} first");
+            }
         }
     }
 
@@ -2207,6 +2207,13 @@ mod tests {
         assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: true }));
         let ends = list.wires().wires.iter().flat_map(|w| [w.start.y, w.end.y]).fold(0.0, |m: f64, y| m.max(y));
         assert!((ends - 2.5).abs() < 1e-12 && list.rows()[0].width == 5.0);
+        // and so would rounding 6.53 m to 6.5 m
+        let mut list = ElementList::new(&wires, 21.3);
+        assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 6.53, scale_all: false }));
+        let round =
+            ElementOp::RoundValues { decimals: 1, in_wavelengths: false, in_millimetres: false, scale_all: false };
+        assert!(!list.apply(&round));
+        assert!(list.apply_as_original(&round));
     }
 
     #[test]
