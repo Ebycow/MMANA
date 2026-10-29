@@ -41,6 +41,10 @@ exclude_re = [
     # likewise S102's for half a segment: a radius exactly SRM never occurs,
     # and below it L135 gives the same
     'kernel\.rs:\d+:33: replace < with (==|<=) in Mininec::s102$',
+    # a free end is marked -i only to be unlike every junction: marked +i it
+    # matches only the junction at wire i's other end, whose wires share
+    # that junction with wire i already
+    'geometry\.rs:\d+:(26|31): delete - in Mininec::connect$',
     # pulses come wire by wire: a pulse starts on the last wire only when the
     # pulse is on it, and L1270 then goes on to L1279 too
     'geometry\.rs:\d+:31: replace > with >= in Mininec::number_pulses$',
@@ -77,8 +81,10 @@ exclude_re = [
     # a copy is recomputed only when it is exactly 0, which no element of
     # the k = +1 term is
     'matrix\.rs:\d+:(34|38|46): replace [/%+] with [-+*/%] in Mininec::fill$',
-    # a pulse half on a wire run backwards ends that wire on the ground, so
-    # the next pulse is never on it and the vertical-wire test is not reached
+    # a pulse whose second half is on a wire run backwards (an end on the
+    # ground, or joined end to end with an earlier wire) is the last on its
+    # wire, so the next pulse is never on that wire and the vertical-wire
+    # test is not reached
     'matrix\.rs:\d+:(37|52): replace [+!]=? with [-*=]=? in Mininec::copy_sources$',
     # a pulse on the ground is half the wire and half its image, its own
     # image: skipping the antenna's term instead of the image's gives the same
