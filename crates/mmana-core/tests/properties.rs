@@ -339,6 +339,21 @@ fn a_coil_or_capacitor_with_a_q_has_its_reactance_over_q_as_resistance() {
 }
 
 #[test]
+fn an_s_domain_term_given_on_one_side_still_counts() {
+    // 1e-99 is the original's empty cell: (0 + 2e-6·s) / (1 + empty·s) is
+    // still of order 1, a coil of 2 µH
+    let with = |kind: LoadKind| {
+        let mut p = dipole();
+        p.antenna.loads_enabled = true;
+        p.antenna.loads = vec![Load { pulse: "w1c".into(), kind }];
+        calc(&p).impedance
+    };
+    let s_domain = with(LoadKind::SDomain { coefficients: vec![[0.0, 1.0], [2e-6, 1e-99]] });
+    let coil = with(LoadKind::Lc { inductance_uh: 2.0, capacitance_pf: 0.0, q: 0.0 });
+    assert!(rel(s_domain, coil) < 1e-6, "{s_domain:?} vs {coil:?}");
+}
+
+#[test]
 fn a_sweep_point_is_the_single_calculation_at_its_frequency() {
     for name in ["DP20.MAA", "3EL20.MAA", "4X12.MAA"] {
         let p = sample(name);

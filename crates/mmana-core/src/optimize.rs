@@ -2834,6 +2834,11 @@ mod tests {
         let ratio = capacitance / hairpin;
         let expected = (shunt - x).abs() / (shunt + x).abs();
         assert!((ratio / expected - 1.0).abs() < 1e-9, "{ratio} vs {expected} at {z:?}");
+        // a given R + jX scores minus √(4·ΔR² + ΔX²)
+        let (given, _) = first(Matching::Impedance { r: Some(30.0), x: Some(5.0) });
+        let ratio = given / capacitance;
+        let expected = (4.0 * (r - 30.0).powi(2) + (x - 5.0).powi(2)).sqrt() / (shunt - x).abs();
+        assert!((ratio / expected - 1.0).abs() < 1e-9, "{ratio} vs {expected} at {z:?}");
     }
 
     #[test]
