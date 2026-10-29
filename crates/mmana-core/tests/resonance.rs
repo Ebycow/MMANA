@@ -3,7 +3,7 @@
 use mmana_core::resonance::{
     MAX_RESONANCE_CALCULATIONS, RESONANCE_REACTANCE, ResonanceRange, ResonanceSearch, series_circuit,
 };
-use mmana_core::{CalcOptions, Complex, Point3, Project, Segmentation, Source, Wire, maa, solve};
+use mmana_core::{CalcError, CalcOptions, Complex, Point3, Project, Segmentation, Source, Wire, maa, solve};
 use std::f64::consts::PI;
 use std::path::Path;
 
@@ -103,6 +103,17 @@ fn rejects_a_start_outside_the_range() {
     // nor can a range reach down to 0 MHz
     let range = ResonanceRange { min_mhz: Some(0.0), ..Default::default() };
     assert!(mmana_core::resonance::find_resonance(&dipole(5.0), &CalcOptions::default(), &range).is_err());
+    // the error names the bound that leaves the start out
+    let bound = |range: ResonanceRange| match mmana_core::resonance::find_resonance(
+        &dipole(5.0),
+        &CalcOptions::default(),
+        &range,
+    ) {
+        Err(CalcError::OutOfRange { value, .. }) => value,
+        r => panic!("{r:?}"),
+    };
+    assert_eq!(bound(ResonanceRange { start_mhz: Some(30.0), max_mhz: Some(20.0), ..Default::default() }), 20.0);
+    assert_eq!(bound(ResonanceRange { start_mhz: Some(10.0), min_mhz: Some(12.0), ..Default::default() }), 12.0);
 }
 
 /// Every sample: a resonance found has |X| under 0.1 Ω, or X jumps across 0
@@ -168,6 +179,15 @@ fn a_search_steps_down_a_quarter_at_a_time() {
     // 14.05 MHz, 0.5 % and then four steps of at most 1.25 times reach the
     // limit at 7.025 MHz
     let found = search(&small_loop(1.0), None);
+    assert_eq!(found.resonance, None);
+    assert_eq!(found.calculations, 6);
+}
+
+#[test]
+fn a_search_steps_up_a_quarter_at_a_time() {
+    // a 2 m dipole is capacitive up to near 70 MHz: from 14.05 MHz, 0.5 %
+    // and then three steps of at most 1.25 times reach the limit at 28.1 MHz
+    let found = search(&dipole(1.0), None);
     assert_eq!(found.resonance, None);
     assert_eq!(found.calculations, 6);
 }

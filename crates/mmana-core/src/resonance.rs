@@ -207,7 +207,7 @@ pub fn find_resonance(
     // X < 0 at `below`, > 0 at `above`: narrow the interval by the fitted
     // circuit, or by halving when the last step did not halve it
     let mut previous = f64::INFINITY;
-    while samples.len() < MAX_RESONANCE_CALCULATIONS {
+    for _ in samples.len()..MAX_RESONANCE_CALCULATIONS {
         let width = above.f - below.f;
         if width <= RESOLUTION * above.f {
             return Ok(done(&samples, false, lo, hi));
