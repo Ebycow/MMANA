@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 axum = { version = "0.8.9", features = ["macros"] }
-mmana-core = { version = "0.2.0", path = "../mmana-core", features = ["openapi"] }
+mmana-core = { version = "0.3.0", path = "../mmana-core", features = ["openapi"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.154", features = ["float_roundtrip"] }
 tokio = { version = "1.54.0", features = ["full"] }
