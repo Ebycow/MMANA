@@ -322,6 +322,23 @@ fn two_loads_on_one_pulse_are_in_series() {
 }
 
 #[test]
+fn a_coil_or_capacitor_with_a_q_has_its_reactance_over_q_as_resistance() {
+    let with = |kind: LoadKind| {
+        let mut p = dipole();
+        p.antenna.loads_enabled = true;
+        p.antenna.loads = vec![Load { pulse: "w1c".into(), kind }];
+        calc(&p).impedance
+    };
+    let w = 2.0 * PI * 14.05e6;
+    for (lc, x) in [((2.0, 0.0), w * 2e-6), ((0.0, 150.0), -1.0 / (w * 150e-12))] {
+        let (inductance_uh, capacitance_pf) = lc;
+        let ours = with(LoadKind::Lc { inductance_uh, capacitance_pf, q: 200.0 });
+        let rx = with(LoadKind::Impedance { r: x.abs() / 200.0, x });
+        assert!(rel(ours, rx) < 1e-6, "L {inductance_uh} µH, C {capacitance_pf} pF: {ours:?} vs {rx:?}");
+    }
+}
+
+#[test]
 fn a_sweep_point_is_the_single_calculation_at_its_frequency() {
     for name in ["DP20.MAA", "3EL20.MAA", "4X12.MAA"] {
         let p = sample(name);
@@ -418,6 +435,17 @@ fn an_end_an_ulp_off_the_ground_is_on_it() {
     assert!(off.warnings.is_empty(), "{:?}", off.warnings);
     p.antenna.wires[0].start.z = -3e-9;
     assert_eq!(warned_wires(&p, WarningCode::BelowGround), Some(vec![1]));
+    // the length is the wire's own, wherever it is and whichever way it
+    // runs: 2.236 m from (3, 0) up to (3, 1, 2)
+    let sloper = |z: f64| {
+        let mut p = project(vec![wire((3.0, 0.0, z), (3.0, 1.0, 2.0), 10)], vec![source("w1b", 1.0, 0.0)]);
+        p.environment.ground = GroundKind::Perfect;
+        p.environment.height = 0.0;
+        calc(&p).impedance
+    };
+    let on = sloper(0.0);
+    assert_eq!(sloper(2.2e-9), on);
+    assert!(rel(sloper(2.3e-9), on) > 0.5, "{:?} vs {on:?}", sloper(2.3e-9));
     // exactly a billionth of the longest wire (4 m) down is still on it
     let mut p = project(
         vec![wire((0.0, -2.0, 5.0), (0.0, 2.0, 5.0), 10), wire((3.0, 0.0, -4e-9), (3.0, 0.0, 1.0), 10)],
@@ -633,6 +661,20 @@ fn a_result_that_takes_no_power_says_so() {
     assert!(matches!(solved.near_field(&spec), Err(mmana_core::CalcError::NonPositivePower { .. })));
     // an ordinary antenna has no such warning
     assert!(calc(&yagi()).warnings.is_empty());
+}
+
+#[test]
+fn a_result_whose_power_is_rounding_says_so() {
+    // a 10 cm dipole at 14 MHz: R = 0.004 Ω beside jX = −27 kΩ, under a
+    // millionth of the |V|·|I|/2 the source gives
+    let p = project(vec![wire((0.0, -0.05, 0.0), (0.0, 0.05, 0.0), 2)], vec![source("w1c", 1.0, 0.0)]);
+    let r = calc(&p);
+    let warning = r.warnings.iter().find(|w| w.code == WarningCode::NegligiblePower).expect("warned");
+    let s = &r.sources[0];
+    let apparent = abs(s.voltage) * abs(s.current) / 2.0;
+    let shown: f64 = warning.message.split(" W of ").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap();
+    assert!((shown / apparent - 1.0).abs() < 1e-12, "{} vs {apparent} VA", warning.message);
+    assert!(r.total_power_w > 0.0 && r.total_power_w < 1e-6 * apparent);
 }
 
 fn drift_warned(p: &Project) -> bool {

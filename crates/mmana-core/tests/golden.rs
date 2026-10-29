@@ -321,6 +321,8 @@ fn exports_match_original() {
                     let tol = f(b).abs() * 1e-6 + scale * 1e-12;
                     assert!((a - f(b)).abs() <= tol, "{}: near {a} vs {b}", case.name);
                 }
+                // the phase lies within ±180°
+                assert!(o.phase_deg.abs() <= 180.0, "{}: phase {}", case.name, o.phase_deg);
                 if f(&t[6]) > scale * 1e-6 {
                     let d = (o.phase_deg - f(&t[7])).abs();
                     assert!(d <= 1e-5 || (d - 360.0).abs() <= 1e-5, "{}: phase {} vs {}", case.name, o.phase_deg, t[7]);
