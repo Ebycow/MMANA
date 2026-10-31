@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.4.0
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
       # models, element edits (about 2 minutes) and optimisations (about 8)
       - run: cargo test -p mmana-core --release --test random_models --test random_edits --test random_optimize
         env:
@@ -39,8 +39,8 @@ jobs:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v4.4.0
+      - uses: actions/setup-node@v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -62,12 +62,12 @@ jobs:
         job: [0, 1, 2, 3, 4, 5]
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.4.0
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - uses: Swatinem/rust-cache@v2.9.3
+      - uses: taiki-e/install-action@v2.88.1
         with:
           tool: cargo-mutants
       - id: night
@@ -88,7 +88,7 @@ jobs:
             --shard $(( ${{ matrix.job }} * 14 + ${{ steps.night.outputs.n }} ))/84 || status=$?
           if [ -s mutants.out/missed.txt ]; then exit 2; fi
           [ "$status" -eq 0 ] || [ "$status" -eq 3 ]
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4.6.2
         if: always()
         with:
           name: mutants.out-night${{ steps.night.outputs.n }}-${{ matrix.job }}
