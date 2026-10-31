@@ -1,10 +1,13 @@
 version: 2
 updates:
-  # also regenerates the entries in .github/workflows/actions.lock
+  # also regenerates the entries in .github/workflows/actions.lock, except
+  # that of a branch (rust-toolchain@master): gh actions-lock --relock
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ['*']
