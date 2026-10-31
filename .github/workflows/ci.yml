@@ -95,3 +95,17 @@ jobs:
       - name: Compare the wasm and native engines
         working-directory: apps/desktop
         run: npm run test:wasm
+
+  # actions.lock must cover every workflow and still match upstream.
+  lockfile:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+      - run: gh extension install github/gh-actions-lock --pin v0.4.0
+      - run: gh actions-lock --verify
