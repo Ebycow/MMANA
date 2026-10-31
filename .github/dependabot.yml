@@ -1,0 +1,10 @@
+version: 2
+updates:
+  # also regenerates the entries in .github/workflows/actions.lock
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
