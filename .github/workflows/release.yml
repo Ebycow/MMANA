@@ -41,8 +41,9 @@ jobs:
       - name: Install frontend dependencies
         working-directory: apps/desktop
         run: npm ci
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: stable
           targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
       # builds the installers and attaches them to a draft release for the pushed tag

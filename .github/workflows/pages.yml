@@ -28,8 +28,9 @@ jobs:
         # the tags, for the version shown in the app (git describe)
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       # the CLI must be the version of the wasm-bindgen crate in Cargo.lock
