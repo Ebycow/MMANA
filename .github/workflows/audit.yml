@@ -1,0 +1,49 @@
+name: Audit
+
+# Known vulnerabilities in the locked dependencies. An advisory can appear
+# without any change here, so this also runs every night. Dependabot raises
+# the fixes it can (.github/dependabot.yml); this fails on what is left.
+on:
+  pull_request:
+    paths:
+      - Cargo.lock
+      - apps/desktop/package-lock.json
+      - .github/workflows/audit.yml
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@v2.88.1
+        with:
+          tool: cargo-audit
+      # vulnerabilities only: unsound and unmaintained crates are warnings
+      # (glib 0.18, which Tauri needs on Linux, is unsound)
+      - run: cargo audit
+
+  npm:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
+    steps:
+      - uses: actions/checkout@v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 22
+      # what ships, at any severity
+      - run: npm audit --omit=dev
+      # the build and test tools too, from high up (npm has no way to ignore
+      # one advisory, and openapi-typescript holds a moderate one: minimatch)
+      - run: npm audit --audit-level=high
