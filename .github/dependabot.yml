@@ -11,3 +11,23 @@ updates:
     groups:
       actions:
         patterns: ['*']
+  # security updates only, one pull request for each ecosystem; the limit
+  # stops the version updates. .github/workflows/audit.yml fails on the rest.
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ['*']
+  - package-ecosystem: npm
+    directory: /apps/desktop
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ['*']
