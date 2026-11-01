@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4.4.0
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -39,8 +39,8 @@ jobs:
       run:
         working-directory: apps/desktop
     steps:
-      - uses: actions/checkout@v4.4.0
-      - uses: actions/setup-node@v4.4.0
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -62,7 +62,7 @@ jobs:
         job: [0, 1, 2, 3, 4, 5]
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v4.4.0
+      - uses: actions/checkout@v7.0.1
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
@@ -88,7 +88,7 @@ jobs:
             --shard $(( ${{ matrix.job }} * 14 + ${{ steps.night.outputs.n }} ))/84 || status=$?
           if [ -s mutants.out/missed.txt ]; then exit 2; fi
           [ "$status" -eq 0 ] || [ "$status" -eq 3 ]
-      - uses: actions/upload-artifact@v4.6.2
+      - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: mutants.out-night${{ steps.night.outputs.n }}-${{ matrix.job }}
