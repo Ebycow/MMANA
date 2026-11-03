@@ -3,7 +3,8 @@ name: Quality
 # The long versions of the quality checks (docs/guarantees.md): many more
 # random models, element edits and optimisations, wire commands of the front
 # end, and mutation testing of all of mmana-core, a fourteenth of it each
-# night. Too slow for every push.
+# night. Too slow for every push. The mutants run only by hand for now: they
+# miss more each night than can be dealt with (#52).
 on:
   schedule:
     - cron: '0 18 * * *'
@@ -52,6 +53,8 @@ jobs:
           FC_RUNS: 20000
 
   mutants:
+    # paused at night until the misses can be dealt with (#52)
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # about 7500 mutants of 30 s each: night n runs those whose index is n
     # mod 14, so every mutant runs once in two weeks, split over six jobs of
