@@ -424,10 +424,7 @@ pub(super) fn comb_wire(ap: &AntDef, pp: &PDef, wp: &WDef) -> Vec<WDef> {
             for i in 0..n {
                 if tbl[i].seg == 0 && i != n / 2 {
                     let d = wire_len(&tbl[i]);
-                    let mut nn = (d / dm_len) as i32;
-                    if nn == 0 {
-                        nn += 1;
-                    }
+                    let mut nn = ((d / dm_len) as i32).max(1);
                     if nn <= 4 && (d / nn as f64) * DM2DEF > dm_len {
                         nn += 1;
                     }

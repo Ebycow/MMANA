@@ -83,7 +83,7 @@ impl Mininec {
         let (f4, f5, f6, f7) = f;
         let [_, cj1, cj2] = self.ci[j];
         let (j1, j2) = (cj1.unsigned_abs() as usize, cj2.unsigned_abs() as usize);
-        let j3 = if j1 > j2 { j1 } else { j2 };
+        let j3 = j1.max(j2);
         let kf = k as f64;
         // PSI(0, J, J+1/2)
         let p2 = (2 * j3 + j - 1) as f64;

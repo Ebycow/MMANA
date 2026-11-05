@@ -83,9 +83,10 @@ struct Parser<'a> {
     ctx: &'a ExprContext,
 }
 
+/// (the original also gives the end of the text, 0, a priority of 0, which
+/// is never asked: only operators are)
 fn priority(c: u8) -> i32 {
     match c {
-        0 => 0,
         b'+' | b'-' => 1,
         b'*' | b'/' => 2,
         _ => -1,
@@ -93,7 +94,7 @@ fn priority(c: u8) -> i32 {
 }
 
 fn is_op(c: u8) -> bool {
-    c != 0 && priority(c) != -1
+    priority(c) != -1
 }
 
 fn apply(vs: &mut Term, vw: &Term) {
@@ -173,7 +174,7 @@ impl Parser<'_> {
             p += 1;
             p = self.calc(&mut vw, p);
             let c = self.at(p);
-            if c != 0 && is_op(c) {
+            if is_op(c) {
                 vw.cd = c;
                 vw.pr = priority(c);
                 p += 1;

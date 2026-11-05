@@ -199,12 +199,11 @@ impl Mininec {
                 let h9 = (s9 * t8 - s8 * t9) / d - v9;
                 let s2 = self.w * (self.x[j] * r1 + self.y[j] * r2 - (self.z[j] - 2.0 * self.med_h[jm]) * r3);
                 let (s1, s2) = (s2.cos(), s2.sin());
+                // (the original skips the half of a pulse on the ground below
+                // it here too; such pulses have no image term, skipped above)
                 for c in [ci1, ci2] {
                     let l = c.unsigned_abs() as usize;
                     let f3 = sgn(c) as f64 * self.w * self.s[l] / 2.0;
-                    if grounded && f3 < 0.0 {
-                        continue;
-                    }
                     // contribution to sum
                     let b1 = f3 * (s1 * self.cr[i] - s2 * self.cim[i]);
                     let b2 = f3 * (s1 * self.cim[i] + s2 * self.cr[i]);

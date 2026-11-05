@@ -67,11 +67,10 @@ impl CurState {
     }
 }
 
-/// S607: magnitude of a complex current.
+/// S607: magnitude of a complex current. (The original takes the root only
+/// above 0, where it is 0 too.)
 fn magnitude(i2f: f64, j2f: f64) -> f64 {
-    let i3f = i2f * i2f;
-    let j3f = j2f * j2f;
-    if i3f > 0.0 || j3f > 0.0 { (i3f + j3f).sqrt() } else { 0.0 }
+    (i2f * i2f + j2f * j2f).sqrt()
 }
 
 impl Mininec {

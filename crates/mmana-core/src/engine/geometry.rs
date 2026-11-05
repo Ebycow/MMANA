@@ -141,8 +141,9 @@ impl Mininec {
                 self.rr = radius;
                 self.tb = 2;
             }
-            // the outermost medium always extends to "infinity"
-            if self.nm > 0 && self.med_u[self.nm] < 1000000.0 {
+            // the outermost medium always extends to "infinity" (the original
+            // asks for a medium first, which a real ground always has)
+            if self.med_u[self.nm] < 1000000.0 {
                 self.med_u[self.nm] = 1000000.0;
             }
         }
@@ -278,9 +279,11 @@ impl Mininec {
             return Err(CalcError::NoPulses);
         }
         self.n = n as usize;
-        let len = self.n + 2;
-        self.ci.truncate(len.max(2));
-        self.wi.truncate(len.max(2));
+        // (a row past the last pulse; the original keeps at least 2, which
+        // a pulse and that row are)
+        let rows = self.n + 2;
+        self.ci.truncate(rows);
+        self.wi.truncate(rows);
         Ok(())
     }
 
