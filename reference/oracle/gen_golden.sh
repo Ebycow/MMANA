@@ -43,6 +43,11 @@ done
 # settings, not in the files; the golden carries them for the test)
 "$ORACLE" "$ROOT/testdata/maa/GP40.MAA" --ground 2 --media '5,0.001,8,-;13,0.005,-,-0.5' --screen 30,8 > "$OUT/GP40@ground2screen.json"
 "$ORACLE" "$ROOT/testdata/maa/GP40.MAA" --ground 2 --media '5,0.001,8,-;13,0.005,-,-0.5' --screen 30,8 --far 1 > "$OUT/GP40@ground2screenfar.json"
+# one medium with a boundary given at 8 m: it still reaches every distance,
+# and the screen with it
+"$ORACLE" "$ROOT/testdata/maa/GP40.MAA" --ground 2 --media '13,0.005,8,-' --screen 30,8 > "$OUT/GP40@ground2screen1.json"
+# a ground of permittivity below 1, whose reflection takes the other root
+"$ORACLE" "$ROOT/testdata/maa/GP40.MAA" --ground 2 --media '0.25,0.0001,-,-' > "$OUT/GP40@ground2thin.json"
 "$ORACLE" "$ROOT/testdata/maa/VERT20M.MAA" --ground 2 --media '5,0.001,15,-;80,4,-,-1' > "$OUT/VERT20M@ground2media.json"
 "$ORACLE" "$ROOT/testdata/maa/VERT20M.MAA" --ground 2 --media '5,0.001,15,-;80,4,-,-1' --far 1 > "$OUT/VERT20M@ground2mediafar.json"
 ls "$OUT" | wc -l
