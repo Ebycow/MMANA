@@ -2206,6 +2206,8 @@ mod tests {
         // would show 5 m for an antenna 6.52 m wide
         assert!(!list.apply(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: false }));
         assert!(list.clone().apply_as_original(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: false }));
+        // and so is the copy the new row makes of it
+        assert!(!list.clone().apply(&ElementOp::SetWidth { row: 1, value: 5.0, scale_all: false }));
         // shorter tips, or everything scaled, are fine
         assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 7.0, scale_all: false }));
         assert!(list.apply(&ElementOp::SetWidth { row: 0, value: 5.0, scale_all: true }));
@@ -2218,6 +2220,24 @@ mod tests {
             ElementOp::RoundValues { decimals: 1, in_wavelengths: false, in_millimetres: false, scale_all: false };
         assert!(!list.apply(&round));
         assert!(list.apply_as_original(&round));
+    }
+
+    #[test]
+    fn an_octagon_with_corners_at_its_sides_stays_closed_when_resized() {
+        // corners every 45° from the side at the centre's height: the side
+        // corners go down, whichever wire they start or end
+        let corner = |k: usize| {
+            let a = k as f64 * std::f64::consts::FRAC_PI_4;
+            (0.0, 2.0 * a.cos(), 10.0 + 2.0 * a.sin())
+        };
+        let wires: Vec<Wire> = (0..8).map(|k| wire(corner(k), corner(k + 1))).collect();
+        let mut list = ElementList::new(&wires, 21.3);
+        assert_eq!(list.rows()[0].kind, ElementKind::VerticalOctagon);
+        let perimeter = list.rows()[0].perimeter;
+        assert!(list.apply(&ElementOp::SetPerimeter { row: 0, value: perimeter * 1.1, scale_all: false }));
+        let out = list.wires().wires;
+        assert!((0..8).all(|k| out[k].end == out[(k + 1) % 8].start), "{out:?}");
+        assert!(out[0].start.z < 10.0 && out[3].end.z < 10.0, "{out:?}");
     }
 
     #[test]
@@ -2339,6 +2359,7 @@ mod tests {
         assert!(!list.apply_as_original(&ElementOp::SetPosition { row: 0, value: 1.0 }));
         assert!(!list.apply_as_original(&ElementOp::SetPosition { row: 2, value: -1.0 }));
         assert!(list.apply_as_original(&ElementOp::SetPosition { row: 2, value: 1.0 }));
+        assert!(list.apply_as_original(&ElementOp::SetPosition { row: 2, value: 0.0 }));
     }
 
     #[test]

@@ -608,6 +608,9 @@ fn near_field_scans() {
         z: axis(1.0, 0.0, 1),
     };
     assert_eq!(solved.near_field(&base).unwrap().len(), 2 * 3);
+    // a step of 0, like a count of 0, is one point whatever the count
+    let one = NearFieldSpec { x: axis(0.0, 0.0, 3), y: axis(0.0, 1.0, 0), ..base };
+    assert_eq!(solved.near_field(&one).unwrap().len(), 3);
     let check = |spec: NearFieldSpec| solved.near_field(&spec).map(|_| ());
     assert_eq!(
         check(NearFieldSpec { power_w: 0.0, ..base }),

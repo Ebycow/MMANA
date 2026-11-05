@@ -54,6 +54,9 @@ fn a_series_circuit_is_recovered_from_two_frequencies() {
     // nor is one without a resistance (its Q would be infinite)
     let lossless = |mhz: f64| (mhz, Complex { re: 0.0, im: z(mhz).1.im });
     assert_eq!(series_circuit(lossless(14.0), lossless(14.3)), None);
+    // or a negative one (its Q would be negative)
+    let negative = |mhz: f64| (mhz, Complex { re: -r, im: z(mhz).1.im });
+    assert_eq!(series_circuit(negative(14.0), negative(14.3)), None);
 }
 
 #[test]

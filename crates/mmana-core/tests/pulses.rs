@@ -80,6 +80,26 @@ fn names_the_first_stacked_copy_and_leaves_out_the_others() {
 }
 
 #[test]
+fn a_wire_without_a_radius_has_no_pulses_on_the_layout_or_its_copies() {
+    // wire 1, R = 0, is left out of the calculation: the dipole is wire 2,
+    // and w4c (its copy) is no name of the antenna
+    let mut p = sample("DP20.MAA");
+    let mut idle = p.antenna.wires[0].clone();
+    idle.radius = 0.0;
+    idle.start.z = 3.0;
+    idle.end.z = 3.0;
+    p.antenna.wires.insert(0, idle);
+    p.antenna.sources[0].pulse = "w2c".into();
+    p.antenna.stack.horizontal = 2;
+    p.antenna.stack.horizontal_spacing = 5.0;
+    let layout = pulse_layout(&p, &CalcOptions::default()).unwrap();
+    assert_eq!(layout.wires.iter().map(|w| w.wire).collect::<Vec<_>>(), [2]);
+    assert!(layout.sources[0].is_some());
+    p.antenna.sources[0].pulse = "w4c".into();
+    assert_eq!(pulse_layout(&p, &CalcOptions::default()).unwrap().sources, vec![None]);
+}
+
+#[test]
 fn a_stacked_copy_on_the_ground_is_divided_as_calculated() {
     // a 5 m vertical in 10, 5 m up, stacked 2 high 10 m apart: the lower copy
     // (the first) stands on the ground and gains a pulse there

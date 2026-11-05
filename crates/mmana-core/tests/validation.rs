@@ -128,6 +128,17 @@ fn rejects_wires_on_top_of_each_other() {
 }
 
 #[test]
+fn a_wire_of_no_length_is_refused_by_its_number() {
+    let mut p = dp20();
+    let mut point = p.antenna.wires[0].clone();
+    point.end = point.start;
+    point.start.z += 3.0;
+    point.end.z += 3.0;
+    p.antenna.wires.push(point);
+    assert_eq!(calc(p), Err(CalcError::ZeroLengthWire { wire: 2 }));
+}
+
+#[test]
 fn errors_name_the_wires_they_are_about() {
     let overlap = CalcError::OverlappingWires { first: 2, second: 12 };
     assert_eq!((overlap.code(), overlap.wires()), ("overlapping-wires", vec![2, 12]));

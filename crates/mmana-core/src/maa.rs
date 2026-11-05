@@ -646,6 +646,14 @@ mod tests {
     }
 
     #[test]
+    fn a_taper_given_as_minus_its_division_reads_it_whatever_its_size() {
+        // packed codes (the two divisions) are far below -10000
+        let text = DP.replace("8.000e-04,\t-1\r\n", "8.000e-04,\t-10000\r\n");
+        let p = parse(&text);
+        assert_eq!(p.project.antenna.wires[0].segmentation, Segmentation::TaperCustom { dm1: 10000, dm2: None });
+    }
+
+    #[test]
     fn frequency_keeps_its_precision() {
         // MMANA rounds it to 0.001 MHz through the display (see porting notes)
         let p = parse(&DP.replace("\r\n14.05\r\n", "\r\n14.05049\r\n")).project;
@@ -789,5 +797,23 @@ mod tests {
         let once = reread(&p).project;
         assert_eq!(once.antenna.combined_wires[0].sections, vec![section(2.0)]);
         assert_eq!(reread(&once).project, once);
+    }
+
+    #[test]
+    fn a_combined_wire_reads_as_many_sections_as_the_engine_takes() {
+        let mut p = parse(DP).project;
+        let section = CombinedSection { length: 1.0, radius: 0.01 };
+        let combined = CombinedWire { radius_key: -1.0, mode: 0, sections: vec![section; crate::engine::PPMAX + 1] };
+        p.antenna.combined_wires = vec![combined];
+        assert_eq!(reread(&p).project.antenna.combined_wires[0].sections, vec![section; crate::engine::PPMAX]);
+    }
+
+    #[test]
+    fn a_step_ratio_inside_its_range_is_kept() {
+        // the automatic segmentation's SC from above 1 to 3, else 2
+        for (sc, kept) in [("1.0", 2.0), ("1.5", 1.5), ("3.0", 3.0), ("3.5", 2.0)] {
+            let p = parse(&DP.replace("400,\t40,\t2.0,\t1", &format!("400,\t40,\t{sc},\t1"))).project;
+            assert_eq!(p.antenna.auto_segmentation.sc, kept, "{sc}");
+        }
     }
 }

@@ -1779,12 +1779,11 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                         self.set_para_linked(n);
                         break;
                     } else if dir >= 1.0 {
-                        // falling at once: try the other way
+                        // falling at once: try the other way (the original
+                        // also cuts the step back to the first, which it
+                        // still is: it grows only once the score rises)
                         dir = -1.0;
                         s.dc = max_d;
-                        if s.di > s.dio {
-                            s.di = s.dio;
-                        }
                         cont_n = 0;
                     } else {
                         s.dc = max_d;
@@ -3044,6 +3043,11 @@ mod tests {
         let (l, a, z) = polar(w);
         assert_eq!((l, a), (5.0, 0.0));
         assert!((z - 3f64.atan2(4.0).to_degrees()).abs() < 1e-12, "{z}");
+        // and its length from all three axes
+        let w = &with_wires(&[((0.0, 0.0, 0.0), (0.0, 3.0, 4.0))]).antenna.wires[0];
+        let (l, a, z) = polar(w);
+        assert_eq!((l, a), (5.0, 90.0));
+        assert!((z - 3f64.atan2(4.0).to_degrees()).abs() < 1e-12, "{z}");
     }
 
     #[test]
@@ -3109,6 +3113,17 @@ mod tests {
         };
         assert_eq!(issue(ElementPart::Height), [IssueCode::ZeroValue]);
         assert!(!issue(ElementPart::Position).contains(&IssueCode::ZeroValue));
+        // an element past the last
+        let setup = OptimizerSetup {
+            variables: vec![Variable {
+                pitch: 0.1,
+                max: 10.0,
+                ..Variable::new(VariableTarget::Element { element: 1, part: ElementPart::Interval })
+            }],
+            ..Default::default()
+        };
+        let (errors, _) = issues(&Model::new(&dipole, &CalcOptions::default()), &setup);
+        assert_eq!(errors.iter().map(|e| e.code).collect::<Vec<_>>(), [IssueCode::MissingTarget]);
     }
 
     #[test]
@@ -3138,6 +3153,9 @@ mod tests {
         let wires = &project.antenna.wires;
         assert_eq!(joints(wires), [0, 1, 1, 3, 4, 5]);
         assert_eq!(short_wires(wires), 1);
+        // too short for the longest wire, not for a metre
+        let wires = with_wires(&[((0.0, 0.0, 0.0), (0.0, 100.0, 0.0)), ((0.0, 5.0, 1.0), (0.0, 5.0, 1.0 + 1e-8))]);
+        assert_eq!(short_wires(&wires.antenna.wires), 1);
     }
 
     #[test]
@@ -3326,5 +3344,236 @@ mod tests {
         };
         let values = swept(&project, &setup);
         assert!(values.iter().all(|&v| v <= 180.0 + 1e-9) && values.iter().any(|&v| v < 170.0), "{values:?}");
+    }
+
+    #[test]
+    fn a_wire_reads_its_x_from_where_its_element_is() {
+        // two dipoles at X = 1 and 3: the wires hold X about their element
+        let project = with_wires(&[((1.0, -5.0, 0.0), (1.0, 5.0, 0.0)), ((3.0, -4.0, 0.0), (3.0, 4.0, 0.0))]);
+        let model = Model::new(&project, &CalcOptions::default());
+        let x = |wire, part| model.value(&VariableTarget::Wire { wire, part });
+        let xs = [x(0, WirePart::X1), x(0, WirePart::X2), x(1, WirePart::X1), x(1, WirePart::X2)];
+        assert_eq!(xs, [1.0, 1.0, 3.0, 3.0]);
+    }
+
+    #[test]
+    fn a_polar_length_from_the_end_moves_the_start_along_the_wire() {
+        // 5 m along (0.6, 0, 0.8), made 10 m from its end at (3, 0, 14)
+        let project = with_wires(&[((0.0, 0.0, 10.0), (3.0, 0.0, 14.0))]);
+        let target = VariableTarget::PolarWire { wire: 0, quantity: PolarQuantity::Length, anchor: PolarAnchor::End };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 1.0, max: 20.0, ..Variable::new(target) }],
+            ..Default::default()
+        };
+        let (written, _) = apply_trial(&project, &CalcOptions::default(), &setup, &[10.0]).unwrap();
+        let w = &written.antenna.wires[0];
+        let got = [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z];
+        let want = [-3.0, 0.0, 6.0, 3.0, 0.0, 14.0];
+        assert!(want.iter().zip(&got).all(|(a, b)| (a - b).abs() < 1e-12), "{got:?}");
+    }
+
+    #[test]
+    fn a_polar_length_about_the_centre_of_a_wire_off_its_elements_centre() {
+        // the side at X = 0 of a horizontal loop 1 m deep, made 3 m long
+        let project = with_wires(&[
+            ((0.0, -2.0, 10.0), (0.0, 2.0, 10.0)),
+            ((0.0, 2.0, 10.0), (1.0, 2.0, 10.0)),
+            ((1.0, 2.0, 10.0), (1.0, -2.0, 10.0)),
+            ((1.0, -2.0, 10.0), (0.0, -2.0, 10.0)),
+        ]);
+        let target =
+            VariableTarget::PolarWire { wire: 0, quantity: PolarQuantity::Length, anchor: PolarAnchor::Center };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 1.0, max: 20.0, ..Variable::new(target) }],
+            ..Default::default()
+        };
+        let (written, _) = apply_trial(&project, &CalcOptions::default(), &setup, &[3.0]).unwrap();
+        let w = &written.antenna.wires[0];
+        let got = [w.start.x, w.start.y, w.start.z, w.end.x, w.end.y, w.end.z];
+        let want = [0.0, -1.5, 10.0, 0.0, 1.5, 10.0];
+        assert!(want.iter().zip(&got).all(|(a, b)| (a - b).abs() < 1e-12), "{got:?}");
+    }
+
+    #[test]
+    fn setting_r_of_a_load_keeps_its_x() {
+        let mut project = sample("DP20.MAA");
+        project.antenna.loads =
+            vec![crate::Load { pulse: "w1c".into(), kind: LoadKind::Impedance { r: 50.0, x: 10.0 } }];
+        let target = VariableTarget::Load { load: 0, part: LoadPart::Primary };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 0.1, max: 100.0, ..Variable::new(target) }],
+            ..Default::default()
+        };
+        let (written, _) = apply_trial(&project, &CalcOptions::default(), &setup, &[20.0]).unwrap();
+        assert_eq!(written.antenna.loads[0].kind, LoadKind::Impedance { r: 20.0, x: 10.0 });
+    }
+
+    #[test]
+    fn a_link_to_a_different_value_is_warned_about() {
+        let dipole = sample("DP20.MAA");
+        let end = |part| Variable {
+            pitch: 0.1,
+            min: -10.0,
+            max: 10.0,
+            ..Variable::new(VariableTarget::Wire { wire: 0, part })
+        };
+        let warnings = |link| {
+            let setup = OptimizerSetup {
+                variables: vec![end(WirePart::Y2), Variable { link, ..end(WirePart::Y1) }],
+                ..Default::default()
+            };
+            issues(&Model::new(&dipole, &CalcOptions::default()), &setup).1.iter().map(|w| w.code).collect::<Vec<_>>()
+        };
+        // Y1 is -Y2
+        assert_eq!(warnings(Link::Negated { variable: 0 }), []);
+        assert_eq!(warnings(Link::Same { variable: 0 }), [IssueCode::LinkValueDiffers]);
+    }
+
+    #[test]
+    fn a_wire_and_its_element_are_refused_together_whatever_they_change() {
+        // the radius does not change with the width, nor the width with the radius
+        use VariableTarget::*;
+        let radius_and_width =
+            [Wire { wire: 0, part: WirePart::Radius }, Element { element: 0, part: ElementPart::Width }];
+        assert_eq!(errors_of("DP20.MAA", &radius_and_width, &[]), vec![IssueCode::Overlapping]);
+    }
+
+    #[test]
+    fn the_azimuth_of_a_vertical_wire_cannot_be_varied() {
+        // a vertical wire reads back no azimuth, whatever was set
+        let project = with_wires(&[((0.0, -5.0, 10.0), (0.0, 5.0, 10.0)), ((0.0, 0.0, 10.0), (0.0, 0.0, 15.0))]);
+        let azimuth =
+            VariableTarget::PolarWire { wire: 1, quantity: PolarQuantity::Azimuth, anchor: PolarAnchor::Start };
+        let setup = OptimizerSetup {
+            variables: vec![Variable { pitch: 5.0, min: -90.0, max: 90.0, ..Variable::new(azimuth) }],
+            sweep_only: true,
+            absolute_pitch: true,
+            ..Default::default()
+        };
+        let values = swept(&project, &setup);
+        assert!(values.iter().all(|&v| v == 0.0), "{values:?}");
+    }
+
+    #[test]
+    fn a_gain_above_its_goal_counts_the_log_of_the_rest() {
+        let project = sample("DP20.MAA");
+        let gain = crate::calculate(&project, &CalcOptions::default()).unwrap().gain_dbi as f64;
+        assert!(gain > 0.0, "{gain}");
+        let score = |max_gain_dbi: f64| {
+            let mut setup = dipole_length();
+            setup.weights = Weights { gain: 100, fb: 0, jx: 0, swr: 0, elevation: 0, matching: 0, current: 0 };
+            setup.goals.max_gain_dbi = max_gain_dbi;
+            first_score(&project, &CalcOptions::default(), &setup)
+        };
+        let (a, b) = (gain / 2.0, gain / 4.0);
+        let ratio = score(a) / score(b);
+        let expected = (a + (gain / a).ln()) / (b + (gain / b).ln());
+        assert!((ratio / expected - 1.0).abs() < 1e-9, "{ratio} vs {expected}");
+    }
+
+    #[test]
+    fn a_jx_below_its_goal_counts_the_goal_less_a_twentieth_of_the_rest() {
+        let project = sample("DP20.MAA");
+        let jx = (crate::calculate(&project, &CalcOptions::default()).unwrap().impedance.im as f32 as f64).abs();
+        let score = |min_jx: f64| {
+            let mut setup = dipole_length();
+            setup.weights = Weights { gain: 0, fb: 0, jx: 100, swr: 0, elevation: 0, matching: 0, current: 0 };
+            setup.goals.min_jx = min_jx;
+            first_score(&project, &CalcOptions::default(), &setup)
+        };
+        let ratio = score(1000.0) / score(2000.0);
+        let expected = (1000.0 - (1000.0 - jx) / 20.0) / (2000.0 - (2000.0 - jx) / 20.0);
+        assert!((ratio / expected - 1.0).abs() < 1e-9, "{ratio} vs {expected}");
+    }
+
+    #[test]
+    fn a_bound_taken_from_another_variable_can_be_reached() {
+        // the phase swept in quarters up to the voltage, 1 V
+        let project = sample("DP20.MAA");
+        assert_eq!((project.antenna.sources[0].phase_deg, project.antenna.sources[0].voltage), (0.0, 1.0));
+        let source = |part| VariableTarget::Source { source: 0, part };
+        let setup = OptimizerSetup {
+            variables: vec![
+                Variable { pitch: 0.25, min: -1.0, max_from: Some(1), ..Variable::new(source(SourcePart::Phase)) },
+                Variable { max: 2.0, ..Variable::new(source(SourcePart::Voltage)) },
+            ],
+            sweep_only: true,
+            absolute_pitch: true,
+            ..Default::default()
+        };
+        let values = swept(&project, &setup);
+        assert!(values.contains(&1.0) && values.iter().all(|&v| v <= 1.0), "{values:?}");
+    }
+
+    #[test]
+    fn no_variable_is_added_past_the_limit() {
+        let project = sample("DP20.MAA");
+        let mut setup = dipole_length();
+        setup.variables = vec![setup.variables[0].clone(); MAX_VARIABLES];
+        let op = SetupOp::SetTarget { index: MAX_VARIABLES, target: VariableTarget::Frequency };
+        let edit = edit_setup(&project, &CalcOptions::default(), &setup, &[op]);
+        assert_eq!(edit.applied, [false]);
+        assert_eq!(edit.setup.variables.len(), MAX_VARIABLES);
+    }
+
+    #[test]
+    fn a_reflector_stacked_on_the_first_has_no_position_of_its_own() {
+        let mut project = with_wires(&[
+            ((-2.0, -5.2, 0.0), (-2.0, 5.2, 0.0)),
+            ((-2.0, -5.2, 4.0), (-2.0, 5.2, 4.0)),
+            ((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+        ]);
+        project.antenna.sources[0].pulse = "w3c".into();
+        let op = SetupOp::AllElements { intervals: false, scale_all: false, combination: None };
+        let positions: Vec<_> = targets(&setup_of(&project, &[op]))
+            .into_iter()
+            .filter(|(t, _)| matches!(t, VariableTarget::Element { part: ElementPart::Position, .. }))
+            .collect();
+        assert_eq!(positions, []);
+    }
+
+    #[test]
+    fn the_combination_answered_registers_only_what_it_says() {
+        // the inverted V behind the vertical has a width and a height
+        let project = with_wires(&[
+            ((0.0, 0.0, 1.0), (0.0, 0.0, 11.0)),
+            ((-2.0, -5.0, 0.0), (-2.0, 0.0, 1.0)),
+            ((-2.0, 0.0, 1.0), (-2.0, 5.0, 0.0)),
+        ]);
+        let combination = ElementCombination { width: false, ..Default::default() };
+        let op = SetupOp::AllElements { intervals: true, scale_all: false, combination: Some(combination) };
+        let parts: Vec<ElementPart> = targets(&setup_of(&project, &[op]))
+            .into_iter()
+            .filter_map(|(t, _)| match t {
+                VariableTarget::Element { element: 0, part } => Some(part),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(parts, [ElementPart::Height, ElementPart::Interval]);
+    }
+
+    #[test]
+    fn linking_elements_starts_from_unlinked_variables_only() {
+        // widths of 10, 5 and 5 m, the second linked to half the first
+        let project = with_wires(&[
+            ((0.0, -5.0, 0.0), (0.0, 5.0, 0.0)),
+            ((2.0, -2.5, 0.0), (2.0, 2.5, 0.0)),
+            ((4.0, -2.5, 0.0), (4.0, 2.5, 0.0)),
+        ]);
+        let width = |element| Variable {
+            pitch: 1.0,
+            max: 20.0,
+            ..Variable::new(VariableTarget::Element { element, part: ElementPart::Width })
+        };
+        let setup = OptimizerSetup {
+            variables: vec![
+                width(0),
+                Variable { link: Link::Scaled { variable: 0, factor: 0.5 }, ..width(1) },
+                width(2),
+            ],
+            ..Default::default()
+        };
+        let edit = edit_setup(&project, &CalcOptions::default(), &setup, &[SetupOp::LinkElements]);
+        assert_eq!(edit.setup.variables[2].link, Link::Independent);
     }
 }

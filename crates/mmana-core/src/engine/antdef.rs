@@ -294,4 +294,16 @@ mod tests {
         assert_eq!(add_wire_no("7", 3), "7");
         assert_eq!(add_wire_no("w1c", 0), "w1c");
     }
+
+    #[test]
+    fn every_section_list_ends_in_the_sentinel() {
+        // ended by a section of no length, or by the last there is room for
+        let full = PDef { rr: -1.0, l: [1.0; PPMAX], r: [0.01; PPMAX], ty: 0 };
+        let mut short = full.clone();
+        short.l[3] = 0.0;
+        let mut pdef = vec![full, short];
+        adj_pdef(&mut pdef);
+        assert_eq!(pdef[0].l[PPMAX - 1], 99999.9);
+        assert_eq!(&pdef[1].l[..4], [1.0, 1.0, 99999.9, 0.0]);
+    }
 }

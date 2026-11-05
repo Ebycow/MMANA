@@ -9,8 +9,8 @@
 //! within tolerances stated with each test.
 
 use mmana_core::{
-    CalcOptions, CalcResult, Complex, GroundKind, Load, LoadKind, Point3, Project, Segmentation, Source, WarningCode,
-    Wire, calculate, maa, pulse_layout, solve, sweep_at,
+    CalcOptions, CalcResult, Complex, GroundKind, Load, LoadKind, PatternResolution, Point3, Project, Segmentation,
+    Source, WarningCode, Wire, calculate, maa, pulse_layout, solve, sweep_at,
 };
 use std::f64::consts::PI;
 use std::path::Path;
@@ -505,6 +505,47 @@ fn coordinates_an_ulp_apart_give_the_same_figures() {
 }
 
 #[test]
+fn a_horizontal_cut_is_the_far_field_at_its_elevation() {
+    // up to straight up, where every azimuth is the same direction
+    let p = sample("3EL20.MAA");
+    let solved = solve(&p, &CalcOptions::default()).unwrap();
+    for elevation in [20.0, 90.0] {
+        let opts = CalcOptions { horizontal_cut_elevation_deg: Some(elevation), ..CalcOptions::default() };
+        let cut = calculate(&p, &opts).unwrap().patterns.horizontal;
+        let n = cut.total.len();
+        for k in [0, n / 4, n / 2] {
+            let azimuth = cut.start_deg + k as f64 * cut.step_deg;
+            let field = solved.far_field((90.0 - elevation, 0.0, 1), (azimuth, 0.0, 1)).unwrap()[0];
+            assert!(
+                (cut.total[k] as f64 - field.total_db).abs() < 1e-3,
+                "{elevation}° at {azimuth}°: {field:?} {}",
+                cut.total[k]
+            );
+        }
+    }
+}
+
+#[test]
+fn f_b_takes_the_strongest_back_lobe_within_its_range_at_either_resolution() {
+    // a dipole turned 30°: its back lobe is at 150°, inside 180° ± 60°
+    let (s, c) = (30f64.to_radians().sin(), 30f64.to_radians().cos());
+    let mut p =
+        project(vec![wire((-5.2 * s, -5.2 * c, 0.0), (5.2 * s, 5.2 * c, 0.0), 20)], vec![source("w1c", 1.0, 0.0)]);
+    p.environment.fb_range.horizontal = 120;
+    p.environment.fb_range.vertical = 0;
+    for resolution in [PatternResolution::Fine, PatternResolution::Coarse] {
+        let r = calculate(&p, &CalcOptions { pattern_resolution: resolution, ..CalcOptions::default() }).unwrap();
+        let h = &r.patterns.horizontal;
+        let back = (0..h.total.len())
+            .filter(|&k| ((h.start_deg + k as f64 * h.step_deg) - 180.0).abs() <= 60.0)
+            .map(|k| h.total[k])
+            .fold(r.patterns.vertical.total[0], f32::max);
+        assert!(back > h.total[h.total.len() / 2], "{resolution:?}");
+        assert_eq!(r.fb_db, h.total[0] - back, "{resolution:?}");
+    }
+}
+
+#[test]
 fn nothing_radiates_below_the_ground() {
     // a horizontal cut 10° below the horizon: none over ground, the mirror
     // of the cut 10° above in free space
@@ -799,6 +840,15 @@ fn a_conductor_divided_too_finely_is_warned_about() {
 }
 
 #[test]
+fn a_solved_antenna_carries_the_warnings_of_its_result() {
+    let p = sample("CR2.MAA");
+    let opts = CalcOptions::default();
+    let solved = solve(&p, &opts).unwrap();
+    assert!(!solved.warnings().is_empty());
+    assert_eq!(solved.warnings(), calculate(&p, &opts).unwrap().warnings);
+}
+
+#[test]
 fn moving_the_antenna_in_free_space_changes_nothing() {
     for (name, p) in [("dipole", dipole()), ("yagi", yagi())] {
         let mut q = p.clone();
@@ -934,6 +984,17 @@ fn a_point_calculated_as_lying_on_a_wire_beside_it_is_warned_about() {
     assert_eq!(warned_wires(&v(20.0, 20), WarningCode::CloseWires), Some(vec![1, 2]));
     assert_eq!(warned_wires(&v(20.0, 80), WarningCode::CloseWires), None);
     assert_eq!(warned_wires(&v(30.0, 20), WarningCode::CloseWires), None);
+    // nor is a point beside the very end of a segment, as on a wire turning
+    // off at a corner: 1 m segments, and 5 cm ones rising from either end
+    let corners = project(
+        vec![
+            wire((0.0, 0.0, 0.0), (0.0, 10.0, 0.0), 10),
+            wire((0.0, 10.0, 0.0), (0.0, 10.0, 1.0), 20),
+            wire((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 20),
+        ],
+        vec![source("w1c", 1.0, 0.0)],
+    );
+    assert_eq!(warned_wires(&corners, WarningCode::CloseWires), None);
     // and no sample holding up under twice the segments is warned (samples.md)
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa");
     for name in ["HB9CVH.MAA", "DBLDP.MAA", "ZL20.MAA", "LPDA15.MAA", "MULTDP.MAA", "M2CQW.MAA"] {
