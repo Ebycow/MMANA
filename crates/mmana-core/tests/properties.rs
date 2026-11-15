@@ -941,3 +941,51 @@ fn a_point_calculated_as_lying_on_a_wire_beside_it_is_warned_about() {
         assert_eq!(warned_wires(&sample(name), WarningCode::CloseWires), None, "{name}");
     }
 }
+
+#[test]
+fn wires_that_run_along_each_other_are_warned_about() {
+    let h = 5.2;
+    let beside =
+        |wire2: Wire| project(vec![wire((0.0, -h, 0.0), (0.0, h, 0.0), 17), wire2], vec![source("w1c", 1.0, 0.0)]);
+    let warned = |p: &Project| warned_wires(p, WarningCode::OverlappingWires);
+    // (wires of 1 mm radius: they touch 2 mm apart)
+    assert_eq!(wire((0.0, 0.0, 0.0), (0.0, 1.0, 0.0), 1).radius, 0.001);
+    // a copy a rounding beside the wire, half a millimetre, and at the surface
+    for d in [1e-15, 5e-4, 2e-3] {
+        assert_eq!(warned(&beside(wire((d, -h, 0.0), (d, h, 0.0), 17))), Some(vec![1, 2]), "{d}");
+    }
+    // clear of it: a close pair, as of an open-wire line
+    assert_eq!(warned(&beside(wire((3e-3, -h, 0.0), (3e-3, h, 0.0), 17))), None);
+    // a piece laid on a part of the wire, and one sticking out past its end
+    assert_eq!(warned(&beside(wire((0.0, -1.0, 0.0), (0.0, 2.0, 0.0), 5))), Some(vec![1, 2]));
+    assert_eq!(warned(&beside(wire((0.0, 4.0, 0.0), (0.0, 7.0, 0.0), 5))), Some(vec![1, 2]));
+    // a copy sharing an end, its other end a millimetre off
+    assert_eq!(warned(&beside(wire((0.0, -h, 0.0), (1e-3, h, 0.0), 17))), Some(vec![1, 2]));
+    // wires that only meet: end to end in line, at a sharp angle, as a tee and across
+    for (a, b) in [
+        ((0.0, h, 0.0), (0.0, 2.0 * h, 0.0)),
+        ((0.0, h, 0.0), (1.0, -h, 0.0)),
+        ((0.0, 1.0, 0.0), (3.0, 1.0, 0.0)),
+        ((-3.0, 1.0, 0.0), (3.0, 1.0, 0.0)),
+    ] {
+        assert_eq!(warned(&beside(wire(a, b, 9))), None, "{a:?} {b:?}");
+    }
+    // a stacked copy counts as the wire it copies
+    let mut stacked = beside(wire((5e-4, -h, 0.0), (5e-4, h, 0.0), 17));
+    stacked.antenna.stack.horizontal = 2;
+    stacked.antenna.stack.horizontal_spacing = 10.0;
+    assert_eq!(warned(&stacked), Some(vec![1, 2]));
+    // and no sample is: none has wires through each other
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa");
+    let options = CalcOptions { max_pulses: 600, ..CalcOptions::default() };
+    let mut calculated = 0;
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        let p = mmana_core::maa::parse_bytes(&std::fs::read(&path).unwrap()).project;
+        if let Ok(r) = calculate(&p, &options) {
+            calculated += 1;
+            assert!(r.warnings.iter().all(|w| w.code != WarningCode::OverlappingWires), "{path:?}");
+        }
+    }
+    assert_eq!(calculated, 79);
+}

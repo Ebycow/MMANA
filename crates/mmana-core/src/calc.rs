@@ -174,6 +174,8 @@ pub enum WarningCode {
     TooManySegments,
     /// A segment is long for its distance to another wire (`checks::CLOSE_WIRE_RATIO`).
     CloseWires,
+    /// Two wires run along each other within the sum of their radii.
+    OverlappingWires,
 }
 
 /// A calculated result that should not be trusted as it is.
@@ -303,6 +305,7 @@ pub fn solve(project: &Project, opts: &CalcOptions) -> Result<Solved, CalcError>
         warnings.push(CalcWarning::new(WarningCode::TooManySegments, wires, message));
     }
     warnings.extend(crate::checks::misapplied_shortcut(&ap, &engine));
+    warnings.extend(crate::checks::overlapping_wires(&ap));
     Ok(Solved { ap, engine, warnings })
 }
 

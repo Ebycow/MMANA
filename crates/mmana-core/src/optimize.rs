@@ -1278,9 +1278,10 @@ struct Reading {
     current: Option<f32>,
     horizontal: Vec<f32>,
     vertical: Vec<f32>,
-    /// The antenna takes power the calculation can tell from rounding
-    /// (its result has no warning about the input power).
-    takes_power: bool,
+    /// The figures mean something: the antenna takes power the calculation
+    /// can tell from rounding and no wires overlap (its result has no
+    /// warning about either).
+    meaningful: bool,
 }
 
 /// `ABS()` of the original, which keeps the sign of -0.
@@ -1316,6 +1317,29 @@ fn short_wires(wires: &[Wire]) -> usize {
     let length = |w: &Wire| (w.end.x - w.start.x).hypot(w.end.y - w.start.y).hypot(w.end.z - w.start.z);
     let size = wires.iter().map(length).fold(0.0, f64::max);
     wires.iter().filter(|w| length(w) <= 1e-9 * size).count()
+}
+
+/// How many pairs of wire ends lie a billionth of the antenna apart or
+/// closer without being the same point: ends that a turn or a resize
+/// brought together a rounding apart. They do not move together, but the
+/// wires between them lie over each other all the same.
+fn near_ends(wires: &[Wire]) -> usize {
+    let length = |w: &Wire| (w.end.x - w.start.x).hypot(w.end.y - w.start.y).hypot(w.end.z - w.start.z);
+    let reach = 1e-9 * wires.iter().map(length).fold(0.0, f64::max);
+    let mut ends: Vec<[f64; 3]> =
+        wires.iter().flat_map(|w| [[w.start.x, w.start.y, w.start.z], [w.end.x, w.end.y, w.end.z]]).collect();
+    ends.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    let mut pairs = 0;
+    for (i, a) in ends.iter().enumerate() {
+        for b in ends[i + 1..].iter().take_while(|b| b[0] - a[0] <= reach) {
+            let apart = (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2]);
+            // (-0.0 is the same point as 0.0)
+            if a != b && apart <= reach {
+                pairs += 1;
+            }
+        }
+    }
+    pairs
 }
 
 /// `CACal` with its goal state (`ATRG`).
@@ -1397,6 +1421,11 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
     ///   nothing, or to a billionth of the antenna), or ends that met part:
     ///   ends that meet move together, so writing the values back from there
     ///   would move other points;
+    /// - wire ends come within a billionth of the antenna of each other
+    ///   without meeting, as a wire turned onto another one does: whether
+    ///   the wires then count as lying over each other, and whether the
+    ///   matrix is singular, is a matter of rounding, which differs between
+    ///   the steps of the search and the values set at once;
     /// - an element size takes its bounds across 0 (or onto it): they then
     ///   scale in proportion about 0 instead of moving about the centre, so
     ///   the way back to the best value would end elsewhere;
@@ -1438,7 +1467,10 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             }
         }
         let (before, after) = (self.model.list.wires().wires, m.list.wires().wires);
-        if joints(&before) != joints(&after) || short_wires(&before) < short_wires(&after) {
+        if joints(&before) != joints(&after)
+            || short_wires(&before) < short_wires(&after)
+            || near_ends(&before) < near_ends(&after)
+        {
             return true;
         }
         if moved.iter().any(|&i| matches!(self.vars[i].target, T::Element { .. })) {
@@ -1499,10 +1531,12 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             current,
             horizontal: every(&r.patterns.horizontal.total),
             vertical: every(&r.patterns.vertical.total),
-            takes_power: !r
-                .warnings
-                .iter()
-                .any(|w| matches!(w.code, WarningCode::NonPositivePower | WarningCode::NegligiblePower)),
+            meaningful: !r.warnings.iter().any(|w| {
+                matches!(
+                    w.code,
+                    WarningCode::NonPositivePower | WarningCode::NegligiblePower | WarningCode::OverlappingWires
+                )
+            }),
         })
     }
 
@@ -1606,7 +1640,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             }
             let rd = self.calculate().map_err(Stop::Failed)?;
             bv[b] = self.score(&rd);
-            meaningless |= !rd.takes_power;
+            meaningless |= !rd.meaningful;
             let last = b == self.bands - 1;
             if last {
                 // (the original adds the last band's score in place of
@@ -1616,9 +1650,9 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                     self.v += if self.setup.emphasize_first_band { s / self.bands as f64 } else { s };
                 }
                 // a band that takes no power (MININEC broke down, as with a
-                // feed resistance below 0, or one within rounding of 0)
-                // scores the least, never the best; the original scores it,
-                // and the matching goal gets a NaN
+                // feed resistance below 0, or one within rounding of 0) or
+                // whose wires overlap scores the least, never the best; the
+                // original scores it, and the matching goal gets a NaN
                 if !self.setup.sweep_only && (meaningless || !self.v.is_finite()) {
                     self.v = f64::MIN;
                 }
@@ -2870,6 +2904,29 @@ mod tests {
     }
 
     #[test]
+    fn a_trial_whose_wires_overlap_is_never_the_best() {
+        // a second wire of 1 mm radius slanting from 1.5 mm to 3 mm below
+        // the dipole: its far end stepped up to 1.5 mm, the two lie within
+        // their radii of each other all along
+        let project = with_wires(&[((0.0, -5.2, 0.0), (0.0, 5.2, 0.0)), ((0.0, -5.2, -0.0015), (0.0, 5.2, -0.003))]);
+        let target = VariableTarget::Wire { wire: 1, part: WirePart::Z2 };
+        let mut setup = setup_of(&project, &[SetupOp::SetTarget { index: 0, target }]).setup;
+        setup.absolute_pitch = true;
+        setup.variables[0].pitch = 0.0015;
+        setup.weights = Weights { gain: 0, fb: 0, jx: 0, swr: 100, elevation: 0, matching: 0, current: 0 };
+        let mut scores = Vec::new();
+        let out = optimize(&project, &CalcOptions::default(), &setup, Some(20), |p| {
+            scores.extend(p.score.map(|s| (p.values[0], s)));
+            true
+        })
+        .unwrap();
+        let overlapping: Vec<f64> = scores.iter().filter(|(z, _)| *z > -0.002).map(|&(_, s)| s).collect();
+        assert!(!overlapping.is_empty() && overlapping.iter().all(|&s| s == f64::MIN), "{scores:?}");
+        assert!(scores.iter().any(|&(z, s)| z < -0.002 && s > f64::MIN), "{scores:?}");
+        assert!(out.best.unwrap().values[0] < -0.002);
+    }
+
+    #[test]
     fn an_element_size_turns_before_passing_its_inner_points() {
         // element 0 is a 20 m dipole with 15 m tips; narrower than the 20 m
         // part, the tips would lie over it and the antenna would depend on
@@ -3138,6 +3195,36 @@ mod tests {
         let wires = &project.antenna.wires;
         assert_eq!(joints(wires), [0, 1, 1, 3, 4, 5]);
         assert_eq!(short_wires(wires), 1);
+    }
+
+    #[test]
+    fn ends_a_rounding_apart_are_near_and_ends_that_meet_are_not() {
+        let project = with_wires(&[
+            ((0.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            ((-0.0, 1.0, 0.0), (0.0, 2.0, 0.0)),
+            ((1e-12, 2.0, 0.0), (0.0, 3.0, 0.0)),
+        ]);
+        assert_eq!(near_ends(&project.antenna.wires), 1);
+    }
+
+    #[test]
+    fn a_wire_does_not_turn_onto_another_one() {
+        // the side of the coupling loop, turned about its end by 90°, would
+        // lie over the next side, its other end a rounding from the corner
+        // opposite: a singular matrix or not by that rounding
+        let project = sample("MAGLOOPM.MAA");
+        let target = VariableTarget::PolarWire { wire: 4, quantity: PolarQuantity::Azimuth, anchor: PolarAnchor::End };
+        let mut setup = setup_of(&project, &[SetupOp::SetTarget { index: 0, target }]).setup;
+        setup.sweep_only = true;
+        setup.variables[0].pitch = 5.0;
+        let values = swept(&project, &setup);
+        assert_eq!(
+            values[..19],
+            [
+                90.0, 95.0, 100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0, 135.0, 140.0, 145.0, 150.0, 155.0, 160.0,
+                165.0, 170.0, 175.0, 85.0
+            ]
+        );
     }
 
     #[test]

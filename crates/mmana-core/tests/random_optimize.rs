@@ -14,8 +14,8 @@ use mmana_core::optimize::{
     SourcePart, StackPart, Trial, VariableTarget, Weights, WirePart,
 };
 use mmana_core::{
-    CalcOptions, GroundKind, Load, LoadKind, PatternResolution, Point3, Project, Segmentation, Source, Wire, calculate,
-    maa,
+    CalcOptions, GroundKind, Load, LoadKind, PatternResolution, Point3, Project, Segmentation, Source, WarningCode,
+    Wire, calculate, maa,
 };
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
@@ -324,7 +324,8 @@ impl Figures {
     }
 
     /// What a calculation of `project` at `frequency_mhz` gives, and whether
-    /// the antenna takes power the calculation can tell from rounding.
+    /// the figures mean something: the antenna takes power the calculation
+    /// can tell from rounding, and no wires overlap.
     fn calculated(project: &Project, options: &CalcOptions, frequency_mhz: f64) -> Result<(Self, bool), String> {
         let options = CalcOptions {
             frequency_mhz: Some(frequency_mhz),
@@ -340,7 +341,11 @@ impl Figures {
             fb: r.fb_db,
             elevation: r.elevation_deg,
         };
-        Ok((figures, !r.warnings.iter().any(|w| w.message.starts_with("the input power"))))
+        let meaningless = |w: &mmana_core::CalcWarning| {
+            use WarningCode::*;
+            matches!(w.code, NonPositivePower | NegligiblePower | OverlappingWires)
+        };
+        Ok((figures, !r.warnings.iter().any(meaningless)))
     }
 }
 
@@ -440,7 +445,7 @@ fn keeps_its_best(case: &Case) -> Result<(), TestCaseError> {
         prop_assert!(same_to_rounding(&written, &out.project), "{written:?}\n{:?}", out.project);
         prop_assert_eq!(frequency, out.frequency_mhz);
         let (p, f) = band_one(case, &out.project, out.frequency_mhz);
-        let (got, takes_power) = Figures::calculated(&p, &case.options, f)
+        let (got, meaningful) = Figures::calculated(&p, &case.options, f)
             .map_err(|e| TestCaseError::fail(format!("the optimised antenna does not calculate: {e}")))?;
         prop_assert!(
             got.close(&Figures::of_trial(best)),
@@ -448,7 +453,7 @@ fn keeps_its_best(case: &Case) -> Result<(), TestCaseError> {
             Figures::of_trial(best)
         );
         // a breakdown of the model is never the best
-        prop_assert!(takes_power || case.setup.sweep_only, "the optimised antenna takes no power: {got:?}");
+        prop_assert!(meaningful || case.setup.sweep_only, "the optimised antenna means nothing: {got:?}");
 
         // every trial listed is what its values give
         let mut listed: Vec<&Trial> = out.trials.iter().collect();
@@ -458,12 +463,12 @@ fn keeps_its_best(case: &Case) -> Result<(), TestCaseError> {
                 .map_err(|e| TestCaseError::fail(e.to_string()))?;
             let (p, f) = band_one(case, &p, f);
             let want = Figures::of_trial(t);
-            let (got, takes_power) = Figures::calculated(&p, &case.options, f).map_err(|e| {
+            let (got, meaningful) = Figures::calculated(&p, &case.options, f).map_err(|e| {
                 TestCaseError::fail(format!("trial {:?} written back does not calculate: {e}", t.values))
             })?;
-            // (an antenna that takes no power has figures of rounding; such
-            // a trial scored the least)
-            if takes_power {
+            // (an antenna that takes no power, or whose wires overlap, has
+            // figures of rounding; such a trial scored the least)
+            if meaningful {
                 prop_assert!(got.close(&want), "trial {:?} written back: {got:?}, listed {want:?}", t.values);
             } else if !case.setup.sweep_only {
                 prop_assert_eq!(t.score, f64::MIN);

@@ -18,6 +18,7 @@ export type RuleId =
   | 'engine-error'
   | 'tee'
   | 'gap'
+  | 'along'
   | 'close-wires'
   | 'too-many-segments'
   | 'below-ground'
@@ -44,6 +45,12 @@ export const RULES: Rule[] = [
     description: '端が別のワイヤーの途中に触れていますが、計算上はつながっていません。',
   },
   { id: 'gap', severity: 'warning', label: 'わずかにずれた端', description: '触れているように見える端どうしの座標がずれていて、計算上はつながっていません。' },
+  {
+    id: 'along',
+    severity: 'warning',
+    label: '沿って重なったワイヤー',
+    description: '2 本のワイヤーが半径の和より近い距離で沿って並んでいます。導体どうしが重なっているので、結果は分割数や丸めで変わり、信用できません。',
+  },
   {
     id: 'close-wires',
     severity: 'warning',
@@ -118,6 +125,10 @@ const WARNING_RULE: Partial<Record<CalcResult['warnings'][number]['code'], { rul
   closeWires: {
     rule: 'close-wires',
     message: (w) => `ワイヤー ${w}：横を通る点が区間上の点として計算されています（共振が数 % ずれることがあります）。この付近の区間を短くしてください`,
+  },
+  overlappingWires: {
+    rule: 'along',
+    message: (w) => `ワイヤー ${w} が半径の和より近い距離で沿って重なっています（結果は信用できません）。どちらかを削除するか、離してください`,
   },
   tooManySegments: { rule: 'too-many-segments', message: (w) => `ワイヤー ${w} がつながった導体の分割が多すぎます（約 250 を超えると結果が分割数で変わります）` },
   belowGround: { rule: 'below-ground', message: (w) => `ワイヤー ${w} が地面より下にあります` },
