@@ -1318,6 +1318,29 @@ fn short_wires(wires: &[Wire]) -> usize {
     wires.iter().filter(|w| length(w) <= 1e-9 * size).count()
 }
 
+/// How many pairs of wire ends lie a billionth of the antenna apart or
+/// closer without being the same point: ends that a turn or a resize
+/// brought together a rounding apart. They do not move together, but the
+/// wires between them lie over each other all the same.
+fn near_ends(wires: &[Wire]) -> usize {
+    let length = |w: &Wire| (w.end.x - w.start.x).hypot(w.end.y - w.start.y).hypot(w.end.z - w.start.z);
+    let reach = 1e-9 * wires.iter().map(length).fold(0.0, f64::max);
+    let mut ends: Vec<[f64; 3]> =
+        wires.iter().flat_map(|w| [[w.start.x, w.start.y, w.start.z], [w.end.x, w.end.y, w.end.z]]).collect();
+    ends.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    let mut pairs = 0;
+    for (i, a) in ends.iter().enumerate() {
+        for b in ends[i + 1..].iter().take_while(|b| b[0] - a[0] <= reach) {
+            let apart = (b[0] - a[0]).hypot(b[1] - a[1]).hypot(b[2] - a[2]);
+            // (-0.0 is the same point as 0.0)
+            if a != b && apart <= reach {
+                pairs += 1;
+            }
+        }
+    }
+    pairs
+}
+
 /// `CACal` with its goal state (`ATRG`).
 struct Search<'a, F> {
     model: Model,
@@ -1397,6 +1420,11 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
     ///   nothing, or to a billionth of the antenna), or ends that met part:
     ///   ends that meet move together, so writing the values back from there
     ///   would move other points;
+    /// - wire ends come within a billionth of the antenna of each other
+    ///   without meeting, as a wire turned onto another one does: whether
+    ///   the wires then count as lying over each other, and whether the
+    ///   matrix is singular, is a matter of rounding, which differs between
+    ///   the steps of the search and the values set at once;
     /// - an element size takes its bounds across 0 (or onto it): they then
     ///   scale in proportion about 0 instead of moving about the centre, so
     ///   the way back to the best value would end elsewhere;
@@ -1438,7 +1466,10 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             }
         }
         let (before, after) = (self.model.list.wires().wires, m.list.wires().wires);
-        if joints(&before) != joints(&after) || short_wires(&before) < short_wires(&after) {
+        if joints(&before) != joints(&after)
+            || short_wires(&before) < short_wires(&after)
+            || near_ends(&before) < near_ends(&after)
+        {
             return true;
         }
         if moved.iter().any(|&i| matches!(self.vars[i].target, T::Element { .. })) {
@@ -3138,6 +3169,36 @@ mod tests {
         let wires = &project.antenna.wires;
         assert_eq!(joints(wires), [0, 1, 1, 3, 4, 5]);
         assert_eq!(short_wires(wires), 1);
+    }
+
+    #[test]
+    fn ends_a_rounding_apart_are_near_and_ends_that_meet_are_not() {
+        let project = with_wires(&[
+            ((0.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            ((-0.0, 1.0, 0.0), (0.0, 2.0, 0.0)),
+            ((1e-12, 2.0, 0.0), (0.0, 3.0, 0.0)),
+        ]);
+        assert_eq!(near_ends(&project.antenna.wires), 1);
+    }
+
+    #[test]
+    fn a_wire_does_not_turn_onto_another_one() {
+        // the side of the coupling loop, turned about its end by 90°, would
+        // lie over the next side, its other end a rounding from the corner
+        // opposite: a singular matrix or not by that rounding
+        let project = sample("MAGLOOPM.MAA");
+        let target = VariableTarget::PolarWire { wire: 4, quantity: PolarQuantity::Azimuth, anchor: PolarAnchor::End };
+        let mut setup = setup_of(&project, &[SetupOp::SetTarget { index: 0, target }]).setup;
+        setup.sweep_only = true;
+        setup.variables[0].pitch = 5.0;
+        let values = swept(&project, &setup);
+        assert_eq!(
+            values[..19],
+            [
+                90.0, 95.0, 100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0, 135.0, 140.0, 145.0, 150.0, 155.0, 160.0,
+                165.0, 170.0, 175.0, 85.0
+            ]
+        );
     }
 
     #[test]
