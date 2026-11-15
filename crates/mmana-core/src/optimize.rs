@@ -1278,9 +1278,10 @@ struct Reading {
     current: Option<f32>,
     horizontal: Vec<f32>,
     vertical: Vec<f32>,
-    /// The antenna takes power the calculation can tell from rounding
-    /// (its result has no warning about the input power).
-    takes_power: bool,
+    /// The figures mean something: the antenna takes power the calculation
+    /// can tell from rounding and no wires overlap (its result has no
+    /// warning about either).
+    meaningful: bool,
 }
 
 /// `ABS()` of the original, which keeps the sign of -0.
@@ -1530,10 +1531,12 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             current,
             horizontal: every(&r.patterns.horizontal.total),
             vertical: every(&r.patterns.vertical.total),
-            takes_power: !r
-                .warnings
-                .iter()
-                .any(|w| matches!(w.code, WarningCode::NonPositivePower | WarningCode::NegligiblePower)),
+            meaningful: !r.warnings.iter().any(|w| {
+                matches!(
+                    w.code,
+                    WarningCode::NonPositivePower | WarningCode::NegligiblePower | WarningCode::OverlappingWires
+                )
+            }),
         })
     }
 
@@ -1637,7 +1640,7 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
             }
             let rd = self.calculate().map_err(Stop::Failed)?;
             bv[b] = self.score(&rd);
-            meaningless |= !rd.takes_power;
+            meaningless |= !rd.meaningful;
             let last = b == self.bands - 1;
             if last {
                 // (the original adds the last band's score in place of
@@ -1647,9 +1650,9 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
                     self.v += if self.setup.emphasize_first_band { s / self.bands as f64 } else { s };
                 }
                 // a band that takes no power (MININEC broke down, as with a
-                // feed resistance below 0, or one within rounding of 0)
-                // scores the least, never the best; the original scores it,
-                // and the matching goal gets a NaN
+                // feed resistance below 0, or one within rounding of 0) or
+                // whose wires overlap scores the least, never the best; the
+                // original scores it, and the matching goal gets a NaN
                 if !self.setup.sweep_only && (meaningless || !self.v.is_finite()) {
                     self.v = f64::MIN;
                 }
@@ -2898,6 +2901,29 @@ mod tests {
         assert!(scores.iter().any(|&(s, r)| s == f64::MIN && r < 0.0), "{scores:?}");
         assert!(scores.iter().all(|(s, _)| !s.is_nan()));
         assert!(out.best.unwrap().impedance.re > 0.0);
+    }
+
+    #[test]
+    fn a_trial_whose_wires_overlap_is_never_the_best() {
+        // a second wire of 1 mm radius slanting from 1.5 mm to 3 mm below
+        // the dipole: its far end stepped up to 1.5 mm, the two lie within
+        // their radii of each other all along
+        let project = with_wires(&[((0.0, -5.2, 0.0), (0.0, 5.2, 0.0)), ((0.0, -5.2, -0.0015), (0.0, 5.2, -0.003))]);
+        let target = VariableTarget::Wire { wire: 1, part: WirePart::Z2 };
+        let mut setup = setup_of(&project, &[SetupOp::SetTarget { index: 0, target }]).setup;
+        setup.absolute_pitch = true;
+        setup.variables[0].pitch = 0.0015;
+        setup.weights = Weights { gain: 0, fb: 0, jx: 0, swr: 100, elevation: 0, matching: 0, current: 0 };
+        let mut scores = Vec::new();
+        let out = optimize(&project, &CalcOptions::default(), &setup, Some(20), |p| {
+            scores.extend(p.score.map(|s| (p.values[0], s)));
+            true
+        })
+        .unwrap();
+        let overlapping: Vec<f64> = scores.iter().filter(|(z, _)| *z > -0.002).map(|&(_, s)| s).collect();
+        assert!(!overlapping.is_empty() && overlapping.iter().all(|&s| s == f64::MIN), "{scores:?}");
+        assert!(scores.iter().any(|&(z, s)| z < -0.002 && s > f64::MIN), "{scores:?}");
+        assert!(out.best.unwrap().values[0] < -0.002);
     }
 
     #[test]
