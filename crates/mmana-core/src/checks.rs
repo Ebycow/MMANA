@@ -119,15 +119,24 @@ pub(crate) fn overlapping_wires(ap: &AntDef) -> Option<CalcWarning> {
     let mut wires: Vec<usize> = wires.into_iter().map(|w| w % base + 1).collect();
     wires.sort_unstable();
     wires.dedup();
+    // of different stacked copies: the wires as defined are clear of each other
+    let (pair, remedy) = if first / base == second / base {
+        (format!("wires {} and {}", first % base + 1, second % base + 1), "remove one of them or move them apart")
+    } else if first % base == second % base {
+        (format!("stacked copies of wire {}", first % base + 1), "space the copies further apart")
+    } else {
+        (
+            format!("wire {} and wire {} of another stacked copy", first % base + 1, second % base + 1),
+            "space the copies further apart",
+        )
+    };
     Some(CalcWarning::new(
         WarningCode::OverlappingWires,
         wires,
         format!(
-            "wires {} and {} run along each other for {shared:.4} m, {gap:.2e} m apart, which is within the sum of \
-             their radii: the conductors pass through each other, which MININEC cannot calculate (the result \
-             depends on the segments and on rounding), so remove one of them or move them apart",
-            first % base + 1,
-            second % base + 1
+            "{pair} run along each other for {shared:.4} m, {gap:.2e} m apart, which is within the sum of their \
+             radii: the conductors pass through each other, which MININEC cannot calculate (the result depends on \
+             the segments and on rounding), so {remedy}"
         ),
     ))
 }

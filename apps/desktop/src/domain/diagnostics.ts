@@ -121,14 +121,18 @@ export function errorDiagnostic(error: EngineError): Diagnostic | null {
 }
 
 /** The rule of each calculation warning that names wires, and what to show for the wires (1-based, listed). */
-const WARNING_RULE: Partial<Record<CalcResult['warnings'][number]['code'], { rule: RuleId; message: (wires: string) => string }>> = {
+const WARNING_RULE: Partial<Record<CalcResult['warnings'][number]['code'], { rule: RuleId; message: (wires: string, count: number) => string }>> = {
   closeWires: {
     rule: 'close-wires',
     message: (w) => `ワイヤー ${w}：横を通る点が区間上の点として計算されています（共振が数 % ずれることがあります）。この付近の区間を短くしてください`,
   },
   overlappingWires: {
     rule: 'along',
-    message: (w) => `ワイヤー ${w} が半径の和より近い距離で沿って重なっています（結果は信用できません）。どちらかを削除するか、離してください`,
+    // one wire: its stacked copies lie on each other
+    message: (w, count) =>
+      count === 1
+        ? `ワイヤー ${w} のスタックしたコピーどうしが沿って重なっています（結果は信用できません）。スタックの間隔を広げてください`
+        : `ワイヤー ${w} が半径の和より近い距離で沿って重なっています（結果は信用できません）。どちらかを削除するか、離してください（スタックしたコピーどうしなら、スタックの間隔を広げてください）`,
   },
   tooManySegments: { rule: 'too-many-segments', message: (w) => `ワイヤー ${w} がつながった導体の分割が多すぎます（約 250 を超えると結果が分割数で変わります）` },
   belowGround: { rule: 'below-ground', message: (w) => `ワイヤー ${w} が地面より下にあります` },
@@ -140,7 +144,7 @@ export function resultDiagnostics(result: CalcResult): Diagnostic[] {
     const known = WARNING_RULE[w.code];
     if (!known || w.wires.length === 0) return [];
     const wires = w.wires.map((n) => n - 1);
-    return [diagnostic(known.rule, wires, known.message(wireList(wires)))];
+    return [diagnostic(known.rule, wires, known.message(wireList(wires), wires.length))];
   });
 }
 
