@@ -224,7 +224,8 @@ prop_compose! {
     /// A model every calculation must accept: 1 to 4 straight elements at
     /// least 0.1 λ apart, each a few dozen segments at most, sources at the
     /// centres of different elements, loads with R ≥ 0, copies 0.6 λ apart
-    /// or more, and everything above the ground.
+    /// or more upwards and 0.1 λ clear of each other sideways, and everything
+    /// above the ground.
     fn valid_model()(
         frequency in prop::sample::select(vec![3.5, 7.05, 14.05, 28.5, 50.1, 145.0]),
         elements in prop::collection::vec(element(), 1..5),
@@ -238,11 +239,12 @@ prop_compose! {
         let mut p = Project::default();
         let ant = &mut p.antenna;
         ant.frequency_mhz = frequency;
-        let mut top = 0.0f64;
+        let (mut top, mut width) = (0.0f64, 0.0f64);
         for (i, e) in elements.iter().enumerate() {
             let (dy, dz) = (e.tilt_deg.to_radians().cos(), e.tilt_deg.to_radians().sin());
             let (h, x) = (e.half_length * wavelength, i as f64 * spacing * wavelength);
             top = top.max((h * dz).abs());
+            width = width.max(2.0 * h * dy);
             ant.wires.push(Wire {
                 start: Point3::new(x, -h * dy, -h * dz),
                 end: Point3::new(x, h * dy, h * dz),
@@ -269,7 +271,9 @@ prop_compose! {
             ant.stack = Stack {
                 horizontal,
                 vertical,
-                horizontal_spacing: apart * wavelength,
+                // side by side along Y, the way the elements run: a copy
+                // starts past the end of the one before it
+                horizontal_spacing: width + (apart - 0.5) * wavelength,
                 vertical_spacing: apart * wavelength,
                 direction: StackDirection::Up,
             };
