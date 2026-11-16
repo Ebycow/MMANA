@@ -70,6 +70,16 @@ describe('gathering the problems of an antenna', () => {
     const ds = collectDiagnostics({ wires: loops().slice(0, 4), error: null, result: r });
     expect(ds).toEqual([expect.objectContaining({ rule: 'along', severity: 'warning', wires: [0, 2] })]);
     expect(ds[0].message).toContain('ワイヤー 1、3');
+    expect(ds[0].message).toContain('どちらかを削除');
+  });
+
+  it('says to widen the stack when the copies of one wire run along each other', () => {
+    const r = result([{ code: 'overlappingWires', wires: [2], message: '...' }]);
+    const ds = collectDiagnostics({ wires: loops().slice(0, 4), error: null, result: r });
+    expect(ds).toEqual([expect.objectContaining({ rule: 'along', severity: 'warning', wires: [1] })]);
+    expect(ds[0].message).toContain('ワイヤー 2 のスタックしたコピーどうし');
+    expect(ds[0].message).toContain('スタックの間隔を広げてください');
+    expect(ds[0].message).not.toContain('削除');
   });
 
   it('puts errors first, then warnings, then notes', () => {
