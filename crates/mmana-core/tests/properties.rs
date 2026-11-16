@@ -975,6 +975,34 @@ fn wires_that_run_along_each_other_are_warned_about() {
     stacked.antenna.stack.horizontal = 2;
     stacked.antenna.stack.horizontal_spacing = 10.0;
     assert_eq!(warned(&stacked), Some(vec![1, 2]));
+    // copies spaced closer than the wire is long lie on each other: one wire, and the spacing to change
+    let message =
+        |p: &Project| calc(p).warnings.into_iter().find(|w| w.code == WarningCode::OverlappingWires).map(|w| w.message);
+    let mut copies = project(vec![wire((0.0, -h, 0.0), (0.0, h, 0.0), 17)], vec![source("w1c", 1.0, 0.0)]);
+    copies.antenna.stack.horizontal = 2;
+    copies.antenna.stack.horizontal_spacing = 6.0;
+    assert_eq!(warned(&copies), Some(vec![1]));
+    let text = message(&copies).unwrap();
+    assert!(text.starts_with("stacked copies of wire 1 run along each other for 4.4000 m"), "{text}");
+    assert!(text.ends_with("so space the copies further apart"), "{text}");
+    // (wires of the antenna as defined are told apart from those)
+    assert!(message(&stacked).unwrap().starts_with("wires 1 and 2 run"));
+    // copies end to end, and clear of each other
+    for spacing in [2.0 * h, 11.0] {
+        copies.antenna.stack.horizontal_spacing = spacing;
+        assert_eq!(warned(&copies), None, "{spacing}");
+    }
+    // a copy of one wire on another wire
+    let mut across = beside(wire((0.0, 6.0 - h, 0.5), (0.0, 6.0 + h, 0.5), 17));
+    across.antenna.stack.vertical = 2;
+    across.antenna.stack.vertical_spacing = 0.5;
+    across.antenna.stack.horizontal_spacing = 6.0;
+    assert_eq!(warned(&across), Some(vec![1, 2]));
+    assert!(
+        message(&across).unwrap().starts_with("wire 2 and wire 1 of another stacked copy run"),
+        "{:?}",
+        message(&across)
+    );
     // and no sample is: none has wires through each other
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/maa");
     let options = CalcOptions { max_pulses: 600, ..CalcOptions::default() };
