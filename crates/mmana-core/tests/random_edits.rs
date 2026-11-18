@@ -402,8 +402,12 @@ fn table_mismatch(e: &ElementEdit, round: f64) -> Vec<String> {
         if let Some(&j) = flat.first()
             && flat.contains(&i)
         {
+            // each position against the centre of its own wires: two
+            // elements may lie near opposite ends of the range of f64,
+            // where the distance between them overflows
             let apart = centre(i) - centre(j);
-            if !((r.position - e.elements[j].position - apart).abs() <= tol[i] + tol[j]) {
+            let shift = (r.position - centre(i)) - (e.elements[j].position - centre(j));
+            if !(shift.abs() <= tol[i] + tol[j]) {
                 off.push(format!(
                     "element {i}: {} from element {j} but the wires {apart}",
                     r.position - e.elements[j].position
