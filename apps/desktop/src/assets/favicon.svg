@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 100 824 824">
+  <!-- App icon: the Tabler Icons "antenna" glyph (MIT, as IconAntenna in the app header)
+       on the Mantine blue. Regenerate the desktop icons with
+       `npx tauri icon app-icon.svg -o <tmp>` and copy the files that src-tauri/icons
+       already has; src/assets/favicon.svg is this file with viewBox="100 100 824 824". -->
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#339af0"/><stop offset="1" stop-color="#1971c2"/></linearGradient></defs>
+  <rect x="100" y="100" width="824" height="824" rx="184" fill="url(#bg)"/>
+  <g transform="translate(152 137) scale(30)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 4v8M16 4.5v7M12 5v16M8 5.5v5M4 6v4M20 8h-16"/>
+  </g>
+</svg>
