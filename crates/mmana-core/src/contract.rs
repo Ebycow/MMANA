@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 
 use crate::circuits::{
     self, Coil, CoilInput, Hairpin, HairpinInput, LcMatch, LcMatchInput, Line, LineInput, Stub, StubInput, StubMatch,
-    StubMatchInput, Tank, TankInput, TwoSection, TwoSectionInput, TwoSectionTuneInput,
+    StubMatchInput, SweepMatch, SweepMatchInput, Tank, TankInput, TwoSection, TwoSectionInput, TwoSectionTuneInput,
 };
 use crate::elements::{ElementEdit, ElementOp};
 use crate::optimize::{OptimizeError, OptimizeOutcome, OptimizerSetup, Progress, SetupEdit, SetupOp};
@@ -51,6 +51,10 @@ pub struct SweepRequest {
     /// when omitted.
     #[serde(default)]
     pub indices: Option<Vec<usize>>,
+    /// Gives each point its pattern cuts (at the options' resolution), for
+    /// the patterns across the band.
+    #[serde(default)]
+    pub patterns: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -104,8 +108,9 @@ pub struct ResonanceRequest {
     pub range: ResonanceRange,
 }
 
-/// One of the calculators of the 共振条件 dialog ([`crate::circuits`]).
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+/// One of the calculators of the 共振条件 dialog, or the matching of the
+/// 周波数特性 dialog ([`crate::circuits`]).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(tag = "tool", content = "input", rename_all = "camelCase")]
 pub enum CircuitRequest {
@@ -118,6 +123,7 @@ pub enum CircuitRequest {
     TwoSectionTune(TwoSectionTuneInput),
     StubMatch(StubMatchInput),
     Hairpin(HairpinInput),
+    SweepMatch(SweepMatchInput),
 }
 
 /// The result of a [`CircuitRequest`], tagged with the same tool.
@@ -134,6 +140,7 @@ pub enum CircuitResponse {
     TwoSectionTune(TwoSection),
     StubMatch(StubMatch),
     Hairpin(Hairpin),
+    SweepMatch(SweepMatch),
 }
 
 /// Element editing: the edits so far, replayed on the antenna as it was when
@@ -226,25 +233,22 @@ pub fn pulse_layout(req: &CalculationRequest) -> Result<PulseLayout, CalcError> 
 }
 
 pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
-    let Some(indices) = &req.indices else {
-        return Ok(SweepResponse {
-            points: crate::sweep(&req.project, &req.options, req.start_mhz, req.stop_mhz, req.points)?,
-        });
-    };
     let points = req.points;
     crate::validate::sweep_points(points)?;
-    crate::validate::sweep_points(indices.len().max(1))?;
-    let frequencies = indices
-        .iter()
-        .map(|&index| {
-            if index < points {
-                Ok(crate::sweep_frequency(req.start_mhz, req.stop_mhz, points, index))
-            } else {
-                Err(CalcError::SweepPointOutOfRange { index, points })
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(SweepResponse { points: crate::sweep_at(&req.project, &req.options, &frequencies)? })
+    let at = |index| crate::sweep_frequency(req.start_mhz, req.stop_mhz, points, index);
+    let frequencies = match &req.indices {
+        None => (0..points).map(at).collect(),
+        Some(indices) => {
+            crate::validate::sweep_points(indices.len().max(1))?;
+            indices
+                .iter()
+                .map(|&index| {
+                    if index < points { Ok(at(index)) } else { Err(CalcError::SweepPointOutOfRange { index, points }) }
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        }
+    };
+    Ok(SweepResponse { points: crate::sweep_with(&req.project, &req.options, &frequencies, req.patterns)? })
 }
 
 pub fn find_resonance(req: &ResonanceRequest) -> Result<ResonanceSearch, CalcError> {
@@ -262,6 +266,7 @@ pub fn circuit(req: &CircuitRequest) -> Result<CircuitResponse, CalcError> {
         CircuitRequest::TwoSectionTune(i) => CircuitResponse::TwoSectionTune(circuits::tune_two_section(i)?),
         CircuitRequest::StubMatch(i) => CircuitResponse::StubMatch(circuits::stub_match(i)?),
         CircuitRequest::Hairpin(i) => CircuitResponse::Hairpin(circuits::hairpin(i)?),
+        CircuitRequest::SweepMatch(i) => CircuitResponse::SweepMatch(circuits::sweep_match(i)?),
     })
 }
 

@@ -72,7 +72,7 @@ pub struct AppState {
         (name = "calculations", description = "Antenna calculations"),
         (name = "files", description = "MMANA .maa file conversion"),
         (name = "editing", description = "Antenna editing"),
-        (name = "circuits", description = "Matching and resonance calculators (LC, coil, stub, line)"),
+        (name = "circuits", description = "Matching and resonance calculators (LC, coil, stub, line) and the matched sweep"),
         (name = "optimization", description = "Optimisation of dimensions, loads, height and more"),
         (name = "system")
     )

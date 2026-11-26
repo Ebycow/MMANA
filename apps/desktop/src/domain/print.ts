@@ -1,7 +1,7 @@
 // The printed sheets (印刷): which sections there are, how they fall onto A4
 // pages, and the figures MMANA printed that the screen does not show (the
 // SWR against 600 Ω, the SWR bandwidths of the 周波数特性 sheet).
-import type { Complex, Point3, SweepPoint } from '../api/types';
+import type { Complex, Point3 } from '../api/types';
 
 export type SectionId = 'summary' | 'patterns' | 'shape' | 'warnings' | 'elements' | 'wires' | 'feed' | 'sweep' | 'memo';
 
@@ -21,7 +21,7 @@ export const SECTIONS: Section[] = [
   { id: 'elements', label: 'エレメント表', description: 'エレメント編集と同じ表（位置・間隔・横幅・縦幅・全周）', initial: true },
   { id: 'wires', label: 'ワイヤー表', description: '全ワイヤーの座標・半径・分割数・長さ', initial: true },
   { id: 'feed', label: '給電点・負荷', description: '給電点ごとのインピーダンス・SWR と負荷の値', initial: true },
-  { id: 'sweep', label: '周波数特性', description: 'SWR・インピーダンス・利得・F/B のグラフと SWR の帯域幅', initial: true },
+  { id: 'sweep', label: '周波数特性', description: 'SWR・インピーダンス・利得・F/B のグラフと SWR の帯域幅（整合回路を入れていれば、その前後）', initial: true },
   { id: 'memo', label: 'メモ欄', description: '製作や調整の記録を書き込む罫線', initial: false },
 ];
 
@@ -113,7 +113,7 @@ export interface Bandwidth {
  * `GetSWRWidth`), with its edges interpolated between sweep points; null
  * when no point is under it.
  */
-export function swrBandwidth(points: SweepPoint[], limit: number): Bandwidth | null {
+export function swrBandwidth(points: { frequencyMhz: number; swr: number }[], limit: number): Bandwidth | null {
   if (points.length === 0) return null;
   let best = 0;
   points.forEach((p, i) => p.swr < points[best].swr && (best = i));

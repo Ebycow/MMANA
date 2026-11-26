@@ -9,8 +9,8 @@
 //! within tolerances stated with each test.
 
 use mmana_core::{
-    CalcOptions, CalcResult, Complex, GroundKind, Load, LoadKind, Point3, Project, Segmentation, Source, WarningCode,
-    Wire, calculate, maa, pulse_layout, solve, sweep_at,
+    CalcOptions, CalcResult, Complex, GroundKind, Load, LoadKind, Point3, Project, Segmentation, Source, SweepPoint,
+    WarningCode, Wire, calculate, maa, pulse_layout, solve, sweep_at, sweep_with,
 };
 use std::f64::consts::PI;
 use std::path::Path;
@@ -360,11 +360,15 @@ fn a_sweep_point_is_the_single_calculation_at_its_frequency() {
         let f0 = p.antenna.frequency_mhz;
         let frequencies = [f0 * 0.97, f0, f0 * 1.031];
         let points = sweep_at(&p, &CalcOptions::default(), &frequencies).unwrap();
-        for (pt, &f) in points.iter().zip(&frequencies) {
+        let with_patterns = sweep_with(&p, &CalcOptions::default(), &frequencies, true).unwrap();
+        for ((pt, pp), &f) in points.iter().zip(&with_patterns).zip(&frequencies) {
             let r = calculate(&p, &CalcOptions { frequency_mhz: Some(f), ..CalcOptions::default() }).unwrap();
             assert_eq!(pt.frequency_mhz, f);
             assert_eq!((pt.impedance, pt.swr), (r.impedance, r.swr), "{name} at {f}");
             assert_eq!((pt.gain_dbi, pt.fb_db, pt.elevation_deg), (r.gain_dbi, r.fb_db, r.elevation_deg), "{name}");
+            assert_eq!(pt.patterns, None);
+            assert_eq!(pp.patterns.as_ref(), Some(&r.patterns), "{name} at {f}");
+            assert_eq!(SweepPoint { patterns: None, ..pp.clone() }, *pt);
         }
     }
 }

@@ -41,7 +41,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Run a calculator of the 共振条件 dialog (LC, coil, match, stub, line) on a
+    /// Run a calculator of the 共振条件 dialog (LC, coil, match, stub, line) or the
+    /// matching of a sweep (sweepMatch) on a
     /// JSON request, e.g. '{"tool":"lcResonance","input":{"from":"inductance","frequencyMhz":14.05,"inductanceUh":1}}'.
     Circuit {
         /// The request (default: read from stdin).

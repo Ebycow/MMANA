@@ -22,7 +22,34 @@ interface PolarPlotProps {
   totalOnly?: boolean;
 }
 
-export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: PolarPlotProps) {
+/** One line of a polar plot: gain (dBi) per sample. */
+export interface PolarCurve {
+  key: string;
+  label: string;
+  values: number[];
+  color: string;
+  dash?: string;
+  width: number;
+}
+
+/** The polarisations of one cut, as the result's pattern shows them. */
+export function PolarPlot({ cut, totalOnly, ...rest }: PolarPlotProps) {
+  const series = totalOnly ? SERIES.filter((s) => s.key === 'total') : SERIES;
+  return <PolarCurves {...rest} stepDeg={cut.stepDeg} curves={series.map((s) => ({ ...s, values: cut[s.key] }))} />;
+}
+
+interface PolarCurvesProps {
+  kind: CutKind;
+  stepDeg: number;
+  /** Drawn in order, the first on top; all with the same number of samples. */
+  curves: PolarCurve[];
+  maxDb: number;
+  title: string;
+  subtitle: string;
+}
+
+/** Curves on one polar grid: the polarisations of a cut, or one cut at several frequencies. */
+export function PolarCurves({ kind, stepDeg, curves, maxDb, title, subtitle }: PolarCurvesProps) {
   const { ref, width, height } = useElementSize();
   const [hover, setHover] = useState<number | null>(null);
   const scale = useDisplay((s) => s.polarScale);
@@ -32,10 +59,10 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
   const R = Math.max(10, Math.min((width - pad * 2) / 2, half ? height - pad * 2 : (height - pad * 2) / 2));
   const cx = width / 2;
   const cy = half ? pad + R + 6 : height / 2;
-  const n = cut.total.length;
+  const n = curves[0]?.values.length ?? 0;
 
   const pt = (i: number, db: number) => {
-    const a = sampleAngle(kind, i, cut.stepDeg);
+    const a = sampleAngle(kind, i, stepDeg);
     const r = R * radiusFor(db, maxDb, scale);
     return [cx + r * Math.cos(a), cy - r * Math.sin(a)] as const;
   };
@@ -47,11 +74,10 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
-    setHover(sampleAt(kind, e.clientX - box.left - cx, e.clientY - box.top - cy, cut.stepDeg, n));
+    setHover(sampleAt(kind, e.clientX - box.left - cx, e.clientY - box.top - cy, stepDeg, n));
   };
 
-  const tip = hover != null ? pt(hover, cut.total[hover]) : null;
-  const series = totalOnly ? SERIES.filter((s) => s.key === 'total') : SERIES;
+  const tip = hover != null && curves[0] ? pt(hover, curves[0].values[hover]) : null;
 
   return (
     <figure style={{ margin: 0, display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
@@ -86,7 +112,7 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
               );
             })}
             {spokes.map((deg) => {
-              const a = sampleAngle(kind, deg / cut.stepDeg, cut.stepDeg);
+              const a = sampleAngle(kind, deg / stepDeg, stepDeg);
               const x = cx + R * Math.cos(a);
               const y = cy - R * Math.sin(a);
               const lx = cx + (R + 12) * Math.cos(a);
@@ -103,10 +129,10 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
             })}
             {half && <line x1={cx - R} y1={cy} x2={cx + R} y2={cy} stroke="var(--chart-axis)" />}
 
-            {[...series].reverse().map((s) => (
+            {[...curves].reverse().map((s) => (
               <path
                 key={s.key}
-                d={path(cut[s.key])}
+                d={path(s.values)}
                 fill="none"
                 stroke={s.color}
                 strokeWidth={s.width}
@@ -118,7 +144,7 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
             {hover != null && tip && (
               <g pointerEvents="none">
                 <line x1={cx} y1={cy} x2={tip[0]} y2={tip[1]} stroke="var(--chart-axis)" strokeDasharray="2 2" />
-                <circle cx={tip[0]} cy={tip[1]} r={4} fill="var(--series-1)" stroke="var(--chart-surface)" strokeWidth={2} />
+                <circle cx={tip[0]} cy={tip[1]} r={4} fill={curves[0].color} stroke="var(--chart-surface)" strokeWidth={2} />
               </g>
             )}
           </svg>
@@ -129,14 +155,14 @@ export function PolarPlot({ kind, cut, maxDb, title, subtitle, totalOnly }: Pola
             style={{ left: Math.min(width - 150, tip[0] + 12), top: Math.max(0, tip[1] - 64) }}
             role="status"
           >
-            <div style={{ fontWeight: 600, marginBottom: 2 }}>{sampleLabel(kind, hover, cut.stepDeg)}</div>
-            {series.map((s) => (
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>{sampleLabel(kind, hover, stepDeg)}</div>
+            {curves.map((s) => (
               <div key={s.key} className="num" style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
                 <span>
                   <span className="legend-swatch" style={{ borderColor: s.color, borderTopStyle: s.dash ? 'dashed' : 'solid' }} />
                   {s.label}
                 </span>
-                <span>{formatDb(cut[s.key][hover])}</span>
+                <span>{formatDb(s.values[hover])}</span>
               </div>
             ))}
           </div>

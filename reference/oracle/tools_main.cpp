@@ -19,6 +19,11 @@
 //   qmtune <RL> <XL> <Ri> <Zo1> <Zo2>
 //   sm <MHz> <Zi> <R> <X> <Zo> <vf>
 //   hairpin <R> <Z>
+//   bwmatch <RO> <JXO> <f0 MHz> <R0> <X0> <f MHz> <R> <X>
+//     the 周波数特性 dialog's matching (TBwDispDlg in BwDisp.cpp:
+//     generated/bwdisp_extract.cpp): the antenna, R0 + jX0 at f0, matched to
+//     RO; the SWR (CalcSWR, BwMatch = 1) and impedance (CalcZ, BwMatch = 2)
+//     at f of an antenna that is R + jX there
 
 // Reuse the helpers of the calculation oracle (StrDbl, WarningMB, ...).
 #define main oracle_calc_main
@@ -26,6 +31,7 @@
 #undef main
 
 #include "OptDlg.h"
+#include "BwDisp.h"
 
 static void num(const char *key, double d, int comma = 1)
 {
@@ -249,6 +255,27 @@ static int Hairpin(int argc, char **argv)
 	return 1;
 }
 
+static int BwMatch(int argc, char **argv)
+{
+	if( argc < 8 ) return 0;
+	TBwDispDlg d;
+	env.RO = atof(argv[0]);
+	env.JXO = atof(argv[1]);
+	d.MatchData.Flag = 1;
+	d.MatchData.FQ = atof(argv[2]);
+	d.MatchData.R = atof(argv[3]);
+	d.MatchData.JX = atof(argv[4]);
+	double f = atof(argv[5]), R = atof(argv[6]), X = atof(argv[7]);
+	printf("\"tool\":\"bwmatch\"");
+	exeenv.BwMatch = 1;
+	num("swr", d.CalcSWR(f, R, X));
+	exeenv.BwMatch = 2;
+	double r = R, x = X;
+	d.CalcZ(f, r, x);
+	num("r", r); num("x", x);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	if( argc < 2 ){
@@ -283,6 +310,7 @@ int main(int argc, char *argv[])
 		else if( !strcmp(av[0], "qmtune") ) ok = QM(b, ac-1, av+1, 1);
 		else if( !strcmp(av[0], "sm") ) ok = SM(b, ac-1, av+1);
 		else if( !strcmp(av[0], "hairpin") ) ok = Hairpin(ac-1, av+1);
+		else if( !strcmp(av[0], "bwmatch") ) ok = BwMatch(ac-1, av+1);
 		else ok = 0;
 		if( !ok ){
 			fprintf(stderr, "bad case: %s\n", av[0]);

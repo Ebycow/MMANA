@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import type { CalcOptions, CalcResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, ResonanceSearch, SweepPoint } from '../api/types';
+import type { CalcOptions, CalcResult, CircuitResult, OptimizeOutcome, OptimizerSetup, ParsedProject, Progress, Project, ResonanceSearch, SweepPoint } from '../api/types';
 import { EngineError, files, transport } from '../api/transport';
 import { describeChange } from '../domain/history';
 import { defaultSetup } from '../domain/optimize';
 import { UNTITLED, defaultOptions, emptyProject, newProject, suggestedFileName } from '../domain/project';
-import { OUTLINE_POINTS, sweepOrder } from '../domain/sweep';
+import { OUTLINE_POINTS, centreIsAPoint, matchFrequency, pointAt, sweepOrder, type MatchSettings, type SweepRange } from '../domain/sweep';
 
 const HISTORY_LIMIT = 200;
 
@@ -21,6 +21,21 @@ export interface SweepState {
   progress: { done: number; total: number } | null;
   /** 中止 was pressed: the sweep ends when the points being calculated arrive. */
   stopping: boolean;
+  /** The range, antenna and options `data` was calculated with. */
+  basis: { range: SweepRange; project: Project; options: CalcOptions } | null;
+  /** The matching network of the 周波数特性 dialog, and the sweep through it. */
+  matching: MatchSettings;
+  match: SweepMatchState | null;
+}
+
+export interface SweepMatchState {
+  /** Where the network is designed. */
+  frequencyMhz: number;
+  /** The network and the sweep points through it; null until worked out. */
+  result: CircuitResult<'sweepMatch'> | null;
+  /** The antenna's impedance at the matching frequency is being calculated. */
+  running: boolean;
+  error: string | null;
 }
 
 export interface ResonanceState {
@@ -159,6 +174,7 @@ export interface AppState {
   setShowCurrents: (on: boolean) => void;
   setElementEditorOpen: (open: boolean) => void;
   setSweepRange: (patch: Partial<Pick<SweepState, 'startMhz' | 'stopMhz' | 'points'>>) => void;
+  setSweepMatching: (patch: Partial<MatchSettings>) => void;
   calculate: () => Promise<void>;
   runSweep: () => Promise<void>;
   /** Finds the resonance nearest to the calculation frequency. */
@@ -193,7 +209,18 @@ const freshDocument = (project: Project) => ({
   resultStale: false,
   calcError: null,
   calcErrorProject: null,
-  sweep: { ...sweepAround(project.antenna.frequencyMhz), points: 21, data: null, stale: false, running: false, progress: null, stopping: false },
+  sweep: {
+    ...sweepAround(project.antenna.frequencyMhz),
+    points: 21,
+    data: null,
+    stale: false,
+    running: false,
+    progress: null,
+    stopping: false,
+    basis: null,
+    matching: { mode: 'off', atCentre: true, frequencyMhz: project.antenna.frequencyMhz },
+    match: null,
+  } as SweepState,
   resonance: { search: null, running: false, stale: false },
   optimizer: freshOptimizer(),
 });
@@ -207,6 +234,60 @@ export const useApp = create<AppState>()((set, get) => {
   let generation = 0;
   // the latest sweep request; an earlier one finishing must not overwrite it
   let sweepRequest = 0;
+  // likewise the latest matching of the sweep
+  let matchRequest = 0;
+  // the antenna at a matching frequency that is not a point of the sweep
+  let offGrid: { basis: SweepState['basis']; mhz: number; point: Promise<SweepPoint> } | null = null;
+
+  /** Works out the network and the sweep through it, from the sweep as it is. */
+  const refreshMatch = async () => {
+    const request = ++matchRequest;
+    const { data, basis, matching, match: prev } = get().sweep;
+    if (matching.mode === 'off' || !data?.length || !basis) {
+      set({ sweep: { ...get().sweep, match: null } });
+      return;
+    }
+    const mhz = matchFrequency(basis.range, matching);
+    const setMatch = (m: Partial<SweepMatchState>) => {
+      if (request !== matchRequest) return;
+      set({ sweep: { ...get().sweep, match: { frequencyMhz: mhz, result: null, running: false, error: null, ...m } } });
+    };
+    // keep the curve of the same frequency on screen while it is worked out again
+    const kept = prev?.frequencyMhz === mhz ? prev.result : null;
+    if (!(mhz > 0)) return setMatch({ error: '整合周波数を正の値にしてください。' });
+    try {
+      let z = pointAt(data, mhz)?.impedance;
+      if (!z) {
+        // the middle point comes with the outline of a running sweep
+        if (matching.atCentre && centreIsAPoint(basis.range)) return setMatch({ running: true, result: kept });
+        setMatch({ running: true, result: kept });
+        if (!offGrid || offGrid.basis !== basis || offGrid.mhz !== mhz) {
+          const job = transport
+            .sweep({ project: basis.project, options: { ...basis.options, patternResolution: 'coarse' }, startMhz: mhz, stopMhz: mhz, points: 1 })
+            .then((r) => r.points[0]);
+          offGrid = { basis, mhz, point: job };
+          job.catch(() => offGrid?.point === job && (offGrid = null));
+        }
+        z = (await offGrid.point).impedance;
+        if (request !== matchRequest) return;
+      }
+      const res = await transport.circuit({
+        tool: 'sweepMatch',
+        input: {
+          frequencyMhz: mhz,
+          lineOhm: basis.project.environment.swrReference.r,
+          antenna: z,
+          points: data.map((p) => ({ frequencyMhz: p.frequencyMhz, impedance: p.impedance })),
+        },
+      });
+      if (res.tool === 'sweepMatch') setMatch({ result: res.result });
+    } catch (e) {
+      const err = toEngineError(e);
+      setMatch({
+        error: err.code === 'out-of-range' ? `${mhz.toFixed(4)} MHz でのアンテナの R が 0 以下のため、整合回路を作れません。` : err.message,
+      });
+    }
+  };
 
   /** Drops selected wires that an edit, undo or redo removed. */
   const keepSelection = (project: Project) => {
@@ -253,6 +334,8 @@ export const useApp = create<AppState>()((set, get) => {
   const openDocument = (project: Project, fileName: string, filePath: string | null) => {
     generation++;
     sweepRequest++;
+    matchRequest++;
+    offGrid = null;
     set({ ...freshDocument(project), fileName, filePath, calcQueued: false });
   };
 
@@ -341,6 +424,10 @@ export const useApp = create<AppState>()((set, get) => {
     setShowCurrents: (on) => set({ showCurrents: on }),
     setElementEditorOpen: (open) => set({ elementEditorOpen: open }),
     setSweepRange: (patch) => set({ sweep: { ...get().sweep, ...patch } }),
+    setSweepMatching: (patch) => {
+      set({ sweep: { ...get().sweep, matching: { ...get().sweep.matching, ...patch } } });
+      void refreshMatch();
+    },
 
     calculate: async () => {
       // a request during a running calculation runs once it finishes
@@ -389,6 +476,7 @@ export const useApp = create<AppState>()((set, get) => {
       const request = ++sweepRequest;
       const { startMhz, stopMhz, points } = sweep;
       const order = sweepOrder(points);
+      const basis = { range: { startMhz, stopMhz, points }, project, options };
       set({ sweep: { ...sweep, running: true, stopping: false, progress: { done: 0, total: order.length } } });
       let data: SweepPoint[] = [];
       let done = 0;
@@ -404,6 +492,7 @@ export const useApp = create<AppState>()((set, get) => {
             stopMhz,
             points,
             indices,
+            patterns: true,
           });
           if (request !== sweepRequest) return;
           done += indices.length;
@@ -419,9 +508,11 @@ export const useApp = create<AppState>()((set, get) => {
               running: !ends,
               stopping: false,
               progress: finished ? null : { done, total: order.length },
+              basis,
             },
             calcError: null,
           });
+          void refreshMatch();
           if (ends) return;
           const msPerPoint = (performance.now() - t0) / indices.length;
           size = Math.max(SWEEP_MIN_BATCH, Math.floor(SWEEP_BATCH_MS / Math.max(msPerPoint, 1e-3)));

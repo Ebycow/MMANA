@@ -997,6 +997,107 @@ pub fn hairpin(input: &HairpinInput) -> Result<Hairpin, CalcError> {
     Ok(Hairpin { reactance_ohm })
 }
 
+// ---------------------------------------------------- sweep matching ---
+
+/// A frequency of a sweep and the antenna's impedance there.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct SweepImpedance {
+    pub frequency_mhz: f64,
+    pub impedance: Complex,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct SweepMatchInput {
+    /// The frequency the network is designed at.
+    pub frequency_mhz: f64,
+    /// The feed line's impedance (the SWR reference R).
+    pub line_ohm: f64,
+    /// The antenna's impedance at `frequency_mhz`.
+    pub antenna: Complex,
+    pub points: Vec<SweepImpedance>,
+}
+
+/// A sweep point seen through the network.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct MatchedPoint {
+    pub frequency_mhz: f64,
+    /// None where the network resonates with the antenna (no finite impedance).
+    pub impedance: Option<Complex>,
+    /// Against `lineOhm`; 99999.9 where the impedance is None.
+    pub swr: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct SweepMatch {
+    /// The L network at `frequencyMhz`: a series C when the antenna's R is
+    /// at most the line's, a shunt C when it is above (the networks of the
+    /// 周波数特性 dialog). A missing shunt element is open, a missing series
+    /// element a short; both are missing when the antenna already matches.
+    pub network: LcMatch,
+    pub points: Vec<MatchedPoint>,
+}
+
+/// The matching of the 周波数特性 dialog (`CalcSWR` and `CalcZ` in
+/// BwDisp.cpp): the L network that matches the antenna at one frequency,
+/// with its coils and capacitors kept as they are across the sweep. A
+/// reactance scales with the frequency as the original's `AdjX` scales it.
+///
+/// The original designs the network at each frequency again: it works out
+/// the second element from the first one's scaled reactance and the
+/// antenna's impedance at the matching frequency, so its values drift with
+/// the frequency. The two agree at the matching frequency (to the bit).
+pub fn sweep_match(input: &SweepMatchInput) -> Result<SweepMatch, CalcError> {
+    let f0 = positive("frequency", input.frequency_mhz)?;
+    let ro = positive("line impedance", input.line_ohm)?;
+    crate::validate::sweep_points(input.points.len().max(1))?;
+    for p in &input.points {
+        positive("point frequency", p.frequency_mhz)?;
+        finite("point resistance", p.impedance.re)?;
+        finite("point reactance", p.impedance.im)?;
+    }
+    let circuit = if input.antenna.re <= ro { LcCircuit::SeriesC } else { LcCircuit::ShuntC };
+    let network = lc_match(&LcMatchInput { frequency_mhz: f0, line_ohm: ro, antenna: input.antenna, circuit })?;
+    // `AdjX`: a capacitor's reactance falls with the frequency, a coil's rises
+    let at = |e: Option<Lumped>, f: f64| {
+        e.map(|e| match e.kind {
+            LumpedKind::C => e.reactance_ohm * (f0 / f),
+            LumpedKind::L => e.reactance_ohm * (f / f0),
+        })
+    };
+    let points = input
+        .points
+        .iter()
+        .map(|p| {
+            let f = p.frequency_mhz;
+            let mut zl = Clx::from(p.impedance);
+            let shunt = |zl: Clx| match at(network.shunt, f) {
+                Some(x) => zl.mul(Clx::new(0.0, x)).div(zl.add(Clx::new(0.0, x))),
+                None => zl,
+            };
+            let series = |zl: Clx| match at(network.series, f) {
+                Some(x) => zl.add(Clx::new(0.0, x)),
+                None => zl,
+            };
+            zl = match network.shunt_side {
+                ShuntSide::Line => shunt(series(zl)),
+                ShuntSide::Antenna => series(shunt(zl)),
+            };
+            let impedance = shown_complex(zl);
+            let swr = if impedance.is_some() { calc_swr(zl.r, zl.j, ro, 0.0) } else { 99999.9 };
+            MatchedPoint { frequency_mhz: f, impedance, swr }
+        })
+        .collect();
+    Ok(SweepMatch { network, points })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

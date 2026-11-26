@@ -319,7 +319,69 @@ fn check(c: &mut Check, a: &[&str]) {
             Ok(h) => c.num("jx", h.reactance_ohm),
             Err(e) => c.fail(e),
         },
+        "bwmatch" => {
+            let (ro, jxo, f0, f) = (arg(a, 1), arg(a, 2), arg(a, 3), arg(a, 6));
+            let antenna = z(arg(a, 4), arg(a, 5));
+            let at = z(arg(a, 7), arg(a, 8));
+            let input = SweepMatchInput {
+                frequency_mhz: f0,
+                line_ohm: ro,
+                antenna,
+                points: vec![SweepImpedance { frequency_mhz: f, impedance: at }],
+            };
+            let m = match sweep_match(&input) {
+                Ok(m) => m,
+                Err(e) => return c.fail(e),
+            };
+            let p = m.points[0];
+            if f != f0 || antenna.re == ro {
+                // Off the matching frequency the original designs the network
+                // again; the port keeps it. With R0 = RO the original's shunt
+                // reactance is −DBL_MAX and overflows to NaN; the port leaves
+                // the shunt out (an open circuit).
+                return fixed_network(c, &m, f, at, ro);
+            }
+            c.num("swr", Some(p.swr));
+            c.num("r", p.impedance.map(|z| z.re));
+            // CalcZ adds the SWR reference's jX to the matched reactance; the port does not
+            c.num("x", p.impedance.map(|z| z.im + jxo));
+        }
         other => panic!("unknown case {other}"),
+    }
+}
+
+/// The matched impedance off the matching frequency: the network's coils
+/// and capacitors at `f`, worked out from their values in µH and pF.
+fn fixed_network(c: &mut Check, m: &SweepMatch, f: f64, at: Complex, ro: f64) {
+    let w = 2.0 * std::f64::consts::PI * f * 1e6;
+    let x = |e: Option<Lumped>| {
+        e.map(|e| match e.kind {
+            LumpedKind::L => w * e.value * 1e-6,
+            LumpedKind::C => -1.0 / (w * e.value * 1e-12),
+        })
+    };
+    let (shunt, series) = (x(m.network.shunt), x(m.network.series));
+    let mul = |a: (f64, f64), b: (f64, f64)| (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0);
+    let div = |a: (f64, f64), b: (f64, f64)| {
+        let d = b.0 * b.0 + b.1 * b.1;
+        ((a.0 * b.0 + a.1 * b.1) / d, (a.1 * b.0 - a.0 * b.1) / d)
+    };
+    let par = |zl: (f64, f64)| match shunt {
+        Some(x) => div(mul(zl, (0.0, x)), (zl.0, zl.1 + x)),
+        None => zl,
+    };
+    let ser = |zl: (f64, f64)| (zl.0, zl.1 + series.unwrap_or(0.0));
+    let zl = (at.re, at.im);
+    let want = match m.network.shunt_side {
+        ShuntSide::Line => par(ser(zl)),
+        ShuntSide::Antenna => ser(par(zl)),
+    };
+    let Some(got) = m.points[0].impedance else {
+        return c.fail("no matched impedance");
+    };
+    let close = |w: f64, g: f64| (w - g).abs() <= 1e-9 * w.abs().max(g.abs()).max(ro);
+    if !close(want.0, got.re) || !close(want.1, got.im) {
+        c.fail(format!("fixed network: want {want:?}, port {got:?}"));
     }
 }
 

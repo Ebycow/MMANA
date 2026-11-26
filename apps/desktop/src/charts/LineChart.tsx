@@ -4,6 +4,7 @@ import { niceTicks } from './ticks';
 
 export interface Series {
   label: string;
+  /** A value that is not finite leaves a gap. */
   values: number[];
   color: string;
   dash?: string;
@@ -104,9 +105,9 @@ export function LineChart({ title, unit, x, series, hover, onHover, yMin, yMax, 
               <line x1={sx(markerX)} x2={sx(markerX)} y1={M.top} y2={M.top + h} stroke="var(--chart-axis)" strokeDasharray="3 3" />
             )}
             {series.map((s) => (
-              <polyline
+              <path
                 key={s.label}
-                points={s.values.map((v, i) => `${sx(x[i])},${sy(v)}`).join(' ')}
+                d={s.values.map((v, i) => (Number.isFinite(v) ? `${i && Number.isFinite(s.values[i - 1]) ? 'L' : 'M'}${sx(x[i])},${sy(v)}` : '')).join('')}
                 fill="none"
                 stroke={s.color}
                 strokeWidth={2}
@@ -117,7 +118,7 @@ export function LineChart({ title, unit, x, series, hover, onHover, yMin, yMax, 
             {hover != null && hover < x.length && (
               <g pointerEvents="none">
                 <line x1={sx(x[hover])} x2={sx(x[hover])} y1={M.top} y2={M.top + h} stroke="var(--chart-axis)" />
-                {series.map((s) => (
+                {series.filter((s) => Number.isFinite(s.values[hover])).map((s) => (
                   <circle key={s.label} cx={sx(x[hover])} cy={sy(s.values[hover])} r={4} fill={s.color} stroke="var(--chart-surface)" strokeWidth={2} />
                 ))}
               </g>
@@ -133,7 +134,7 @@ export function LineChart({ title, unit, x, series, hover, onHover, yMin, yMax, 
                   <span className="legend-swatch" style={{ borderColor: s.color, borderTopStyle: s.dash ? 'dashed' : 'solid' }} />
                   {s.label}
                 </span>
-                <span>{s.values[hover].toFixed(digits)}</span>
+                <span>{Number.isFinite(s.values[hover]) ? s.values[hover].toFixed(digits) : '—'}</span>
               </div>
             ))}
           </div>

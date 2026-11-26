@@ -1,6 +1,7 @@
 /* App-level tokens. Chart colours are the validated reference palette
-   (categorical slots 1-3, which stay distinguishable for colour-vision
-   deficiencies when shown together); dark mode uses its own steps. */
+   (categorical slots 1-5, which stay distinguishable for colour-vision
+   deficiencies when shown together; 4 and 5 only colour the patterns across
+   the band); dark mode uses its own steps. */
 :root {
   --app-bg: #f4f5f7;
   --panel-bg: #ffffff;
@@ -14,6 +15,8 @@
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
+  --series-4: #f2a600;
+  --series-5: #ee7fac;
   --view3d-bg: #f7f8fa;
   --view3d-grid: #c6c5bf;
   --view3d-grid-section: #98978f;
@@ -39,6 +42,8 @@
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
+  --series-4: #d28e05;
+  --series-5: #e24d8b;
   --view3d-bg: #171716;
   --view3d-grid: #52524d;
   --view3d-grid-section: #7a7a72;
