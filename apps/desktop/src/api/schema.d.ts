@@ -592,17 +592,6 @@ export interface components {
             /** Format: double */
             re: number;
         };
-        /** @description A coil (µH) or a capacitor (pF) and its reactance at the frequency. */
-        Element: {
-            kind: components["schemas"]["ElementKind"];
-            /** Format: double */
-            reactanceOhm: number;
-            /**
-             * Format: double
-             * @description µH for a coil, pF for a capacitor.
-             */
-            value: number;
-        };
         /** @enum {string} */
         ElementAxis: "width" | "height" | "xWidth";
         /**
@@ -908,8 +897,8 @@ export interface components {
          *     antenna already matches).
          */
         LcMatch: {
-            series?: components["schemas"]["Element"] | null;
-            shunt?: components["schemas"]["Element"] | null;
+            series?: components["schemas"]["Lumped"] | null;
+            shunt?: components["schemas"]["Lumped"] | null;
             shuntSide: components["schemas"]["ShuntSide"];
         };
         LcMatchInput: {
@@ -1030,6 +1019,19 @@ export interface components {
         };
         /** @enum {string} */
         LoadPart: "primary" | "secondary";
+        /** @description A coil (µH) or a capacitor (pF) and its reactance at the frequency. */
+        Lumped: {
+            kind: components["schemas"]["LumpedKind"];
+            /** Format: double */
+            reactanceOhm: number;
+            /**
+             * Format: double
+             * @description µH for a coil, pF for a capacitor.
+             */
+            value: number;
+        };
+        /** @enum {string} */
+        LumpedKind: "L" | "C";
         /** @description The matching network scored by the `matching` goal (マッチング回路). */
         Matching: {
             /** @enum {string} */
@@ -1047,7 +1049,7 @@ export interface components {
         };
         /** @description A stub across the line, cut to cancel the susceptance there. */
         MatchingStub: {
-            element: components["schemas"]["Element"];
+            element: components["schemas"]["Lumped"];
             /** Format: double */
             openCm: number;
             /** Format: double */
@@ -1587,7 +1589,7 @@ export interface components {
         /** @description A stub of a cable cut to a reactance. */
         Stub: {
             /** @description The coil (µH) or capacitor (pF) of the same reactance. */
-            element: components["schemas"]["Element"];
+            element: components["schemas"]["Lumped"];
             /**
              * Format: double
              * @description The shortest stub of the reactance, under half a wavelength in the cable.

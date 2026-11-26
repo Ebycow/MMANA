@@ -333,7 +333,7 @@ pub enum LcCircuit {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-pub enum ElementKind {
+pub enum LumpedKind {
     L,
     C,
 }
@@ -342,8 +342,8 @@ pub enum ElementKind {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(rename_all = "camelCase")]
-pub struct Element {
-    pub kind: ElementKind,
+pub struct Lumped {
+    pub kind: LumpedKind,
     /// µH for a coil, pF for a capacitor.
     pub value: f64,
     pub reactance_ohm: f64,
@@ -380,8 +380,8 @@ pub enum ShuntSide {
 #[serde(rename_all = "camelCase")]
 pub struct LcMatch {
     pub shunt_side: ShuntSide,
-    pub shunt: Option<Element>,
-    pub series: Option<Element>,
+    pub shunt: Option<Lumped>,
+    pub series: Option<Lumped>,
 }
 
 /// `CalcMatch`, and the elements `PBoxMPaint` draws.
@@ -415,15 +415,15 @@ pub fn lc_match(input: &LcMatchInput) -> Result<LcMatch, CalcError> {
         mx2 = -(mx1 * mr * mr + (mx + mx1) * mx * mx1) / (mr * mr + (mx + mx1) * (mx + mx1));
     }
     let md1 = if mx1 >= 0.0 {
-        (ElementKind::L, mx1 * 1e6 / w)
+        (LumpedKind::L, mx1 * 1e6 / w)
     } else if mx1 == -f64::MAX {
-        (ElementKind::C, 0.0)
+        (LumpedKind::C, 0.0)
     } else {
-        (ElementKind::C, -1e12 / (w * mx1))
+        (LumpedKind::C, -1e12 / (w * mx1))
     };
-    let md2 = if mx2 >= 0.0 { (ElementKind::L, mx2 * 1e6 / w) } else { (ElementKind::C, -1e12 / (w * mx2)) };
-    let element = |(kind, value): (ElementKind, f64), x: f64| {
-        (value != 0.0 && value.is_finite() && x.is_finite()).then_some(Element { kind, value, reactance_ohm: x })
+    let md2 = if mx2 >= 0.0 { (LumpedKind::L, mx2 * 1e6 / w) } else { (LumpedKind::C, -1e12 / (w * mx2)) };
+    let element = |(kind, value): (LumpedKind, f64), x: f64| {
+        (value != 0.0 && value.is_finite() && x.is_finite()).then_some(Lumped { kind, value, reactance_ohm: x })
     };
     Ok(LcMatch { shunt_side: mt, shunt: element(md1, mx1), series: element(md2, mx2) })
 }
@@ -483,7 +483,7 @@ pub struct Stub {
     /// None for an open circuit (an open stub of length 0, or a capacitance of 0).
     pub reactance_ohm: Option<f64>,
     /// The coil (µH) or capacitor (pF) of the same reactance.
-    pub element: Element,
+    pub element: Lumped,
     /// The shortest stub of the reactance, under half a wavelength in the cable.
     pub length_cm: f64,
     /// Where the stub is a quarter wavelength (MHz); None for a length of 0.
@@ -541,10 +541,10 @@ pub fn stub(input: &StubInput) -> Result<Stub, CalcError> {
         }
     }
     let quarter_wave_mhz = (core_l >= 1e-5).then(|| 299.8 * core_p / (4.0 * (core_l * 0.01)));
-    let kind = if core_x >= 0.0 { ElementKind::L } else { ElementKind::C };
+    let kind = if core_x >= 0.0 { LumpedKind::L } else { LumpedKind::C };
     let stub = Stub {
         reactance_ohm: (core_x != OPEN).then_some(core_x),
-        element: Element { kind, value: core_lc, reactance_ohm: core_x },
+        element: Lumped { kind, value: core_lc, reactance_ohm: core_x },
         length_cm: core_l,
         quarter_wave_mhz,
     };
@@ -856,7 +856,7 @@ pub struct StubMatchInput {
 #[serde(rename_all = "camelCase")]
 pub struct MatchingStub {
     pub reactance_ohm: f64,
-    pub element: Element,
+    pub element: Lumped,
     pub short_wl: f64,
     pub short_cm: f64,
     pub open_wl: f64,
@@ -926,9 +926,9 @@ pub fn stub_match(input: &StubMatchInput) -> Result<StubMatch, CalcError> {
         let stub = (x.abs() < 1e10).then(|| MatchingStub {
             reactance_ohm: x,
             element: if x >= 0.0 {
-                Element { kind: ElementKind::L, value: 0.1591549 * x / f, reactance_ohm: x }
+                Lumped { kind: LumpedKind::L, value: 0.1591549 * x / f, reactance_ohm: x }
             } else {
-                Element { kind: ElementKind::C, value: -159154.9 / (f * x), reactance_ohm: x }
+                Lumped { kind: LumpedKind::C, value: -159154.9 / (f * x), reactance_ohm: x }
             },
             short_wl: ls,
             short_cm: to_cm(ls),
@@ -1026,7 +1026,7 @@ mod tests {
                     circuit,
                 })
                 .unwrap();
-                let jx = |e: Option<Element>| e.map_or(0.0, |e| e.reactance_ohm);
+                let jx = |e: Option<Lumped>| e.map_or(0.0, |e| e.reactance_ohm);
                 let z = Clx::new(r, x);
                 let par = |z: Clx, x: f64| {
                     Clx::real(1.0).div(Clx::real(1.0).div(z).add(Clx::real(1.0).div(Clx::new(0.0, x))))

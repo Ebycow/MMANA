@@ -7,6 +7,7 @@ import { EngineError, files, isTauri, startupFile, transport } from './api/trans
 import { AppHeader, type FileActions } from './components/AppHeader';
 import { ChecksSettings } from './components/ChecksSettings';
 import { NewWireSettings } from './components/NewWireSettings';
+import { CircuitTools } from './components/CircuitTools';
 import { ElementEditor } from './components/ElementEditor';
 import { InputSettings } from './components/InputSettings';
 import { OptimizerDialog } from './components/OptimizerDialog';
@@ -224,6 +225,7 @@ export function App() {
       <InputSettings />
       <ChecksSettings />
       <NewWireSettings />
+      <CircuitTools />
       <PrintView />
     </AppShell>
   );

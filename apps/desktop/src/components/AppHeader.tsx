@@ -3,6 +3,7 @@ import {
   IconAlertTriangle,
   IconAntenna,
   IconBug,
+  IconCalculator,
   IconArrowBackUp,
   IconArrowForwardUp,
   IconCheck,
@@ -23,6 +24,7 @@ import {
   IconTarget,
 } from '@tabler/icons-react';
 import { useRef, useState } from 'react';
+import { useCircuits } from '../state/circuits';
 import { useChecks } from '../state/diagnostics';
 import { useInput, useKeyText } from '../state/input';
 import { useLayout, type PaneId } from '../state/layout';
@@ -121,6 +123,7 @@ export function AppHeader({ actions }: { actions: FileActions }) {
   const openSettings = useInput((s) => s.setDialogOpen);
   const openChecks = useChecks((s) => s.setDialogOpen);
   const openNewWire = useNewWire((s) => s.setDialogOpen);
+  const openCircuits = useCircuits((s) => s.setOpen);
   const undoKey = useKeyText('undo');
   const redoKey = useKeyText('redo');
   const { colorScheme, setColorScheme } = useMantineColorScheme();
@@ -201,6 +204,18 @@ export function AppHeader({ actions }: { actions: FileActions }) {
           </Menu.Item>
           <Menu.Item leftSection={<IconPlus size={14} />} onClick={() => openNewWire(true)}>
             ワイヤーの追加…
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+      <Menu position="bottom-start" shadow="md" width={240}>
+        <Menu.Target>
+          <Button variant="subtle" color="gray" rightSection={<IconChevronDown size={14} />}>
+            ツール
+          </Button>
+        </Menu.Target>
+        <Menu.Dropdown>
+          <Menu.Item leftSection={<IconCalculator size={14} />} onClick={() => openCircuits(true)}>
+            計算ツール…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>

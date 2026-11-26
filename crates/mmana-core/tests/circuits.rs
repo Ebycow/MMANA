@@ -53,11 +53,11 @@ impl Check<'_> {
         }
     }
 
-    fn kind(&mut self, obj: &Value, key: &str, got: ElementKind) {
+    fn kind(&mut self, obj: &Value, key: &str, got: LumpedKind) {
         let want = obj[key].as_str().unwrap_or_default();
         let got = match got {
-            ElementKind::L => "L",
-            ElementKind::C => "C",
+            LumpedKind::L => "L",
+            LumpedKind::C => "C",
         };
         if want != got {
             self.failures.push(format!("{}: {key}: original {want}, port {got}", self.case));
@@ -252,9 +252,9 @@ fn check(c: &mut Check, a: &[&str]) {
                         c.at(w, "r", Some(s.impedance.re));
                         c.at(w, "x", Some(s.impedance.im));
                         c.at(w, "xc", s.stub.map(|t| t.reactance_ohm));
-                        let value = |k: ElementKind| s.stub.filter(|t| t.element.kind == k).map(|t| t.element.value);
-                        c.at(w, "uh", value(ElementKind::L));
-                        c.at(w, "pf", value(ElementKind::C));
+                        let value = |k: LumpedKind| s.stub.filter(|t| t.element.kind == k).map(|t| t.element.value);
+                        c.at(w, "uh", value(LumpedKind::L));
+                        c.at(w, "pf", value(LumpedKind::C));
                         c.at(w, "ls", s.stub.map(|t| t.short_wl));
                         c.at(w, "lscm", s.stub.map(|t| t.short_cm));
                         c.at(w, "lo", s.stub.map(|t| t.open_wl));

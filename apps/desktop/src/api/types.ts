@@ -36,7 +36,7 @@ export type CircuitResponse = S['CircuitResponse'];
 /** The result type of one calculator. */
 export type CircuitResult<T extends CircuitRequest['tool']> = Extract<CircuitResponse, { tool: T }>['result'];
 export type CircuitInput<T extends CircuitRequest['tool']> = Extract<CircuitRequest, { tool: T }>['input'];
-export type Element = S['Element'];
+export type Lumped = S['Lumped'];
 export type Cable = S['Cable'];
 export type FarFieldRequest = S['FarFieldRequest'];
 export type FarFieldResponse = S['FarFieldResponse'];
