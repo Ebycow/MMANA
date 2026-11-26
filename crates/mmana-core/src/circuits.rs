@@ -113,15 +113,19 @@ fn shown_complex(c: Clx) -> Option<Complex> {
 /// What the LC resonance is calculated from (the field last edited).
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[serde(tag = "from", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(tag = "from", rename_all = "camelCase")]
 pub enum TankInput {
     /// L and C of reactance X at the frequency.
+    #[serde(rename_all = "camelCase")]
     Reactance { frequency_mhz: f64, reactance_ohm: f64 },
     /// The reactance of L, and the C that resonates with it.
+    #[serde(rename_all = "camelCase")]
     Inductance { frequency_mhz: f64, inductance_uh: f64 },
     /// The reactance of C, and the L that resonates with it.
+    #[serde(rename_all = "camelCase")]
     Capacitance { frequency_mhz: f64, capacitance_pf: f64 },
     /// The frequency L and C resonate at.
+    #[serde(rename_all = "camelCase")]
     Resonance { inductance_uh: f64, capacitance_pf: f64 },
 }
 
@@ -236,10 +240,13 @@ pub const COIL_MIN_LENGTH_RATIO: f64 = 0.4;
 /// The quantity of a single-layer air-core coil calculated from the others.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[serde(tag = "solveFor", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(tag = "solveFor", rename_all = "camelCase")]
 pub enum CoilUnknown {
+    #[serde(rename_all = "camelCase")]
     Inductance { turns: f64, diameter_cm: f64 },
+    #[serde(rename_all = "camelCase")]
     Turns { inductance_uh: f64, diameter_cm: f64 },
+    #[serde(rename_all = "camelCase")]
     Diameter { inductance_uh: f64, turns: f64 },
 }
 
@@ -445,11 +452,15 @@ pub struct Cable {
 /// What the stub is calculated from (the field last edited).
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
-#[serde(tag = "from", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(tag = "from", rename_all = "camelCase")]
 pub enum StubGiven {
+    #[serde(rename_all = "camelCase")]
     Reactance { reactance_ohm: f64 },
+    #[serde(rename_all = "camelCase")]
     Inductance { inductance_uh: f64 },
+    #[serde(rename_all = "camelCase")]
     Capacitance { capacitance_pf: f64 },
+    #[serde(rename_all = "camelCase")]
     Length { length_cm: f64 },
 }
 

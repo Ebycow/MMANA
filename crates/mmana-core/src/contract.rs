@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "openapi")]
 use utoipa::ToSchema;
 
+use crate::circuits::{
+    self, Coil, CoilInput, Hairpin, HairpinInput, LcMatch, LcMatchInput, Line, LineInput, Stub, StubInput, StubMatch,
+    StubMatchInput, Tank, TankInput, TwoSection, TwoSectionInput, TwoSectionTuneInput,
+};
 use crate::elements::{ElementEdit, ElementOp};
 use crate::optimize::{OptimizeError, OptimizeOutcome, OptimizerSetup, Progress, SetupEdit, SetupOp};
 use crate::resonance::{ResonanceRange, ResonanceSearch};
@@ -98,6 +102,38 @@ pub struct ResonanceRequest {
     pub options: CalcOptions,
     #[serde(default)]
     pub range: ResonanceRange,
+}
+
+/// One of the calculators of the 共振条件 dialog ([`crate::circuits`]).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(tag = "tool", content = "input", rename_all = "camelCase")]
+pub enum CircuitRequest {
+    LcResonance(TankInput),
+    Coil(CoilInput),
+    LcMatch(LcMatchInput),
+    Stub(StubInput),
+    Line(LineInput),
+    TwoSection(TwoSectionInput),
+    TwoSectionTune(TwoSectionTuneInput),
+    StubMatch(StubMatchInput),
+    Hairpin(HairpinInput),
+}
+
+/// The result of a [`CircuitRequest`], tagged with the same tool.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(ToSchema))]
+#[serde(tag = "tool", content = "result", rename_all = "camelCase")]
+pub enum CircuitResponse {
+    LcResonance(Tank),
+    Coil(Coil),
+    LcMatch(LcMatch),
+    Stub(Stub),
+    Line(Line),
+    TwoSection(TwoSection),
+    TwoSectionTune(TwoSection),
+    StubMatch(StubMatch),
+    Hairpin(Hairpin),
 }
 
 /// Element editing: the edits so far, replayed on the antenna as it was when
@@ -213,6 +249,20 @@ pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
 
 pub fn find_resonance(req: &ResonanceRequest) -> Result<ResonanceSearch, CalcError> {
     crate::resonance::find_resonance(&req.project, &req.options, &req.range)
+}
+
+pub fn circuit(req: &CircuitRequest) -> Result<CircuitResponse, CalcError> {
+    Ok(match req {
+        CircuitRequest::LcResonance(i) => CircuitResponse::LcResonance(circuits::tank(i)?),
+        CircuitRequest::Coil(i) => CircuitResponse::Coil(circuits::coil(i)?),
+        CircuitRequest::LcMatch(i) => CircuitResponse::LcMatch(circuits::lc_match(i)?),
+        CircuitRequest::Stub(i) => CircuitResponse::Stub(circuits::stub(i)?),
+        CircuitRequest::Line(i) => CircuitResponse::Line(circuits::line(i)?),
+        CircuitRequest::TwoSection(i) => CircuitResponse::TwoSection(circuits::two_section(i)?),
+        CircuitRequest::TwoSectionTune(i) => CircuitResponse::TwoSectionTune(circuits::tune_two_section(i)?),
+        CircuitRequest::StubMatch(i) => CircuitResponse::StubMatch(circuits::stub_match(i)?),
+        CircuitRequest::Hairpin(i) => CircuitResponse::Hairpin(circuits::hairpin(i)?),
+    })
 }
 
 pub fn far_field(req: &FarFieldRequest) -> Result<FarFieldResponse, CalcError> {

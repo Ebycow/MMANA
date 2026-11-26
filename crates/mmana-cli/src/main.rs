@@ -41,6 +41,12 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Run a calculator of the 共振条件 dialog (LC, coil, match, stub, line) on a
+    /// JSON request, e.g. '{"tool":"lcResonance","input":{"from":"inductance","frequencyMhz":14.05,"inductanceUh":1}}'.
+    Circuit {
+        /// The request (default: read from stdin).
+        request: Option<String>,
+    },
     /// Find the resonant frequency nearest to a start frequency (X = 0, rising).
     Resonance {
         file: PathBuf,
@@ -132,6 +138,14 @@ fn main() -> Result<()> {
                     p.frequency_mhz, p.impedance.re, p.impedance.im, p.swr, p.gain_dbi, p.fb_db
                 );
             }
+        }
+        Command::Circuit { request } => {
+            let request = match request {
+                Some(r) => r,
+                None => std::io::read_to_string(std::io::stdin())?,
+            };
+            let request: mmana_core::contract::CircuitRequest = serde_json::from_str(&request)?;
+            println!("{}", serde_json::to_string_pretty(&mmana_core::contract::circuit(&request)?)?);
         }
         Command::Resonance { file, start, min, max, json } => {
             let project = load(&file)?;

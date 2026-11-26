@@ -250,6 +250,51 @@ async fn finds_the_resonance() {
 }
 
 #[tokio::test]
+async fn runs_every_calculator() {
+    let z = |re: f64, im: f64| json!({ "re": re, "im": im });
+    let cable = json!({ "impedanceOhm": 50.0, "velocityFactor": 0.67 });
+    let requests = [
+        json!({ "tool": "lcResonance", "input": { "from": "reactance", "frequencyMhz": 14.05, "reactanceOhm": 50.0 } }),
+        json!({ "tool": "lcResonance", "input": { "from": "inductance", "frequencyMhz": 14.05, "inductanceUh": 1.0 } }),
+        json!({ "tool": "lcResonance", "input": { "from": "capacitance", "frequencyMhz": 14.05, "capacitancePf": 100.0 } }),
+        json!({ "tool": "lcResonance", "input": { "from": "resonance", "inductanceUh": 1.0, "capacitancePf": 100.0 } }),
+        json!({ "tool": "coil", "input": { "solveFor": "inductance", "turns": 10.0, "diameterCm": 2.0, "wireDiameterMm": 1.0, "spacingMm": 0.0 } }),
+        json!({ "tool": "coil", "input": { "solveFor": "turns", "inductanceUh": 1.0, "diameterCm": 2.0, "wireDiameterMm": 1.0, "spacingMm": 0.5 } }),
+        json!({ "tool": "coil", "input": { "solveFor": "diameter", "inductanceUh": 1.0, "turns": 10.0, "wireDiameterMm": 1.0, "spacingMm": 0.5 } }),
+        json!({ "tool": "lcMatch", "input": { "frequencyMhz": 7.05, "lineOhm": 50.0, "antenna": z(12.5, -30.0), "circuit": "seriesC" } }),
+        json!({ "tool": "stub", "input": { "frequencyMhz": 7.05, "cable": cable, "end": "short", "given": { "from": "inductanceUh", "inductanceUh": 1.0 } } }),
+        json!({ "tool": "stub", "input": { "frequencyMhz": 7.05, "cable": cable, "end": "short", "given": { "from": "inductance", "inductanceUh": 1.0 } } }),
+        json!({ "tool": "stub", "input": { "frequencyMhz": 7.05, "cable": cable, "given": { "from": "length", "lengthCm": 100.0 } } }),
+        json!({ "tool": "line", "input": { "impedanceOhm": 50.0, "lengthWl": 0.25, "lossDb": 0.5, "known": { "from": "load", "impedance": z(100.0, 0.0) } } }),
+        json!({ "tool": "twoSection", "input": { "load": z(75.0, 0.0), "referenceOhm": 50.0,
+            "feedSection": { "impedanceOhm": 75.0, "lengthWl": 0.08 }, "loadSection": { "impedanceOhm": 50.0, "lengthWl": 0.08 } } }),
+        json!({ "tool": "twoSectionTune", "input": { "load": z(75.0, 0.0), "referenceOhm": 50.0, "feedImpedanceOhm": 75.0, "loadImpedanceOhm": 50.0 } }),
+        json!({ "tool": "stubMatch", "input": { "frequencyMhz": 14.05, "load": z(25.0, 0.0), "referenceOhm": 50.0, "cable": cable } }),
+        json!({ "tool": "hairpin", "input": { "resistanceOhm": 25.0, "targetOhm": 50.0 } }),
+    ];
+    for req in requests {
+        let (status, _, v) = post_json("/v1/circuits", req.clone()).await;
+        if req["input"]["given"]["from"] == "inductanceUh" {
+            // a misspelt tag is refused, not taken for another
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{req} {v}");
+            continue;
+        }
+        assert_eq!(status, StatusCode::OK, "{req} {v}");
+        assert_eq!(v["tool"], req["tool"], "{v}");
+        assert!(v["result"].is_object(), "{v}");
+    }
+    let (_, _, v) =
+        post_json("/v1/circuits", json!({ "tool": "hairpin", "input": { "resistanceOhm": 25.0, "targetOhm": 50.0 } }))
+            .await;
+    assert_eq!(v["result"]["reactanceOhm"], -25.0);
+    let (status, _, v) =
+        post_json("/v1/circuits", json!({ "tool": "hairpin", "input": { "resistanceOhm": 0.0, "targetOhm": 50.0 } }))
+            .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{v}");
+    assert_eq!(v["code"], "out-of-range");
+}
+
+#[tokio::test]
 async fn field_point_limits_do_not_wrap() {
     let parsed = parse("DP20.MAA").await;
     let axis = |count: i32| json!({ "start": 0.0, "step": 1.0, "count": count });

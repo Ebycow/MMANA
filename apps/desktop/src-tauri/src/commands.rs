@@ -3,9 +3,9 @@
 //! of TypeScript types. Calculations run on the blocking pool.
 
 use mmana_core::contract::{
-    self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
-    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, ResonanceRequest,
-    SweepRequest, SweepResponse,
+    self, AppliedTrial, ApplyTrialRequest, CalculationRequest, CircuitRequest, CircuitResponse, ElementEditRequest,
+    FarFieldRequest, FarFieldResponse, NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest,
+    ParsedProject, ResonanceRequest, SweepRequest, SweepResponse,
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeError, OptimizeOutcome, Progress, SetupEdit};
@@ -155,6 +155,11 @@ pub async fn sweep(request: SweepRequest) -> Result<SweepResponse, CommandError>
 #[tauri::command]
 pub async fn find_resonance(request: ResonanceRequest) -> Result<ResonanceSearch, CommandError> {
     blocking(move || Ok(contract::find_resonance(&request)?)).await
+}
+
+#[tauri::command]
+pub fn circuit(request: CircuitRequest) -> Result<CircuitResponse, CommandError> {
+    Ok(contract::circuit(&request)?)
 }
 
 #[tauri::command]
