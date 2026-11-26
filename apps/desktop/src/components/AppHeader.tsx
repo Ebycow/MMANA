@@ -19,6 +19,8 @@ import {
   IconPencil,
   IconPlus,
   IconPrinter,
+  IconReplace,
+  IconResize,
   IconPlayerPlay,
   IconSun,
   IconTarget,
@@ -31,6 +33,7 @@ import { useLayout, type PaneId } from '../state/layout';
 import { useNewWire } from '../state/newWire';
 import { usePrint } from '../state/print';
 import { useApp } from '../state/store';
+import { useWireTools } from '../state/wireTools';
 import { AboutModal } from './AboutModal';
 import { ReportModal } from './ReportModal';
 import { KeyHint } from './InputSettings';
@@ -216,6 +219,13 @@ export function AppHeader({ actions }: { actions: FileActions }) {
         <Menu.Dropdown>
           <Menu.Item leftSection={<IconCalculator size={14} />} onClick={() => openCircuits(true)}>
             計算ツール…
+          </Menu.Item>
+          <Menu.Divider />
+          <Menu.Item leftSection={<IconResize size={14} />} onClick={() => useWireTools.getState().setScaleOpen(true)}>
+            アンテナのサイズ（拡大・縮小）…
+          </Menu.Item>
+          <Menu.Item leftSection={<IconReplace size={14} />} onClick={() => useWireTools.getState().openReplace('X1')}>
+            ワイヤーの検索と置換…
           </Menu.Item>
         </Menu.Dropdown>
       </Menu>
