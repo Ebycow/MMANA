@@ -51,6 +51,10 @@ pub struct SweepRequest {
     /// when omitted.
     #[serde(default)]
     pub indices: Option<Vec<usize>>,
+    /// Gives each point its pattern cuts (at the options' resolution), for
+    /// the patterns across the band.
+    #[serde(default)]
+    pub patterns: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -229,25 +233,22 @@ pub fn pulse_layout(req: &CalculationRequest) -> Result<PulseLayout, CalcError> 
 }
 
 pub fn sweep(req: &SweepRequest) -> Result<SweepResponse, CalcError> {
-    let Some(indices) = &req.indices else {
-        return Ok(SweepResponse {
-            points: crate::sweep(&req.project, &req.options, req.start_mhz, req.stop_mhz, req.points)?,
-        });
-    };
     let points = req.points;
     crate::validate::sweep_points(points)?;
-    crate::validate::sweep_points(indices.len().max(1))?;
-    let frequencies = indices
-        .iter()
-        .map(|&index| {
-            if index < points {
-                Ok(crate::sweep_frequency(req.start_mhz, req.stop_mhz, points, index))
-            } else {
-                Err(CalcError::SweepPointOutOfRange { index, points })
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(SweepResponse { points: crate::sweep_at(&req.project, &req.options, &frequencies)? })
+    let at = |index| crate::sweep_frequency(req.start_mhz, req.stop_mhz, points, index);
+    let frequencies = match &req.indices {
+        None => (0..points).map(at).collect(),
+        Some(indices) => {
+            crate::validate::sweep_points(indices.len().max(1))?;
+            indices
+                .iter()
+                .map(|&index| {
+                    if index < points { Ok(at(index)) } else { Err(CalcError::SweepPointOutOfRange { index, points }) }
+                })
+                .collect::<Result<Vec<_>, _>>()?
+        }
+    };
+    Ok(SweepResponse { points: crate::sweep_with(&req.project, &req.options, &frequencies, req.patterns)? })
 }
 
 pub fn find_resonance(req: &ResonanceRequest) -> Result<ResonanceSearch, CalcError> {

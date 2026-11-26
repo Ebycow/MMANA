@@ -34,7 +34,7 @@ mod validate;
 pub use calc::{
     CalcOptions, CalcResult, CalcWarning, Complex, PatternCut, PatternResolution, Patterns, PulseCurrent, PulseLayout,
     PulsePoint, SegmentedWire, Solved, SourceResult, SweepPoint, WarningCode, WirePulses, calculate, pulse_layout,
-    solve, sweep, sweep_at, sweep_frequency,
+    solve, sweep, sweep_at, sweep_frequency, sweep_with,
 };
 pub use engine::{AxisRange, FarFieldSample, NearFieldKind, NearFieldSample, NearFieldSpec};
 pub use error::CalcError;

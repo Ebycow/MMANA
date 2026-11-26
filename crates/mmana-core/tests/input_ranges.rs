@@ -654,6 +654,7 @@ fn sweep_points() {
         stop_mhz: 14.1,
         points,
         indices: Some(indices),
+        patterns: false,
     };
     assert_eq!(contract::sweep(&req(3, vec![2, 0])).unwrap().points.len(), 2);
     assert_eq!(contract::sweep(&req(0, vec![0])).map(|_| ()), invalid);

@@ -653,6 +653,9 @@ pub struct SweepPoint {
     pub gain_dbi: f32,
     pub fb_db: f32,
     pub elevation_deg: f32,
+    /// The pattern cuts, when the sweep was asked for them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub patterns: Option<Patterns>,
 }
 
 /// Frequency of point `i` of `points` frequencies evenly spaced from `start`
@@ -676,6 +679,16 @@ pub fn sweep(
 
 /// Evaluates the given frequencies (MHz); the points keep their order.
 pub fn sweep_at(project: &Project, opts: &CalcOptions, frequencies: &[f64]) -> Result<Vec<SweepPoint>, CalcError> {
+    sweep_with(project, opts, frequencies, false)
+}
+
+/// [`sweep_at`], the points carrying their pattern cuts when `patterns`.
+pub fn sweep_with(
+    project: &Project,
+    opts: &CalcOptions,
+    frequencies: &[f64],
+    patterns: bool,
+) -> Result<Vec<SweepPoint>, CalcError> {
     // frequencies are independent: solve them in parallel
     crate::par::map(frequencies.len(), |i| {
         let f = frequencies[i];
@@ -688,6 +701,7 @@ pub fn sweep_at(project: &Project, opts: &CalcOptions, frequencies: &[f64]) -> R
             gain_dbi: r.gain_dbi,
             fb_db: r.fb_db,
             elevation_deg: r.elevation_deg,
+            patterns: patterns.then_some(r.patterns),
         })
     })
     .into_iter()

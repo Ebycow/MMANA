@@ -1742,6 +1742,7 @@ export interface components {
             /** Format: float */
             gainDbi: number;
             impedance: components["schemas"]["Complex"];
+            patterns?: components["schemas"]["Patterns"] | null;
             /** Format: double */
             swr: number;
         };
@@ -1753,6 +1754,11 @@ export interface components {
              */
             indices?: number[] | null;
             options?: components["schemas"]["CalcOptions"];
+            /**
+             * @description Gives each point its pattern cuts (at the options' resolution), for
+             *     the patterns across the band.
+             */
+            patterns?: boolean;
             points: number;
             project: components["schemas"]["Project"];
             /** Format: double */

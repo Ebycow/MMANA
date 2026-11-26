@@ -144,6 +144,18 @@ async fn sweep_returns_requested_points() {
     .await;
     assert_eq!(status, StatusCode::OK, "{w}");
     assert_eq!(w["points"], json!([pts[5], pts[2]]));
+    assert!(pts[0].get("patterns").is_none(), "{v}");
+
+    // the pattern cuts, when asked for
+    let (status, _, w) = post_json(
+        "/v1/sweeps",
+        json!({ "project": parsed["project"], "startMhz": 13.9, "stopMhz": 14.4, "points": 6, "indices": [5],
+                "patterns": true, "options": { "patternResolution": "coarse" } }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{w}");
+    assert_eq!(w["points"][0]["swr"], pts[5]["swr"]);
+    assert_eq!(w["points"][0]["patterns"]["horizontal"]["total"].as_array().map(Vec::len), Some(180), "{w}");
 
     let (status, _, w) = post_json(
         "/v1/sweeps",
