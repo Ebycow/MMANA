@@ -18,6 +18,7 @@ import {
   type Units,
 } from '../../domain/elements';
 import { HEADING, ROW_HEIGHT, TABLE_HEAD, extentOf, swrAgainst, swrBandwidth, type PrintBlock, type SectionId } from '../../domain/print';
+import { networkText } from '../../domain/sweep';
 import { wavelength, wireLength } from '../../domain/project';
 import { formatSegmentation } from '../../domain/segmentation';
 import { add, sub } from '../../domain/wireEdit';
@@ -502,16 +503,31 @@ function Feed({ d }: { d: PrintData }) {
 
 // ---------------------------------------------------------------- sweep ---
 
+/** Height (mm) of the notes over the sweep charts: bandwidths, the network, the fitted circuit. */
+function sweepNotesHeight(d: PrintData): number {
+  const matched = d.sweep.matching.mode !== 'off' && d.sweep.match?.result;
+  const circuit = !d.resonance.stale && d.resonance.search?.resonance?.circuit;
+  const lines = 1 + (matched ? 2 : 0) + (circuit ? 1 : 0);
+  return Math.max(10, lines * 3.4 + 1);
+}
+
 function Sweep({ d }: { d: PrintData }) {
   const data = d.sweep.data!;
   const x = data.map((p) => p.frequencyMhz);
   const marker = d.project.antenna.frequencyMhz;
-  const band = (limit: number) => {
-    const b = swrBandwidth(data, limit);
+  // the network of the 周波数特性 dialog, when the SWR is shown through it
+  const match = d.sweep.matching.mode !== 'off' ? d.sweep.match : null;
+  const net = match?.result;
+  const byFreq = new Map(net?.points.map((p) => [p.frequencyMhz, p]));
+  const matched = net ? data.map((p) => byFreq.get(p.frequencyMhz)) : null;
+  const swrPoints = matched ? data.flatMap((p, i) => (matched[i] ? [{ frequencyMhz: p.frequencyMhz, swr: matched[i]!.swr }] : [])) : data;
+  const band = (points: { frequencyMhz: number; swr: number }[], limit: number) => {
+    const b = swrBandwidth(points, limit);
     return b ? `SWR < ${limit}：${b.lowMhz.toFixed(3)}〜${b.highMhz.toFixed(3)} MHz（${b.open ? '≥ ' : ''}${b.khz.toFixed(1)} kHz）` : `SWR < ${limit}：なし`;
   };
-  const b15 = swrBandwidth(data, 1.5);
-  const b20 = swrBandwidth(data, 2);
+  const b15 = swrBandwidth(swrPoints, 1.5);
+  const b20 = swrBandwidth(swrPoints, 2);
+  const matchedZ = matched && d.sweep.matching.mode === 'swrZ';
   const res = d.resonance.stale ? null : d.resonance.search?.resonance;
   const circuit = res?.circuit;
   const cw = (WIDTH - 4) / 2;
@@ -519,10 +535,21 @@ function Sweep({ d }: { d: PrintData }) {
   return (
     <div>
       <Heading note={d.sweep.stale ? 'アンテナを変更した後、再計算していません' : `${x[0]}〜${x.at(-1)} MHz・${data.length} 点`}>周波数特性</Heading>
-      <div className="p-bandwidth">
+      <div className="p-bandwidth" style={{ height: `${sweepNotesHeight(d)}mm` }}>
         <div>
-          {band(1.5)}　{band(2)}
+          {matched && '整合前　'}
+          {band(data, 1.5)}　{band(data, 2)}
         </div>
+        {matched && net && (
+          <>
+            <div>
+              整合後　{band(swrPoints, 1.5)}　{band(swrPoints, 2)}
+            </div>
+            <div>
+              整合回路：{match!.frequencyMhz.toFixed(3)} MHz で {(d.sweep.basis?.project ?? d.project).environment.swrReference.r} Ω に整合・{networkText(net.network)}
+            </div>
+          </>
+        )}
         {/* MMANA printed the fitted series circuit on its impedance chart */}
         {circuit && (
           <div>
@@ -533,7 +560,7 @@ function Sweep({ d }: { d: PrintData }) {
       </div>
       <div className={`p-sweep${d.sweep.stale ? ' p-stale' : ''}`}>
         <LineSvg
-          title="SWR"
+          title={matched ? 'SWR（整合回路あり）' : 'SWR'}
           unit=""
           x={x}
           width={cw}
@@ -546,19 +573,33 @@ function Sweep({ d }: { d: PrintData }) {
             ...(b20 ? [{ low: b20.lowMhz, high: b20.highMhz, className: 'p-band' }] : []),
             ...(b15 ? [{ low: b15.lowMhz, high: b15.highMhz, className: 'p-band' }] : []),
           ]}
-          series={[{ label: 'SWR', values: data.map((p) => p.swr), color: 'var(--p-series-1)' }]}
+          series={
+            matched
+              ? [
+                  { label: '整合後', values: matched.map((m) => m?.swr ?? NaN), color: 'var(--p-series-1)' },
+                  { label: '整合前', values: data.map((p) => p.swr), color: 'var(--p-series-2)', dash: '1.6 1' },
+                ]
+              : [{ label: 'SWR', values: data.map((p) => p.swr), color: 'var(--p-series-1)' }]
+          }
         />
         <LineSvg
-          title="インピーダンス"
+          title={matchedZ ? 'インピーダンス（整合後）' : 'インピーダンス'}
           unit="Ω"
           x={x}
           width={cw}
           height={ch}
           markerX={marker}
-          series={[
-            { label: 'R', values: data.map((p) => p.impedance.re), color: 'var(--p-series-1)' },
-            { label: 'jX', values: data.map((p) => p.impedance.im), color: 'var(--p-series-2)', dash: '1.6 1' },
-          ]}
+          series={
+            matchedZ
+              ? [
+                  { label: 'R', values: matched!.map((m) => m?.impedance?.re ?? NaN), color: 'var(--p-series-1)' },
+                  { label: 'jX', values: matched!.map((m) => m?.impedance?.im ?? NaN), color: 'var(--p-series-2)', dash: '1.6 1' },
+                ]
+              : [
+                  { label: 'R', values: data.map((p) => p.impedance.re), color: 'var(--p-series-1)' },
+                  { label: 'jX', values: data.map((p) => p.impedance.im), color: 'var(--p-series-2)', dash: '1.6 1' },
+                ]
+          }
         />
         <LineSvg title="利得" unit="dBi" x={x} width={cw} height={ch} markerX={marker} series={[{ label: '利得', values: data.map((p) => p.gainDbi), color: 'var(--p-series-1)' }]} />
         <LineSvg title="F/B 比" unit="dB" x={x} width={cw} height={ch} markerX={marker} series={[{ label: 'F/B', values: data.map((p) => p.fbDb), color: 'var(--p-series-1)' }]} />
@@ -632,7 +673,7 @@ export function printSections(d: PrintData, chosen: Record<SectionId, boolean>):
     const loads = a.loads.length ? 3 + TABLE_HEAD + a.loads.length * ROW_HEIGHT : 0;
     out.push({ block: { key: 'feed', height: HEADING + TABLE_HEAD + a.sources.length * ROW_HEIGHT + loads + 1 }, render: () => <Feed d={d} /> });
   }
-  if (on('sweep')) out.push({ block: { key: 'sweep', height: HEADING + 10 + 64 * 2 + 4 }, render: () => <Sweep d={d} /> });
+  if (on('sweep')) out.push({ block: { key: 'sweep', height: HEADING + sweepNotesHeight(d) + 64 * 2 + 4 }, render: () => <Sweep d={d} /> });
   if (on('memo')) out.push({ block: { key: 'memo', height: HEADING + 58 }, render: () => <Memo /> });
   return out;
 }

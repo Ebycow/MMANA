@@ -170,9 +170,9 @@ export function LineSvg({ title, unit, x, series, width, height, yMin, yMax, mar
         <line x1={sx(markerX)} x2={sx(markerX)} y1={M.top} y2={M.top + h} className="p-axis" strokeDasharray="1 1" />
       )}
       {series.map((s) => (
-        <polyline
+        <path
           key={s.label}
-          points={s.values.map((v, i) => `${sx(x[i]).toFixed(2)},${sy(v).toFixed(2)}`).join(' ')}
+          d={s.values.map((v, i) => (Number.isFinite(v) ? `${i && Number.isFinite(s.values[i - 1]) ? 'L' : 'M'}${sx(x[i]).toFixed(2)},${sy(v).toFixed(2)}` : '')).join('')}
           fill="none"
           stroke={s.color}
           strokeWidth={0.45}
