@@ -184,7 +184,9 @@ reference/oracle/gen_golden.sh
   `apps/desktop/src/domain/circuits.ts` にあります。
 - **検証は計算エンジンと同じ方式です。** `extract.sh` が `CalcTank`・`CalcCoil`・`CalcMatch`・`CalcCore`・`CalcZi`/`CalcZL`・`CalcQML`・`CalcSM` と `CLX` を
   行範囲でそのまま抜き出し、`reference/oracle/tools_main.cpp` が `testdata/circuits/cases.txt` の 949 ケースを編集時の単位変換つきで実行して
-  `testdata/circuits/golden.json` を作ります（`reference/oracle/gen_circuits.sh`）。`crates/mmana-core/tests/circuits.rs` が全値をビット単位で比較します。
+  `testdata/circuits/golden.json` を作ります（`reference/oracle/gen_circuits.sh`）。`crates/mmana-core/tests/circuits.rs` が、正解データを作った macOS/arm64 では全値をビット単位で、
+  それ以外では libm の違い（`atan`・`tan` などが 1 ulp 違う）を見込んだ相対 1e-9 で比較します。長さの探索（Q マッチ・スタブ整合）は SWR が 1 ulp の差しかない平らな谷で
+  1 歩違う位置に止まることがあるので（Windows で 1 ケース、0.0003 λ）、そのときは到達した SWR を比べます。
 
 ## 性能
 
