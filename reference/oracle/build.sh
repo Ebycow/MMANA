@@ -20,4 +20,10 @@ ${CXX:-clang++} -std=c++14 -O2 -ffp-contract=off -w \
 	"$HERE/generated/mininec3.cpp" "$HERE/generated/comlib_extract.cpp" "$HERE/generated/cwgroup_extract.cpp" \
 	"$HERE/generated/cacal_extract.cpp" "$HERE/generated/acalbox_extract.cpp" "$HERE/optimize_main.cpp" \
 	-o "$HERE/build/optimize"
-echo "built $HERE/build/oracle, $HERE/build/elements and $HERE/build/optimize"
+# shim/tools/OptDlg.h stands in for the calculator dialog
+${CXX:-clang++} -std=c++14 -O2 -ffp-contract=off -w \
+	-I"$HERE" -I"$HERE/shim/tools" -I"$HERE/shim" -I"$HERE/generated" \
+	"$HERE/generated/mininec3.cpp" "$HERE/generated/comlib_extract.cpp" "$HERE/generated/optdlg_extract.cpp" \
+	"$HERE/tools_main.cpp" \
+	-o "$HERE/build/tools"
+echo "built $HERE/build/oracle, $HERE/build/elements, $HERE/build/optimize and $HERE/build/tools"
