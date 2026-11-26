@@ -2,9 +2,9 @@
 
 <img src="apps/desktop/app-icon.svg" alt="MMANA のアプリアイコン" width="128" height="128">
 
-# MMANA — Rust 移植
+# MMANA
 
-**MININEC3 ベースのアンテナ解析ソフト MMANA を、Rust で。**
+**MININEC3 ベースのアンテナ解析ソフト MMANA — Rust 移植**
 
 [![CI](https://github.com/Ebycow/MMANA/actions/workflows/ci.yml/badge.svg)](https://github.com/Ebycow/MMANA/actions/workflows/ci.yml)
 [![Quality](https://github.com/Ebycow/MMANA/actions/workflows/quality.yml/badge.svg)](https://github.com/Ebycow/MMANA/actions/workflows/quality.yml)
