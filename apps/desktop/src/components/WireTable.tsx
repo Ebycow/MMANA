@@ -9,6 +9,7 @@ import {
   IconLayoutRows,
   IconPencil,
   IconPlus,
+  IconReplace,
   IconTrash,
 } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef } from 'react';
@@ -39,6 +40,7 @@ import { useEditor } from '../state/editor';
 import { useInput } from '../state/input';
 import { useNewWire } from '../state/newWire';
 import { useApp } from '../state/store';
+import { WIRE_COLUMNS, useWireTools, type WireColumn } from '../state/wireTools';
 import {
   canEditWires,
   dissolveGroup,
@@ -82,6 +84,8 @@ export function WireTable() {
   const units: Units = { wavelengths: display.wavelengths && lambda > 0, millimetres: display.millimetres, lambda };
   const lu = lengthUnit(units);
   const bodyRef = useRef<HTMLTableSectionElement>(null);
+  // the column 検索と置換 opens on: the last one a cell was edited in
+  const lastColumn = useRef<WireColumn>('X1');
   const diagnostics = useDiagnostics();
   const problems = useMemo(() => byWire(diagnostics), [diagnostics]);
   const collapsedGroups = useEditor((s) => s.collapsedGroups);
@@ -186,7 +190,13 @@ export function WireTable() {
             <th />
           </tr>
         </thead>
-        <tbody ref={bodyRef}>
+        <tbody
+          ref={bodyRef}
+          onFocus={(e) => {
+            const col = (e.target as HTMLElement).closest<HTMLElement>('td[data-col]')?.dataset.col as WireColumn | undefined;
+            if (col && WIRE_COLUMNS.includes(col)) lastColumn.current = col;
+          }}
+        >
           {rows.map((r, k) => {
             if (r.kind === 'group') {
               const first = rows.findIndex((o) => o.kind === 'group' && o.name === r.name) === k;
@@ -221,7 +231,7 @@ export function WireTable() {
               >
                 <WireNumber index={i} problems={problems.get(i) ?? []} onClick={(e) => clickRow(i, e)} onPointerDown={(e) => dragWire(i, e)} />
                 {COORDS.map((c) => (
-                  <td key={c.label} style={{ minWidth: 50 }}>
+                  <td key={c.label} data-col={c.label} style={{ minWidth: 50 }}>
                     <NumCell
                       ariaLabel={`ワイヤー ${i + 1} ${c.label}`}
                       value={lengthToDisplay(w[c.end][c.axis], units)}
@@ -231,7 +241,7 @@ export function WireTable() {
                     />
                   </td>
                 ))}
-                <td style={{ minWidth: 50 }}>
+                <td data-col="R" style={{ minWidth: 50 }}>
                   <NumCell
                     ariaLabel={`ワイヤー ${i + 1} 半径`}
                     value={radiusToDisplay(w.radius, units)}
@@ -240,7 +250,7 @@ export function WireTable() {
                     onCommit={(v) => edit((p) => void (p.antenna.wires[i].radius = radiusFromDisplay(v, units)))}
                   />
                 </td>
-                <td style={{ minWidth: 46 }}>
+                <td data-col="SEG" style={{ minWidth: 46 }}>
                   <Tooltip label={describeSegmentation(w.segmentation)} openDelay={600}>
                     <div>
                       <TextCell
@@ -304,6 +314,17 @@ export function WireTable() {
             <Button variant="default" leftSection={<IconLayoutRows size={14} />} onClick={() => setElementEditorOpen(true)}>
               エレメント編集…
             </Button>
+          </Tooltip>
+          <Tooltip label="最後に編集した列（座標・R・SEG）の値を、すべてのワイヤーで検索して置き換えます" multiline w={260}>
+            <ActionIcon
+              variant="default"
+              size="input-sm"
+              aria-label="検索と置換"
+              disabled={wires.length === 0}
+              onClick={() => canEditWires() && useWireTools.getState().openReplace(lastColumn.current)}
+            >
+              <IconReplace size={16} />
+            </ActionIcon>
           </Tooltip>
           <Tooltip label={`選択したワイヤーを 1 つのグループにまとめ、最初のワイヤーの位置に並べます${keyHint('group')}`} multiline w={260}>
             <ActionIcon variant="default" size="input-sm" aria-label="グループにまとめる" disabled={selection.length === 0} onClick={() => groupSelected()}>

@@ -16,6 +16,7 @@ import { SamplesModal } from './components/SamplesModal';
 import { StatusBar } from './components/StatusBar';
 import { PrintView } from './components/print/PrintView';
 import { Workspace } from './components/Workspace';
+import { WireTools } from './components/WireTools';
 import { loadSampleBytes, samples as samplesList, type Sample } from './domain/samples';
 import { useEditor, type Tool } from './state/editor';
 import { useCommandKeys, useInput } from './state/input';
@@ -226,6 +227,7 @@ export function App() {
       <ChecksSettings />
       <NewWireSettings />
       <CircuitTools />
+      <WireTools />
       <PrintView />
     </AppShell>
   );
