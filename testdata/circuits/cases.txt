@@ -1,0 +1,960 @@
+# Cases for the calculator oracle (reference/oracle/tools_main.cpp describes the format).
+# The hand-picked cases come first, then grids over each tool's inputs.
+# LC resonance
+tank x 14.05 50
+tank x 14.05 -50
+tank x 7.05 0
+tank x 1.825 1234.5
+tank x 1295 0.3
+tank l 14.05 1
+tank l 3.5 22.7
+tank l 145 0.05
+tank c 14.05 100
+tank c 0.1365 2200
+tank c 430 1.5
+tank lc 1 100
+tank lc 22.7 47
+tank lc 0.05 0.5
+tank lc 0 100
+tank lc 1 0
+# Air-core coil
+coil l 10 10 1 1
+coil l 10 10 1 0
+coil l 3.5 2.5 2 0.5
+coil l 50 1.2 0.5 0
+coil l 1 30 3 10
+coil n 1 2 1 1
+coil n 10 10 1 1
+coil n 0.3 1 1.6 0.4
+coil n 120 5 0.5 0
+coil d 1 10 1 1
+coil d 10 10 1 0
+coil d 0.3 4 1.6 0.4
+coil d 120 80 0.5 0
+# LC match: matched, R below / equal to / above Zo, both circuits
+match 14.05 50 50 0 0
+match 14.05 50 50 0 1
+match 14.05 50 50 20 0
+match 14.05 50 50 -20 1
+match 14.05 50 25 0 0
+match 14.05 50 25 0 1
+match 14.05 50 12.5 -30 0
+match 14.05 50 12.5 -30 1
+match 14.05 50 25 -25 0
+match 14.05 50 25 25 1
+match 7.05 50 200 0 0
+match 7.05 50 200 0 1
+match 7.05 50 200 150 0
+match 7.05 50 200 -150 1
+match 3.55 75 1000 -500 0
+match 144.1 50 50.0001 0 0
+match 1.825 50 2 -300 0
+match 1.825 50 2 -300 1
+# Stub: every cable type, open and short, from X, L, C and length
+stub 14.05 0 0.66 50 open x 25
+stub 14.05 0 0.66 50 short x 25
+stub 14.05 1 0.66 50 open x 25
+stub 14.05 1 0.66 50 short x 25
+stub 14.05 2 0.66 50 open x 25
+stub 14.05 2 0.66 50 short x 25
+stub 14.05 3 0.66 50 open x 25
+stub 14.05 3 0.66 50 short x 25
+stub 14.05 4 0.66 50 open x 25
+stub 14.05 4 0.66 50 short x 25
+stub 14.05 5 0.66 50 open x 25
+stub 14.05 5 0.66 50 short x 25
+stub 14.05 6 0.66 50 open x 25
+stub 14.05 6 0.66 50 short x 25
+stub 14.05 7 0.66 50 open x 25
+stub 14.05 7 0.66 50 short x 25
+stub 14.05 8 0.66 50 open x 25
+stub 14.05 8 0.66 50 short x 25
+stub 14.05 9 0.66 50 open x 25
+stub 14.05 9 0.66 50 short x 25
+stub 14.05 10 0.66 50 open x 25
+stub 14.05 10 0.66 50 short x 25
+stub 14.05 11 0.66 50 open x 25
+stub 14.05 11 0.66 50 short x 25
+stub 14.05 12 0.66 50 open x 25
+stub 14.05 12 0.66 50 short x 25
+stub 14.05 13 0.66 50 open x 25
+stub 14.05 13 0.66 50 short x 25
+stub 14.05 14 0.66 50 open x 25
+stub 14.05 14 0.66 50 short x 25
+stub 14.05 15 0.66 50 open x 25
+stub 14.05 15 0.66 50 short x 25
+stub 14.05 16 0.66 50 open x 25
+stub 14.05 16 0.66 50 short x 25
+stub 14.05 17 0.66 50 open x 25
+stub 14.05 17 0.66 50 short x 25
+stub 14.05 18 0.66 50 open x 25
+stub 14.05 18 0.66 50 short x 25
+stub 14.05 19 0.66 50 open x 25
+stub 14.05 19 0.66 50 short x 25
+stub 7.05 0 0.66 50 open x -100
+stub 7.05 0 0.66 50 short x 100
+stub 7.05 0 0.66 50 open x 0
+stub 7.05 0 0.66 50 short x 0
+stub 7.05 0 0.66 50 open x 1e6
+stub 7.05 8 0 0 open l 1.2
+stub 7.05 8 0 0 short l 1.2
+stub 7.05 8 0 0 open c 47
+stub 7.05 8 0 0 short c 47
+stub 7.05 8 0 0 open c 0
+stub 7.05 8 0 0 short l 0
+stub 7.05 8 0 0 open len 100
+stub 7.05 8 0 0 short len 100
+stub 7.05 8 0 0 open len 0
+stub 7.05 8 0 0 short len 0
+stub 7.05 8 0 0 open len 1000
+stub 7.05 8 0 0 short len 702.3
+stub 50.1 1 0 0 short len 50
+stub 21.05 0 0.8 300 open len 233.4
+# Transmission line, both directions, lossless and lossy, lengths past 1 wavelength
+line zi 50 0.25 0 100 0
+line zi 50 0.25 0 25 25
+line zi 50 0.5 0 12 -40
+line zi 75 0.125 0 50 0
+line zi 50 1.25 0 100 0
+line zi 50 0 0 37 21
+line zi 50 0.3 1.5 100 -50
+line zi 600 0.07 0.2 3000 900
+line zl 50 0.25 0 100 0
+line zl 50 0.25 0 25 25
+line zl 75 0.33 0 50 0
+line zl 50 2.1 0 80 30
+line zl 50 0.3 1.5 60 -20
+line zl 450 0.11 0.05 200 -300
+# Two-section match: evaluate and tune
+qm 75 0 50 75 0.0815 50 0.0815
+qm 25 10 50 75 0.1 50 0.2
+qm 100 -50 50 50 0.3 75 0.05
+qmtune 75 0 50 75 50
+qmtune 25 0 50 75 50
+qmtune 100 0 50 50 75
+qmtune 35 -20 50 75 50
+qmtune 200 100 50 50 75
+qmtune 50 0 50 75 50
+qmtune 12 -30 50 75 50
+qmtune 300 0 75 50 93
+qmtune 62 15 50 75 50
+# Stub match
+sm 14.05 50 25 0 600 0.95
+sm 14.05 50 100 0 600 0.95
+sm 14.05 50 50 0 600 0.95
+sm 14.05 50 50 50 50 0.66
+sm 7.05 50 12 -40 450 0.91
+sm 7.05 50 300 200 600 0.95
+sm 21.2 75 37 21 300 0.8
+sm 3.55 50 2000 -1000 600 0.95
+sm 144.1 50 50 0.5 50 0.66
+sm 1.825 50 5 0 600 0.95
+# Hairpin jX
+hairpin 25 50
+hairpin 12.5 50
+hairpin 50 50
+hairpin 75 50
+hairpin 30 37.5
+# --- grids ---
+tank x 1.9 0.5
+tank x 1.9 7
+tank x 1.9 50
+tank x 1.9 333
+tank x 1.9 4800
+tank l 1.9 0.01
+tank l 1.9 0.33
+tank l 1.9 2.2
+tank l 1.9 47
+tank c 1.9 0.8
+tank c 1.9 15
+tank c 1.9 330
+tank c 1.9 6800
+tank x 14.05 0.5
+tank x 14.05 7
+tank x 14.05 50
+tank x 14.05 333
+tank x 14.05 4800
+tank l 14.05 0.01
+tank l 14.05 0.33
+tank l 14.05 2.2
+tank l 14.05 47
+tank c 14.05 0.8
+tank c 14.05 15
+tank c 14.05 330
+tank c 14.05 6800
+tank x 145 0.5
+tank x 145 7
+tank x 145 50
+tank x 145 333
+tank x 145 4800
+tank l 145 0.01
+tank l 145 0.33
+tank l 145 2.2
+tank l 145 47
+tank c 145 0.8
+tank c 145 15
+tank c 145 330
+tank c 145 6800
+tank lc 0.1 5
+tank lc 0.1 120
+tank lc 0.1 1000
+tank lc 1.5 5
+tank lc 1.5 120
+tank lc 1.5 1000
+tank lc 10 5
+tank lc 10 120
+tank lc 10 1000
+coil l 2 0.8 0.6 0
+coil l 2 0.8 0.6 0.7
+coil l 2 0.8 2 0
+coil l 2 0.8 2 0.7
+coil l 2 3 0.6 0
+coil l 2 3 0.6 0.7
+coil l 2 3 2 0
+coil l 2 3 2 0.7
+coil l 2 12 0.6 0
+coil l 2 12 0.6 0.7
+coil l 2 12 2 0
+coil l 2 12 2 0.7
+coil l 7.5 0.8 0.6 0
+coil l 7.5 0.8 0.6 0.7
+coil l 7.5 0.8 2 0
+coil l 7.5 0.8 2 0.7
+coil l 7.5 3 0.6 0
+coil l 7.5 3 0.6 0.7
+coil l 7.5 3 2 0
+coil l 7.5 3 2 0.7
+coil l 7.5 12 0.6 0
+coil l 7.5 12 0.6 0.7
+coil l 7.5 12 2 0
+coil l 7.5 12 2 0.7
+coil l 40 0.8 0.6 0
+coil l 40 0.8 0.6 0.7
+coil l 40 0.8 2 0
+coil l 40 0.8 2 0.7
+coil l 40 3 0.6 0
+coil l 40 3 0.6 0.7
+coil l 40 3 2 0
+coil l 40 3 2 0.7
+coil l 40 12 0.6 0
+coil l 40 12 0.6 0.7
+coil l 40 12 2 0
+coil l 40 12 2 0.7
+coil n 0.2 0.8 0.6 0
+coil n 0.2 0.8 0.6 0.7
+coil n 0.2 0.8 2 0
+coil n 0.2 0.8 2 0.7
+coil n 0.2 3 0.6 0
+coil n 0.2 3 0.6 0.7
+coil n 0.2 3 2 0
+coil n 0.2 3 2 0.7
+coil n 0.2 12 0.6 0
+coil n 0.2 12 0.6 0.7
+coil n 0.2 12 2 0
+coil n 0.2 12 2 0.7
+coil n 3.3 0.8 0.6 0
+coil n 3.3 0.8 0.6 0.7
+coil n 3.3 0.8 2 0
+coil n 3.3 0.8 2 0.7
+coil n 3.3 3 0.6 0
+coil n 3.3 3 0.6 0.7
+coil n 3.3 3 2 0
+coil n 3.3 3 2 0.7
+coil n 3.3 12 0.6 0
+coil n 3.3 12 0.6 0.7
+coil n 3.3 12 2 0
+coil n 3.3 12 2 0.7
+coil n 60 0.8 0.6 0
+coil n 60 0.8 0.6 0.7
+coil n 60 0.8 2 0
+coil n 60 0.8 2 0.7
+coil n 60 3 0.6 0
+coil n 60 3 0.6 0.7
+coil n 60 3 2 0
+coil n 60 3 2 0.7
+coil n 60 12 0.6 0
+coil n 60 12 0.6 0.7
+coil n 60 12 2 0
+coil n 60 12 2 0.7
+coil d 0.2 2 0.6 0
+coil d 0.2 2 0.6 0.7
+coil d 0.2 2 2 0
+coil d 0.2 2 2 0.7
+coil d 0.2 7.5 0.6 0
+coil d 0.2 7.5 0.6 0.7
+coil d 0.2 7.5 2 0
+coil d 0.2 7.5 2 0.7
+coil d 0.2 40 0.6 0
+coil d 0.2 40 0.6 0.7
+coil d 0.2 40 2 0
+coil d 0.2 40 2 0.7
+coil d 3.3 2 0.6 0
+coil d 3.3 2 0.6 0.7
+coil d 3.3 2 2 0
+coil d 3.3 2 2 0.7
+coil d 3.3 7.5 0.6 0
+coil d 3.3 7.5 0.6 0.7
+coil d 3.3 7.5 2 0
+coil d 3.3 7.5 2 0.7
+coil d 3.3 40 0.6 0
+coil d 3.3 40 0.6 0.7
+coil d 3.3 40 2 0
+coil d 3.3 40 2 0.7
+coil d 60 2 0.6 0
+coil d 60 2 0.6 0.7
+coil d 60 2 2 0
+coil d 60 2 2 0.7
+coil d 60 7.5 0.6 0
+coil d 60 7.5 0.6 0.7
+coil d 60 7.5 2 0
+coil d 60 7.5 2 0.7
+coil d 60 40 0.6 0
+coil d 60 40 0.6 0.7
+coil d 60 40 2 0
+coil d 60 40 2 0.7
+match 10.1 50 3 -250 0
+match 10.1 50 3 -250 1
+match 10.1 50 3 -12 0
+match 10.1 50 3 -12 1
+match 10.1 50 3 0 0
+match 10.1 50 3 0 1
+match 10.1 50 3 33 0
+match 10.1 50 3 33 1
+match 10.1 50 22 -250 0
+match 10.1 50 22 -250 1
+match 10.1 50 22 -12 0
+match 10.1 50 22 -12 1
+match 10.1 50 22 0 0
+match 10.1 50 22 0 1
+match 10.1 50 22 33 0
+match 10.1 50 22 33 1
+match 10.1 50 50 -250 0
+match 10.1 50 50 -250 1
+match 10.1 50 50 -12 0
+match 10.1 50 50 -12 1
+match 10.1 50 50 0 0
+match 10.1 50 50 0 1
+match 10.1 50 50 33 0
+match 10.1 50 50 33 1
+match 10.1 50 61 -250 0
+match 10.1 50 61 -250 1
+match 10.1 50 61 -12 0
+match 10.1 50 61 -12 1
+match 10.1 50 61 0 0
+match 10.1 50 61 0 1
+match 10.1 50 61 33 0
+match 10.1 50 61 33 1
+match 10.1 50 410 -250 0
+match 10.1 50 410 -250 1
+match 10.1 50 410 -12 0
+match 10.1 50 410 -12 1
+match 10.1 50 410 0 0
+match 10.1 50 410 0 1
+match 10.1 50 410 33 0
+match 10.1 50 410 33 1
+match 10.1 75 3 -250 0
+match 10.1 75 3 -250 1
+match 10.1 75 3 -12 0
+match 10.1 75 3 -12 1
+match 10.1 75 3 0 0
+match 10.1 75 3 0 1
+match 10.1 75 3 33 0
+match 10.1 75 3 33 1
+match 10.1 75 22 -250 0
+match 10.1 75 22 -250 1
+match 10.1 75 22 -12 0
+match 10.1 75 22 -12 1
+match 10.1 75 22 0 0
+match 10.1 75 22 0 1
+match 10.1 75 22 33 0
+match 10.1 75 22 33 1
+match 10.1 75 50 -250 0
+match 10.1 75 50 -250 1
+match 10.1 75 50 -12 0
+match 10.1 75 50 -12 1
+match 10.1 75 50 0 0
+match 10.1 75 50 0 1
+match 10.1 75 50 33 0
+match 10.1 75 50 33 1
+match 10.1 75 61 -250 0
+match 10.1 75 61 -250 1
+match 10.1 75 61 -12 0
+match 10.1 75 61 -12 1
+match 10.1 75 61 0 0
+match 10.1 75 61 0 1
+match 10.1 75 61 33 0
+match 10.1 75 61 33 1
+match 10.1 75 410 -250 0
+match 10.1 75 410 -250 1
+match 10.1 75 410 -12 0
+match 10.1 75 410 -12 1
+match 10.1 75 410 0 0
+match 10.1 75 410 0 1
+match 10.1 75 410 33 0
+match 10.1 75 410 33 1
+stub 28.5 0 0.7 93 open x -700
+stub 28.5 0 0.7 93 open x -9
+stub 28.5 0 0.7 93 open x 3
+stub 28.5 0 0.7 93 open x 480
+stub 28.5 0 0.7 93 open l 0.4
+stub 28.5 0 0.7 93 open c 220
+stub 28.5 0 0.7 93 open len 13
+stub 28.5 0 0.7 93 open len 377
+stub 28.5 0 0.7 93 short x -700
+stub 28.5 0 0.7 93 short x -9
+stub 28.5 0 0.7 93 short x 3
+stub 28.5 0 0.7 93 short x 480
+stub 28.5 0 0.7 93 short l 0.4
+stub 28.5 0 0.7 93 short c 220
+stub 28.5 0 0.7 93 short len 13
+stub 28.5 0 0.7 93 short len 377
+stub 28.5 3 0.7 93 open x -700
+stub 28.5 3 0.7 93 open x -9
+stub 28.5 3 0.7 93 open x 3
+stub 28.5 3 0.7 93 open x 480
+stub 28.5 3 0.7 93 open l 0.4
+stub 28.5 3 0.7 93 open c 220
+stub 28.5 3 0.7 93 open len 13
+stub 28.5 3 0.7 93 open len 377
+stub 28.5 3 0.7 93 short x -700
+stub 28.5 3 0.7 93 short x -9
+stub 28.5 3 0.7 93 short x 3
+stub 28.5 3 0.7 93 short x 480
+stub 28.5 3 0.7 93 short l 0.4
+stub 28.5 3 0.7 93 short c 220
+stub 28.5 3 0.7 93 short len 13
+stub 28.5 3 0.7 93 short len 377
+stub 28.5 4 0.7 93 open x -700
+stub 28.5 4 0.7 93 open x -9
+stub 28.5 4 0.7 93 open x 3
+stub 28.5 4 0.7 93 open x 480
+stub 28.5 4 0.7 93 open l 0.4
+stub 28.5 4 0.7 93 open c 220
+stub 28.5 4 0.7 93 open len 13
+stub 28.5 4 0.7 93 open len 377
+stub 28.5 4 0.7 93 short x -700
+stub 28.5 4 0.7 93 short x -9
+stub 28.5 4 0.7 93 short x 3
+stub 28.5 4 0.7 93 short x 480
+stub 28.5 4 0.7 93 short l 0.4
+stub 28.5 4 0.7 93 short c 220
+stub 28.5 4 0.7 93 short len 13
+stub 28.5 4 0.7 93 short len 377
+stub 28.5 12 0.7 93 open x -700
+stub 28.5 12 0.7 93 open x -9
+stub 28.5 12 0.7 93 open x 3
+stub 28.5 12 0.7 93 open x 480
+stub 28.5 12 0.7 93 open l 0.4
+stub 28.5 12 0.7 93 open c 220
+stub 28.5 12 0.7 93 open len 13
+stub 28.5 12 0.7 93 open len 377
+stub 28.5 12 0.7 93 short x -700
+stub 28.5 12 0.7 93 short x -9
+stub 28.5 12 0.7 93 short x 3
+stub 28.5 12 0.7 93 short x 480
+stub 28.5 12 0.7 93 short l 0.4
+stub 28.5 12 0.7 93 short c 220
+stub 28.5 12 0.7 93 short len 13
+stub 28.5 12 0.7 93 short len 377
+stub 28.5 18 0.7 93 open x -700
+stub 28.5 18 0.7 93 open x -9
+stub 28.5 18 0.7 93 open x 3
+stub 28.5 18 0.7 93 open x 480
+stub 28.5 18 0.7 93 open l 0.4
+stub 28.5 18 0.7 93 open c 220
+stub 28.5 18 0.7 93 open len 13
+stub 28.5 18 0.7 93 open len 377
+stub 28.5 18 0.7 93 short x -700
+stub 28.5 18 0.7 93 short x -9
+stub 28.5 18 0.7 93 short x 3
+stub 28.5 18 0.7 93 short x 480
+stub 28.5 18 0.7 93 short l 0.4
+stub 28.5 18 0.7 93 short c 220
+stub 28.5 18 0.7 93 short len 13
+stub 28.5 18 0.7 93 short len 377
+line zi 50 0.04 0 8 -60
+line zi 50 0.04 0 8 0
+line zi 50 0.04 0 8 25
+line zi 50 0.04 0 140 -60
+line zi 50 0.04 0 140 0
+line zi 50 0.04 0 140 25
+line zi 50 0.04 0.8 8 -60
+line zi 50 0.04 0.8 8 0
+line zi 50 0.04 0.8 8 25
+line zi 50 0.04 0.8 140 -60
+line zi 50 0.04 0.8 140 0
+line zi 50 0.04 0.8 140 25
+line zi 50 0.37 0 8 -60
+line zi 50 0.37 0 8 0
+line zi 50 0.37 0 8 25
+line zi 50 0.37 0 140 -60
+line zi 50 0.37 0 140 0
+line zi 50 0.37 0 140 25
+line zi 50 0.37 0.8 8 -60
+line zi 50 0.37 0.8 8 0
+line zi 50 0.37 0.8 8 25
+line zi 50 0.37 0.8 140 -60
+line zi 50 0.37 0.8 140 0
+line zi 50 0.37 0.8 140 25
+line zi 50 0.75 0 8 -60
+line zi 50 0.75 0 8 0
+line zi 50 0.75 0 8 25
+line zi 50 0.75 0 140 -60
+line zi 50 0.75 0 140 0
+line zi 50 0.75 0 140 25
+line zi 50 0.75 0.8 8 -60
+line zi 50 0.75 0.8 8 0
+line zi 50 0.75 0.8 8 25
+line zi 50 0.75 0.8 140 -60
+line zi 50 0.75 0.8 140 0
+line zi 50 0.75 0.8 140 25
+line zi 50 1.6 0 8 -60
+line zi 50 1.6 0 8 0
+line zi 50 1.6 0 8 25
+line zi 50 1.6 0 140 -60
+line zi 50 1.6 0 140 0
+line zi 50 1.6 0 140 25
+line zi 50 1.6 0.8 8 -60
+line zi 50 1.6 0.8 8 0
+line zi 50 1.6 0.8 8 25
+line zi 50 1.6 0.8 140 -60
+line zi 50 1.6 0.8 140 0
+line zi 50 1.6 0.8 140 25
+line zi 300 0.04 0 8 -60
+line zi 300 0.04 0 8 0
+line zi 300 0.04 0 8 25
+line zi 300 0.04 0 140 -60
+line zi 300 0.04 0 140 0
+line zi 300 0.04 0 140 25
+line zi 300 0.04 0.8 8 -60
+line zi 300 0.04 0.8 8 0
+line zi 300 0.04 0.8 8 25
+line zi 300 0.04 0.8 140 -60
+line zi 300 0.04 0.8 140 0
+line zi 300 0.04 0.8 140 25
+line zi 300 0.37 0 8 -60
+line zi 300 0.37 0 8 0
+line zi 300 0.37 0 8 25
+line zi 300 0.37 0 140 -60
+line zi 300 0.37 0 140 0
+line zi 300 0.37 0 140 25
+line zi 300 0.37 0.8 8 -60
+line zi 300 0.37 0.8 8 0
+line zi 300 0.37 0.8 8 25
+line zi 300 0.37 0.8 140 -60
+line zi 300 0.37 0.8 140 0
+line zi 300 0.37 0.8 140 25
+line zi 300 0.75 0 8 -60
+line zi 300 0.75 0 8 0
+line zi 300 0.75 0 8 25
+line zi 300 0.75 0 140 -60
+line zi 300 0.75 0 140 0
+line zi 300 0.75 0 140 25
+line zi 300 0.75 0.8 8 -60
+line zi 300 0.75 0.8 8 0
+line zi 300 0.75 0.8 8 25
+line zi 300 0.75 0.8 140 -60
+line zi 300 0.75 0.8 140 0
+line zi 300 0.75 0.8 140 25
+line zi 300 1.6 0 8 -60
+line zi 300 1.6 0 8 0
+line zi 300 1.6 0 8 25
+line zi 300 1.6 0 140 -60
+line zi 300 1.6 0 140 0
+line zi 300 1.6 0 140 25
+line zi 300 1.6 0.8 8 -60
+line zi 300 1.6 0.8 8 0
+line zi 300 1.6 0.8 8 25
+line zi 300 1.6 0.8 140 -60
+line zi 300 1.6 0.8 140 0
+line zi 300 1.6 0.8 140 25
+line zl 50 0.04 0 8 -60
+line zl 50 0.04 0 8 0
+line zl 50 0.04 0 8 25
+line zl 50 0.04 0 140 -60
+line zl 50 0.04 0 140 0
+line zl 50 0.04 0 140 25
+line zl 50 0.04 0.8 8 -60
+line zl 50 0.04 0.8 8 0
+line zl 50 0.04 0.8 8 25
+line zl 50 0.04 0.8 140 -60
+line zl 50 0.04 0.8 140 0
+line zl 50 0.04 0.8 140 25
+line zl 50 0.37 0 8 -60
+line zl 50 0.37 0 8 0
+line zl 50 0.37 0 8 25
+line zl 50 0.37 0 140 -60
+line zl 50 0.37 0 140 0
+line zl 50 0.37 0 140 25
+line zl 50 0.37 0.8 8 -60
+line zl 50 0.37 0.8 8 0
+line zl 50 0.37 0.8 8 25
+line zl 50 0.37 0.8 140 -60
+line zl 50 0.37 0.8 140 0
+line zl 50 0.37 0.8 140 25
+line zl 50 0.75 0 8 -60
+line zl 50 0.75 0 8 0
+line zl 50 0.75 0 8 25
+line zl 50 0.75 0 140 -60
+line zl 50 0.75 0 140 0
+line zl 50 0.75 0 140 25
+line zl 50 0.75 0.8 8 -60
+line zl 50 0.75 0.8 8 0
+line zl 50 0.75 0.8 8 25
+line zl 50 0.75 0.8 140 -60
+line zl 50 0.75 0.8 140 0
+line zl 50 0.75 0.8 140 25
+line zl 50 1.6 0 8 -60
+line zl 50 1.6 0 8 0
+line zl 50 1.6 0 8 25
+line zl 50 1.6 0 140 -60
+line zl 50 1.6 0 140 0
+line zl 50 1.6 0 140 25
+line zl 50 1.6 0.8 8 -60
+line zl 50 1.6 0.8 8 0
+line zl 50 1.6 0.8 8 25
+line zl 50 1.6 0.8 140 -60
+line zl 50 1.6 0.8 140 0
+line zl 50 1.6 0.8 140 25
+line zl 300 0.04 0 8 -60
+line zl 300 0.04 0 8 0
+line zl 300 0.04 0 8 25
+line zl 300 0.04 0 140 -60
+line zl 300 0.04 0 140 0
+line zl 300 0.04 0 140 25
+line zl 300 0.04 0.8 8 -60
+line zl 300 0.04 0.8 8 0
+line zl 300 0.04 0.8 8 25
+line zl 300 0.04 0.8 140 -60
+line zl 300 0.04 0.8 140 0
+line zl 300 0.04 0.8 140 25
+line zl 300 0.37 0 8 -60
+line zl 300 0.37 0 8 0
+line zl 300 0.37 0 8 25
+line zl 300 0.37 0 140 -60
+line zl 300 0.37 0 140 0
+line zl 300 0.37 0 140 25
+line zl 300 0.37 0.8 8 -60
+line zl 300 0.37 0.8 8 0
+line zl 300 0.37 0.8 8 25
+line zl 300 0.37 0.8 140 -60
+line zl 300 0.37 0.8 140 0
+line zl 300 0.37 0.8 140 25
+line zl 300 0.75 0 8 -60
+line zl 300 0.75 0 8 0
+line zl 300 0.75 0 8 25
+line zl 300 0.75 0 140 -60
+line zl 300 0.75 0 140 0
+line zl 300 0.75 0 140 25
+line zl 300 0.75 0.8 8 -60
+line zl 300 0.75 0.8 8 0
+line zl 300 0.75 0.8 8 25
+line zl 300 0.75 0.8 140 -60
+line zl 300 0.75 0.8 140 0
+line zl 300 0.75 0.8 140 25
+line zl 300 1.6 0 8 -60
+line zl 300 1.6 0 8 0
+line zl 300 1.6 0 8 25
+line zl 300 1.6 0 140 -60
+line zl 300 1.6 0 140 0
+line zl 300 1.6 0 140 25
+line zl 300 1.6 0.8 8 -60
+line zl 300 1.6 0.8 8 0
+line zl 300 1.6 0.8 8 25
+line zl 300 1.6 0.8 140 -60
+line zl 300 1.6 0.8 140 0
+line zl 300 1.6 0.8 140 25
+qmtune 18 -40 50 50 75
+qmtune 18 -40 50 50 300
+qmtune 18 -40 50 75 50
+qmtune 18 -40 50 75 300
+qmtune 18 -40 75 50 75
+qmtune 18 -40 75 50 300
+qmtune 18 -40 75 75 50
+qmtune 18 -40 75 75 300
+qmtune 18 0 50 50 75
+qmtune 18 0 50 50 300
+qmtune 18 0 50 75 50
+qmtune 18 0 50 75 300
+qmtune 18 0 75 50 75
+qmtune 18 0 75 50 300
+qmtune 18 0 75 75 50
+qmtune 18 0 75 75 300
+qmtune 18 35 50 50 75
+qmtune 18 35 50 50 300
+qmtune 18 35 50 75 50
+qmtune 18 35 50 75 300
+qmtune 18 35 75 50 75
+qmtune 18 35 75 50 300
+qmtune 18 35 75 75 50
+qmtune 18 35 75 75 300
+qmtune 44 -40 50 50 75
+qmtune 44 -40 50 50 300
+qmtune 44 -40 50 75 50
+qmtune 44 -40 50 75 300
+qmtune 44 -40 75 50 75
+qmtune 44 -40 75 50 300
+qmtune 44 -40 75 75 50
+qmtune 44 -40 75 75 300
+qmtune 44 0 50 50 75
+qmtune 44 0 50 50 300
+qmtune 44 0 50 75 50
+qmtune 44 0 50 75 300
+qmtune 44 0 75 50 75
+qmtune 44 0 75 50 300
+qmtune 44 0 75 75 50
+qmtune 44 0 75 75 300
+qmtune 44 35 50 50 75
+qmtune 44 35 50 50 300
+qmtune 44 35 50 75 50
+qmtune 44 35 50 75 300
+qmtune 44 35 75 50 75
+qmtune 44 35 75 50 300
+qmtune 44 35 75 75 50
+qmtune 44 35 75 75 300
+qmtune 95 -40 50 50 75
+qmtune 95 -40 50 50 300
+qmtune 95 -40 50 75 50
+qmtune 95 -40 50 75 300
+qmtune 95 -40 75 50 75
+qmtune 95 -40 75 50 300
+qmtune 95 -40 75 75 50
+qmtune 95 -40 75 75 300
+qmtune 95 0 50 50 75
+qmtune 95 0 50 50 300
+qmtune 95 0 50 75 50
+qmtune 95 0 50 75 300
+qmtune 95 0 75 50 75
+qmtune 95 0 75 50 300
+qmtune 95 0 75 75 50
+qmtune 95 0 75 75 300
+qmtune 95 35 50 50 75
+qmtune 95 35 50 50 300
+qmtune 95 35 50 75 50
+qmtune 95 35 50 75 300
+qmtune 95 35 75 50 75
+qmtune 95 35 75 50 300
+qmtune 95 35 75 75 50
+qmtune 95 35 75 75 300
+qmtune 230 -40 50 50 75
+qmtune 230 -40 50 50 300
+qmtune 230 -40 50 75 50
+qmtune 230 -40 50 75 300
+qmtune 230 -40 75 50 75
+qmtune 230 -40 75 50 300
+qmtune 230 -40 75 75 50
+qmtune 230 -40 75 75 300
+qmtune 230 0 50 50 75
+qmtune 230 0 50 50 300
+qmtune 230 0 50 75 50
+qmtune 230 0 50 75 300
+qmtune 230 0 75 50 75
+qmtune 230 0 75 50 300
+qmtune 230 0 75 75 50
+qmtune 230 0 75 75 300
+qmtune 230 35 50 50 75
+qmtune 230 35 50 50 300
+qmtune 230 35 50 75 50
+qmtune 230 35 50 75 300
+qmtune 230 35 75 50 75
+qmtune 230 35 75 50 300
+qmtune 230 35 75 75 50
+qmtune 230 35 75 75 300
+sm 7.05 50 6 -200 75 0.66
+sm 7.05 50 6 -200 75 0.95
+sm 7.05 50 6 -200 600 0.66
+sm 7.05 50 6 -200 600 0.95
+sm 7.05 50 6 0 75 0.66
+sm 7.05 50 6 0 75 0.95
+sm 7.05 50 6 0 600 0.66
+sm 7.05 50 6 0 600 0.95
+sm 7.05 50 6 70 75 0.66
+sm 7.05 50 6 70 75 0.95
+sm 7.05 50 6 70 600 0.66
+sm 7.05 50 6 70 600 0.95
+sm 7.05 50 33 -200 75 0.66
+sm 7.05 50 33 -200 75 0.95
+sm 7.05 50 33 -200 600 0.66
+sm 7.05 50 33 -200 600 0.95
+sm 7.05 50 33 0 75 0.66
+sm 7.05 50 33 0 75 0.95
+sm 7.05 50 33 0 600 0.66
+sm 7.05 50 33 0 600 0.95
+sm 7.05 50 33 70 75 0.66
+sm 7.05 50 33 70 75 0.95
+sm 7.05 50 33 70 600 0.66
+sm 7.05 50 33 70 600 0.95
+sm 7.05 50 120 -200 75 0.66
+sm 7.05 50 120 -200 75 0.95
+sm 7.05 50 120 -200 600 0.66
+sm 7.05 50 120 -200 600 0.95
+sm 7.05 50 120 0 75 0.66
+sm 7.05 50 120 0 75 0.95
+sm 7.05 50 120 0 600 0.66
+sm 7.05 50 120 0 600 0.95
+sm 7.05 50 120 70 75 0.66
+sm 7.05 50 120 70 75 0.95
+sm 7.05 50 120 70 600 0.66
+sm 7.05 50 120 70 600 0.95
+sm 7.05 50 900 -200 75 0.66
+sm 7.05 50 900 -200 75 0.95
+sm 7.05 50 900 -200 600 0.66
+sm 7.05 50 900 -200 600 0.95
+sm 7.05 50 900 0 75 0.66
+sm 7.05 50 900 0 75 0.95
+sm 7.05 50 900 0 600 0.66
+sm 7.05 50 900 0 600 0.95
+sm 7.05 50 900 70 75 0.66
+sm 7.05 50 900 70 75 0.95
+sm 7.05 50 900 70 600 0.66
+sm 7.05 50 900 70 600 0.95
+sm 7.05 75 6 -200 75 0.66
+sm 7.05 75 6 -200 75 0.95
+sm 7.05 75 6 -200 600 0.66
+sm 7.05 75 6 -200 600 0.95
+sm 7.05 75 6 0 75 0.66
+sm 7.05 75 6 0 75 0.95
+sm 7.05 75 6 0 600 0.66
+sm 7.05 75 6 0 600 0.95
+sm 7.05 75 6 70 75 0.66
+sm 7.05 75 6 70 75 0.95
+sm 7.05 75 6 70 600 0.66
+sm 7.05 75 6 70 600 0.95
+sm 7.05 75 33 -200 75 0.66
+sm 7.05 75 33 -200 75 0.95
+sm 7.05 75 33 -200 600 0.66
+sm 7.05 75 33 -200 600 0.95
+sm 7.05 75 33 0 75 0.66
+sm 7.05 75 33 0 75 0.95
+sm 7.05 75 33 0 600 0.66
+sm 7.05 75 33 0 600 0.95
+sm 7.05 75 33 70 75 0.66
+sm 7.05 75 33 70 75 0.95
+sm 7.05 75 33 70 600 0.66
+sm 7.05 75 33 70 600 0.95
+sm 7.05 75 120 -200 75 0.66
+sm 7.05 75 120 -200 75 0.95
+sm 7.05 75 120 -200 600 0.66
+sm 7.05 75 120 -200 600 0.95
+sm 7.05 75 120 0 75 0.66
+sm 7.05 75 120 0 75 0.95
+sm 7.05 75 120 0 600 0.66
+sm 7.05 75 120 0 600 0.95
+sm 7.05 75 120 70 75 0.66
+sm 7.05 75 120 70 75 0.95
+sm 7.05 75 120 70 600 0.66
+sm 7.05 75 120 70 600 0.95
+sm 7.05 75 900 -200 75 0.66
+sm 7.05 75 900 -200 75 0.95
+sm 7.05 75 900 -200 600 0.66
+sm 7.05 75 900 -200 600 0.95
+sm 7.05 75 900 0 75 0.66
+sm 7.05 75 900 0 75 0.95
+sm 7.05 75 900 0 600 0.66
+sm 7.05 75 900 0 600 0.95
+sm 7.05 75 900 70 75 0.66
+sm 7.05 75 900 70 75 0.95
+sm 7.05 75 900 70 600 0.66
+sm 7.05 75 900 70 600 0.95
+sm 50.2 50 6 -200 75 0.66
+sm 50.2 50 6 -200 75 0.95
+sm 50.2 50 6 -200 600 0.66
+sm 50.2 50 6 -200 600 0.95
+sm 50.2 50 6 0 75 0.66
+sm 50.2 50 6 0 75 0.95
+sm 50.2 50 6 0 600 0.66
+sm 50.2 50 6 0 600 0.95
+sm 50.2 50 6 70 75 0.66
+sm 50.2 50 6 70 75 0.95
+sm 50.2 50 6 70 600 0.66
+sm 50.2 50 6 70 600 0.95
+sm 50.2 50 33 -200 75 0.66
+sm 50.2 50 33 -200 75 0.95
+sm 50.2 50 33 -200 600 0.66
+sm 50.2 50 33 -200 600 0.95
+sm 50.2 50 33 0 75 0.66
+sm 50.2 50 33 0 75 0.95
+sm 50.2 50 33 0 600 0.66
+sm 50.2 50 33 0 600 0.95
+sm 50.2 50 33 70 75 0.66
+sm 50.2 50 33 70 75 0.95
+sm 50.2 50 33 70 600 0.66
+sm 50.2 50 33 70 600 0.95
+sm 50.2 50 120 -200 75 0.66
+sm 50.2 50 120 -200 75 0.95
+sm 50.2 50 120 -200 600 0.66
+sm 50.2 50 120 -200 600 0.95
+sm 50.2 50 120 0 75 0.66
+sm 50.2 50 120 0 75 0.95
+sm 50.2 50 120 0 600 0.66
+sm 50.2 50 120 0 600 0.95
+sm 50.2 50 120 70 75 0.66
+sm 50.2 50 120 70 75 0.95
+sm 50.2 50 120 70 600 0.66
+sm 50.2 50 120 70 600 0.95
+sm 50.2 50 900 -200 75 0.66
+sm 50.2 50 900 -200 75 0.95
+sm 50.2 50 900 -200 600 0.66
+sm 50.2 50 900 -200 600 0.95
+sm 50.2 50 900 0 75 0.66
+sm 50.2 50 900 0 75 0.95
+sm 50.2 50 900 0 600 0.66
+sm 50.2 50 900 0 600 0.95
+sm 50.2 50 900 70 75 0.66
+sm 50.2 50 900 70 75 0.95
+sm 50.2 50 900 70 600 0.66
+sm 50.2 50 900 70 600 0.95
+sm 50.2 75 6 -200 75 0.66
+sm 50.2 75 6 -200 75 0.95
+sm 50.2 75 6 -200 600 0.66
+sm 50.2 75 6 -200 600 0.95
+sm 50.2 75 6 0 75 0.66
+sm 50.2 75 6 0 75 0.95
+sm 50.2 75 6 0 600 0.66
+sm 50.2 75 6 0 600 0.95
+sm 50.2 75 6 70 75 0.66
+sm 50.2 75 6 70 75 0.95
+sm 50.2 75 6 70 600 0.66
+sm 50.2 75 6 70 600 0.95
+sm 50.2 75 33 -200 75 0.66
+sm 50.2 75 33 -200 75 0.95
+sm 50.2 75 33 -200 600 0.66
+sm 50.2 75 33 -200 600 0.95
+sm 50.2 75 33 0 75 0.66
+sm 50.2 75 33 0 75 0.95
+sm 50.2 75 33 0 600 0.66
+sm 50.2 75 33 0 600 0.95
+sm 50.2 75 33 70 75 0.66
+sm 50.2 75 33 70 75 0.95
+sm 50.2 75 33 70 600 0.66
+sm 50.2 75 33 70 600 0.95
+sm 50.2 75 120 -200 75 0.66
+sm 50.2 75 120 -200 75 0.95
+sm 50.2 75 120 -200 600 0.66
+sm 50.2 75 120 -200 600 0.95
+sm 50.2 75 120 0 75 0.66
+sm 50.2 75 120 0 75 0.95
+sm 50.2 75 120 0 600 0.66
+sm 50.2 75 120 0 600 0.95
+sm 50.2 75 120 70 75 0.66
+sm 50.2 75 120 70 75 0.95
+sm 50.2 75 120 70 600 0.66
+sm 50.2 75 120 70 600 0.95
+sm 50.2 75 900 -200 75 0.66
+sm 50.2 75 900 -200 75 0.95
+sm 50.2 75 900 -200 600 0.66
+sm 50.2 75 900 -200 600 0.95
+sm 50.2 75 900 0 75 0.66
+sm 50.2 75 900 0 75 0.95
+sm 50.2 75 900 0 600 0.66
+sm 50.2 75 900 0 600 0.95
+sm 50.2 75 900 70 75 0.66
+sm 50.2 75 900 70 75 0.95
+sm 50.2 75 900 70 600 0.66
+sm 50.2 75 900 70 600 0.95
+hairpin 5 50
+hairpin 5 75
+hairpin 18 50
+hairpin 18 75
+hairpin 33.3 50
+hairpin 33.3 75

@@ -1,4 +1,6 @@
-import { ActionIcon, Button, Group, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core';
+import { ActionIcon, Button, Group, NumberInput, Popover, SegmentedControl, Select, SimpleGrid, Stack, Switch, Text, Title } from '@mantine/core';
+import { useState } from 'react';
+import { transport } from '../api/transport';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import type { GroundKind, WireMaterial } from '../api/types';
 import { useApp } from '../state/store';
@@ -71,7 +73,15 @@ export function EnvironmentForm() {
         </Title>
         <SimpleGrid cols={2}>
           <FieldNumber label="SWR 基準インピーダンス R (Ω)" value={env.swrReference.r} min={0.001} onCommit={(v) => edit((p) => void (p.environment.swrReference.r = v))} />
-          <FieldNumber label="SWR 基準インピーダンス jX (Ω)" value={env.swrReference.x} onCommit={(v) => edit((p) => void (p.environment.swrReference.x = v))} />
+          <Group gap={4} align="flex-end" wrap="nowrap">
+            <FieldNumber
+              style={{ flex: 1 }}
+              label="SWR 基準インピーダンス jX (Ω)"
+              value={env.swrReference.x}
+              onCommit={(v) => edit((p) => void (p.environment.swrReference.x = v))}
+            />
+            <HairpinButton resistance={env.swrReference.r} onSet={(x) => edit((p) => void (p.environment.swrReference.x = x))} />
+          </Group>
           <FieldNumber
             label="F/B 比のバック範囲 水平 (°)"
             value={env.fbRange.horizontal}
@@ -191,5 +201,59 @@ function RealGround() {
         </SimpleGrid>
       )}
     </section>
+  );
+}
+
+/**
+ * ヘアピンマッチ (AutojXClick): the reactance jX at which a shunt coil (a
+ * hairpin) matches an antenna of resistance R to the target, set as the SWR
+ * reference so the optimiser and the SWR aim at it.
+ */
+function HairpinButton({ resistance, onSet }: { resistance: number; onSet: (x: number) => void }) {
+  const [opened, setOpened] = useState(false);
+  const [target, setTarget] = useState<string | number>('');
+  const [error, setError] = useState<string | null>(null);
+  const open = () => {
+    // the original's default: 50 Ω, or twice R from 50 Ω up
+    setTarget(resistance < 50 ? 50 : resistance * 2);
+    setError(null);
+    setOpened(true);
+  };
+  const apply = async () => {
+    const z = Number(target);
+    try {
+      const r = await transport.circuit({ tool: 'hairpin', input: { resistanceOhm: resistance, targetOhm: z } });
+      const x = r.tool === 'hairpin' ? r.result.reactanceOhm : null;
+      if (x == null) return setError('整合先の Z は R より大きくしてください');
+      onSet(x);
+      setOpened(false);
+    } catch (e) {
+      setError((e as { detail?: string }).detail ?? String(e));
+    }
+  };
+  return (
+    <Popover opened={opened} onChange={setOpened} position="bottom-end" withArrow shadow="md">
+      <Popover.Target>
+        <Button variant="default" size="compact-md" mb={3} onClick={open}>
+          ヘアピン…
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap="xs" w={260}>
+          <Text size="xs">
+            アンテナの R（SWR 基準の R、{resistance} Ω）に対して、ヘアピン（並列の L）で整合先の Z に合う jX を求め、SWR 基準の jX に入れます。
+          </Text>
+          <NumberInput size="xs" label="整合先の Z (Ω)" value={target} onChange={setTarget} min={0} classNames={{ input: 'num' }} onKeyDown={(e) => e.key === 'Enter' && apply()} />
+          {error && (
+            <Text size="xs" c="red">
+              {error}
+            </Text>
+          )}
+          <Button size="xs" onClick={apply}>
+            jX に入れる
+          </Button>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
   );
 }

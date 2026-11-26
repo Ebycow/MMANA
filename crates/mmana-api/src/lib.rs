@@ -58,6 +58,7 @@ pub struct AppState {
         routes::pulse_layout,
         routes::sweep,
         routes::find_resonance,
+        routes::circuit,
         routes::far_field,
         routes::near_field,
         routes::edit_elements,
@@ -71,6 +72,7 @@ pub struct AppState {
         (name = "calculations", description = "Antenna calculations"),
         (name = "files", description = "MMANA .maa file conversion"),
         (name = "editing", description = "Antenna editing"),
+        (name = "circuits", description = "Matching and resonance calculators (LC, coil, stub, line)"),
         (name = "optimization", description = "Optimisation of dimensions, loads, height and more"),
         (name = "system")
     )
@@ -92,6 +94,7 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/pulses", post(routes::pulse_layout))
         .route("/v1/sweeps", post(routes::sweep))
         .route("/v1/resonance", post(routes::find_resonance))
+        .route("/v1/circuits", post(routes::circuit))
         .route("/v1/far-field", post(routes::far_field))
         .route("/v1/near-field", post(routes::near_field))
         .route("/v1/elements", post(routes::edit_elements))

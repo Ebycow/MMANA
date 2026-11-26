@@ -38,6 +38,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/circuits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The calculators of the 共振条件 dialog: LC resonance, air-core coil,
+         *     L-network match, stub, transmission line, two-section match, stub match
+         *     and hairpin reactance.
+         */
+        post: operations["circuit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/elements": {
         parameters: {
             query?: never;
@@ -327,6 +348,13 @@ export interface components {
             frequencyMhz: number;
             sources: components["schemas"]["Source"][];
         };
+        /** @description A transmission line: its impedance and velocity factor. */
+        Cable: {
+            /** Format: double */
+            impedanceOhm: number;
+            /** Format: double */
+            velocityFactor: number;
+        };
         CalcOptions: {
             /**
              * @description In free space, take the horizontal cut at 0° elevation instead of at
@@ -406,6 +434,132 @@ export interface components {
         CalculationRequest: {
             options?: components["schemas"]["CalcOptions"];
             project: components["schemas"]["Project"];
+        };
+        /** @description One of the calculators of the 共振条件 dialog ([`crate::circuits`]). */
+        CircuitRequest: {
+            input: components["schemas"]["TankInput"];
+            /** @enum {string} */
+            tool: "lcResonance";
+        } | {
+            input: components["schemas"]["CoilInput"];
+            /** @enum {string} */
+            tool: "coil";
+        } | {
+            input: components["schemas"]["LcMatchInput"];
+            /** @enum {string} */
+            tool: "lcMatch";
+        } | {
+            input: components["schemas"]["StubInput"];
+            /** @enum {string} */
+            tool: "stub";
+        } | {
+            input: components["schemas"]["LineInput"];
+            /** @enum {string} */
+            tool: "line";
+        } | {
+            input: components["schemas"]["TwoSectionInput"];
+            /** @enum {string} */
+            tool: "twoSection";
+        } | {
+            input: components["schemas"]["TwoSectionTuneInput"];
+            /** @enum {string} */
+            tool: "twoSectionTune";
+        } | {
+            input: components["schemas"]["StubMatchInput"];
+            /** @enum {string} */
+            tool: "stubMatch";
+        } | {
+            input: components["schemas"]["HairpinInput"];
+            /** @enum {string} */
+            tool: "hairpin";
+        };
+        /** @description The result of a [`CircuitRequest`], tagged with the same tool. */
+        CircuitResponse: {
+            result: components["schemas"]["Tank"];
+            /** @enum {string} */
+            tool: "lcResonance";
+        } | {
+            result: components["schemas"]["Coil"];
+            /** @enum {string} */
+            tool: "coil";
+        } | {
+            result: components["schemas"]["LcMatch"];
+            /** @enum {string} */
+            tool: "lcMatch";
+        } | {
+            result: components["schemas"]["Stub"];
+            /** @enum {string} */
+            tool: "stub";
+        } | {
+            result: components["schemas"]["Line"];
+            /** @enum {string} */
+            tool: "line";
+        } | {
+            result: components["schemas"]["TwoSection"];
+            /** @enum {string} */
+            tool: "twoSection";
+        } | {
+            result: components["schemas"]["TwoSection"];
+            /** @enum {string} */
+            tool: "twoSectionTune";
+        } | {
+            result: components["schemas"]["StubMatch"];
+            /** @enum {string} */
+            tool: "stubMatch";
+        } | {
+            result: components["schemas"]["Hairpin"];
+            /** @enum {string} */
+            tool: "hairpin";
+        };
+        Coil: {
+            /** Format: double */
+            diameterCm: number;
+            /** Format: double */
+            inductanceUh: number;
+            /**
+             * Format: double
+             * @description (wire diameter + spacing) × turns.
+             */
+            lengthCm: number;
+            /**
+             * @description The coil is shorter than [`COIL_MIN_LENGTH_RATIO`] × its diameter,
+             *     where the formula is off by more than 1 %.
+             */
+            short: boolean;
+            /** Format: double */
+            turns: number;
+        };
+        CoilInput: components["schemas"]["CoilUnknown"] & {
+            /**
+             * Format: double
+             * @description The gap between turns (0 for close-wound).
+             */
+            spacingMm: number;
+            /** Format: double */
+            wireDiameterMm: number;
+        };
+        /** @description The quantity of a single-layer air-core coil calculated from the others. */
+        CoilUnknown: {
+            /** Format: double */
+            diameterCm: number;
+            /** @enum {string} */
+            solveFor: "inductance";
+            /** Format: double */
+            turns: number;
+        } | {
+            /** Format: double */
+            diameterCm: number;
+            /** Format: double */
+            inductanceUh: number;
+            /** @enum {string} */
+            solveFor: "turns";
+        } | {
+            /** Format: double */
+            inductanceUh: number;
+            /** @enum {string} */
+            solveFor: "diameter";
+            /** Format: double */
+            turns: number;
         };
         /** @description One section of a [`CombinedWire`]: `length` metres of tube with `radius`. */
         CombinedSection: {
@@ -700,6 +854,26 @@ export interface components {
             /** Format: int32 */
             radials: number;
         };
+        Hairpin: {
+            /**
+             * Format: double
+             * @description The antenna's reactance a shunt coil matches to the target
+             *     (the SWR reference jX); None when the target is below the resistance.
+             */
+            reactanceOhm?: number | null;
+        };
+        HairpinInput: {
+            /**
+             * Format: double
+             * @description The antenna's resistance (the SWR reference R).
+             */
+            resistanceOhm: number;
+            /**
+             * Format: double
+             * @description The impedance the hairpin matches to.
+             */
+            targetOhm: number;
+        };
         Health: {
             status: string;
             version: string;
@@ -712,6 +886,72 @@ export interface components {
         };
         /** @enum {string} */
         IssueCode: "noVariables" | "tooManyVariables" | "missingTarget" | "zeroValue" | "sDomainLoad" | "heightInFreeSpace" | "duplicate" | "overlapping" | "missingVariable" | "linkLoop" | "tooManyBands" | "bandWithoutSources" | "bandMissingSource" | "linkValueDiffers";
+        /**
+         * @description Which of the two L networks: the one with a shunt C (series L when the
+         *     antenna's R is below the line's) or with a series C.
+         * @enum {string}
+         */
+        LcCircuit: "shuntC" | "seriesC";
+        /**
+         * @description The L network. An element that is not needed is None (both, when the
+         *     antenna already matches).
+         */
+        LcMatch: {
+            series?: components["schemas"]["Lumped"] | null;
+            shunt?: components["schemas"]["Lumped"] | null;
+            shuntSide: components["schemas"]["ShuntSide"];
+        };
+        LcMatchInput: {
+            /** @description The antenna's impedance. */
+            antenna: components["schemas"]["Complex"];
+            circuit?: components["schemas"]["LcCircuit"];
+            /** Format: double */
+            frequencyMhz: number;
+            /**
+             * Format: double
+             * @description The feed line's impedance.
+             */
+            lineOhm: number;
+        };
+        Line: {
+            input?: components["schemas"]["Complex"] | null;
+            /**
+             * Format: double
+             * @description Against the line's impedance.
+             */
+            inputSwr?: number | null;
+            load?: components["schemas"]["Complex"] | null;
+            /** Format: double */
+            loadSwr?: number | null;
+        };
+        /** @description Which end of the line is known. */
+        LineEnd: {
+            /** @enum {string} */
+            from: "load";
+            impedance: components["schemas"]["Complex"];
+        } | {
+            /** @enum {string} */
+            from: "input";
+            impedance: components["schemas"]["Complex"];
+        };
+        LineInput: {
+            /** Format: double */
+            impedanceOhm: number;
+            known: components["schemas"]["LineEnd"];
+            /** Format: double */
+            lengthWl: number;
+            /**
+             * Format: double
+             * @description The loss of the whole line.
+             */
+            lossDb?: number;
+        };
+        LineSection: {
+            /** Format: double */
+            impedanceOhm: number;
+            /** Format: double */
+            lengthWl: number;
+        };
         /**
          * @description How a variable follows another one (連携). `variable` is the 0-based
          *     index of the variable it follows; a chain of links ends at an independent
@@ -779,6 +1019,19 @@ export interface components {
         };
         /** @enum {string} */
         LoadPart: "primary" | "secondary";
+        /** @description A coil (µH) or a capacitor (pF) and its reactance at the frequency. */
+        Lumped: {
+            kind: components["schemas"]["LumpedKind"];
+            /** Format: double */
+            reactanceOhm: number;
+            /**
+             * Format: double
+             * @description µH for a coil, pF for a capacitor.
+             */
+            value: number;
+        };
+        /** @enum {string} */
+        LumpedKind: "L" | "C";
         /** @description The matching network scored by the `matching` goal (マッチング回路). */
         Matching: {
             /** @enum {string} */
@@ -793,6 +1046,20 @@ export interface components {
             r?: number | null;
             /** Format: double */
             x?: number | null;
+        };
+        /** @description A stub across the line, cut to cancel the susceptance there. */
+        MatchingStub: {
+            element: components["schemas"]["Lumped"];
+            /** Format: double */
+            openCm: number;
+            /** Format: double */
+            openWl: number;
+            /** Format: double */
+            reactanceOhm: number;
+            /** Format: double */
+            shortCm: number;
+            /** Format: double */
+            shortWl: number;
         };
         /** @description One ground medium of a real ground. */
         Medium: {
@@ -1259,6 +1526,11 @@ export interface components {
             op: "linkElements";
         };
         /**
+         * @description Where the shunt element sits.
+         * @enum {string}
+         */
+        ShuntSide: "line" | "antenna";
+        /**
          * @description Voltage source. `pulse` uses MMANA's notation: `w1c` (centre of wire 1),
          *     `w2b` / `w2e` (begin / end), optional offset `w2b3`, or a raw pulse number.
          */
@@ -1314,6 +1586,98 @@ export interface components {
             kind: "failed";
             message: string;
         };
+        /** @description A stub of a cable cut to a reactance. */
+        Stub: {
+            /** @description The coil (µH) or capacitor (pF) of the same reactance. */
+            element: components["schemas"]["Lumped"];
+            /**
+             * Format: double
+             * @description The shortest stub of the reactance, under half a wavelength in the cable.
+             */
+            lengthCm: number;
+            /**
+             * Format: double
+             * @description Where the stub is a quarter wavelength (MHz); None for a length of 0.
+             */
+            quarterWaveMhz?: number | null;
+            /**
+             * Format: double
+             * @description None for an open circuit (an open stub of length 0, or a capacitance of 0).
+             */
+            reactanceOhm?: number | null;
+        };
+        /**
+         * @description The far end of a stub.
+         * @enum {string}
+         */
+        StubEnd: "open" | "short";
+        /** @description What the stub is calculated from (the field last edited). */
+        StubGiven: {
+            /** @enum {string} */
+            from: "reactance";
+            /** Format: double */
+            reactanceOhm: number;
+        } | {
+            /** @enum {string} */
+            from: "inductance";
+            /** Format: double */
+            inductanceUh: number;
+        } | {
+            /** Format: double */
+            capacitancePf: number;
+            /** @enum {string} */
+            from: "capacitance";
+        } | {
+            /** @enum {string} */
+            from: "length";
+            /** Format: double */
+            lengthCm: number;
+        };
+        StubInput: {
+            cable: components["schemas"]["Cable"];
+            end?: components["schemas"]["StubEnd"];
+            /** Format: double */
+            frequencyMhz: number;
+            given: components["schemas"]["StubGiven"];
+        };
+        StubMatch: {
+            /**
+             * @description The positions within half a wavelength of the load where the SWR is
+             *     lowest and under 1.5, nearest first.
+             */
+            solutions: components["schemas"]["StubMatchSolution"][];
+        };
+        StubMatchInput: {
+            /** @description The line and the stub, of the same cable. */
+            cable: components["schemas"]["Cable"];
+            /** Format: double */
+            frequencyMhz: number;
+            load: components["schemas"]["Complex"];
+            /**
+             * Format: double
+             * @description The impedance the input is matched to.
+             */
+            referenceOhm: number;
+        };
+        StubMatchSolution: {
+            /** @description The line's impedance there, before the stub. */
+            impedance: components["schemas"]["Complex"];
+            /** @description With the stub. */
+            input: components["schemas"]["Complex"];
+            /** Format: double */
+            positionCm: number;
+            /**
+             * Format: double
+             * @description The distance from the load to the stub.
+             */
+            positionWl: number;
+            stub?: components["schemas"]["MatchingStub"] | null;
+            /**
+             * Format: double
+             * @description Against the reference.
+             */
+            swr: number;
+        };
         /** @description One point of a frequency sweep. */
         SweepPoint: {
             /** Format: float */
@@ -1346,6 +1710,51 @@ export interface components {
         SweepResponse: {
             points: components["schemas"]["SweepPoint"][];
         };
+        /**
+         * @description L and C resonating at a frequency, with the reactance of each there.
+         *     The values not determined (a reactance of 0) are None.
+         */
+        Tank: {
+            /** Format: double */
+            capacitancePf?: number | null;
+            /** Format: double */
+            frequencyMhz?: number | null;
+            /** Format: double */
+            inductanceUh?: number | null;
+            /** Format: double */
+            reactanceOhm?: number | null;
+            wavelength?: components["schemas"]["Wavelengths"] | null;
+        };
+        /** @description What the LC resonance is calculated from (the field last edited). */
+        TankInput: {
+            /** Format: double */
+            frequencyMhz: number;
+            /** @enum {string} */
+            from: "reactance";
+            /** Format: double */
+            reactanceOhm: number;
+        } | {
+            /** Format: double */
+            frequencyMhz: number;
+            /** @enum {string} */
+            from: "inductance";
+            /** Format: double */
+            inductanceUh: number;
+        } | {
+            /** Format: double */
+            capacitancePf: number;
+            /** Format: double */
+            frequencyMhz: number;
+            /** @enum {string} */
+            from: "capacitance";
+        } | {
+            /** Format: double */
+            capacitancePf: number;
+            /** @enum {string} */
+            from: "resonance";
+            /** Format: double */
+            inductanceUh: number;
+        };
         /** @description A remembered trial (`MVAL`). Figures are of band 1. */
         Trial: {
             /** Format: float */
@@ -1365,6 +1774,40 @@ export interface components {
             values: number[];
             /** @description Total gain (dBi) every 2° of the vertical cut (as `Patterns::vertical`). */
             verticalPattern: number[];
+        };
+        TwoSection: {
+            feedSection: components["schemas"]["LineSection"];
+            input?: components["schemas"]["Complex"] | null;
+            junction?: components["schemas"]["Complex"] | null;
+            loadSection: components["schemas"]["LineSection"];
+            /**
+             * Format: double
+             * @description At the input, against the reference.
+             */
+            swr?: number | null;
+        };
+        /**
+         * @description Two lines in series between a load and a feed line (Q マッチ):
+         *     `load_section` at the load, `feed_section` towards the feed line.
+         */
+        TwoSectionInput: {
+            feedSection: components["schemas"]["LineSection"];
+            load: components["schemas"]["Complex"];
+            loadSection: components["schemas"]["LineSection"];
+            /**
+             * Format: double
+             * @description The impedance the input is matched to.
+             */
+            referenceOhm: number;
+        };
+        TwoSectionTuneInput: {
+            /** Format: double */
+            feedImpedanceOhm: number;
+            load: components["schemas"]["Complex"];
+            /** Format: double */
+            loadImpedanceOhm: number;
+            /** Format: double */
+            referenceOhm: number;
         };
         /** @description One row of the variable table (`AVAL`). */
         Variable: {
@@ -1424,6 +1867,16 @@ export interface components {
         };
         /** @enum {string} */
         WarningCode: "belowGround" | "nonPositivePower" | "negligiblePower" | "tooManySegments" | "closeWires" | "overlappingWires";
+        Wavelengths: {
+            /** Format: double */
+            fiveEighthsM: number;
+            /** Format: double */
+            fullM: number;
+            /** Format: double */
+            halfM: number;
+            /** Format: double */
+            quarterM: number;
+        };
         /**
          * @description How much each goal counts (評価の割合, 0-100 each). All zero counts every
          *     goal equally.
@@ -1539,6 +1992,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CalcResult"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    circuit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CircuitRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CircuitResponse"];
                 };
             };
             400: {

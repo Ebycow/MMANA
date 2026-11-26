@@ -7,9 +7,9 @@ use axum::extract::{FromRequest, Query, State};
 use axum::http::header;
 use axum::response::IntoResponse;
 use mmana_core::contract::{
-    self, AppliedTrial, ApplyTrialRequest, CalculationRequest, ElementEditRequest, FarFieldRequest, FarFieldResponse,
-    NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest, ParsedProject, ResonanceRequest,
-    SweepRequest, SweepResponse, field_points,
+    self, AppliedTrial, ApplyTrialRequest, CalculationRequest, CircuitRequest, CircuitResponse, ElementEditRequest,
+    FarFieldRequest, FarFieldResponse, NearFieldRequest, NearFieldResponse, OptimizeRequest, OptimizerSetupRequest,
+    ParsedProject, ResonanceRequest, SweepRequest, SweepResponse, field_points,
 };
 use mmana_core::elements::ElementEdit;
 use mmana_core::optimize::{OptimizeOutcome, SetupEdit};
@@ -167,6 +167,20 @@ pub async fn find_resonance(
 ) -> Result<ApiJson<ResonanceSearch>, ApiError> {
     let req = ResonanceRequest { options: checked_options(req.options, &state.limits), ..req };
     Ok(ApiJson(blocking(move || Ok(contract::find_resonance(&req)?)).await?))
+}
+
+/// The calculators of the 共振条件 dialog: LC resonance, air-core coil,
+/// L-network match, stub, transmission line, two-section match, stub match
+/// and hairpin reactance.
+#[utoipa::path(
+    post,
+    path = "/v1/circuits",
+    tag = "circuits",
+    request_body = CircuitRequest,
+    responses((status = 200, body = CircuitResponse), (status = 400, body = Problem), (status = 422, body = Problem))
+)]
+pub async fn circuit(ApiJson(req): ApiJson<CircuitRequest>) -> Result<ApiJson<CircuitResponse>, ApiError> {
+    Ok(ApiJson(contract::circuit(&req)?))
 }
 
 /// Far-field gain on an arbitrary zenith × azimuth grid.
