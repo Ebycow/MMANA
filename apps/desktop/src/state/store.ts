@@ -492,6 +492,7 @@ export const useApp = create<AppState>()((set, get) => {
             stopMhz,
             points,
             indices,
+            patterns: true,
           });
           if (request !== sweepRequest) return;
           done += indices.length;

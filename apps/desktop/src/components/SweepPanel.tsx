@@ -8,8 +8,9 @@ import { swrBandwidth } from '../domain/print';
 import type { MatchMode } from '../domain/sweep';
 import { sweepAround, useApp, type SweepMatchState } from '../state/store';
 import { FieldNumber } from './Fields';
+import { SweepPatterns } from './SweepPatterns';
 
-type View = 'chart' | 'table';
+type View = 'chart' | 'patterns' | 'table';
 
 const swrText = (v: number) => (v >= 99999 ? '∞' : v.toFixed(2));
 
@@ -66,6 +67,7 @@ export function SweepPanel() {
           <SegmentedControl
             data={[
               { value: 'chart', label: 'グラフ' },
+              { value: 'patterns', label: '指向性' },
               { value: 'table', label: '表' },
             ]}
             value={view}
@@ -83,11 +85,13 @@ export function SweepPanel() {
           }}
         />
       )}
-      {data && <MatchRow data={data} stale={sweep.stale} />}
+      {data && view !== 'patterns' && <MatchRow data={data} stale={sweep.stale} />}
       {!data ? (
         <Text size="sm" c="dimmed" mt="md" ta="center">
-          範囲を指定して「計算」を押すと、SWR・インピーダンス・利得・F/B 比の周波数特性を表示します（2° 分解能で計算）。
+          範囲を指定して「計算」を押すと、SWR・インピーダンス・利得・F/B 比と指向性の周波数特性を表示します（2° 分解能で計算）。
         </Text>
+      ) : view === 'patterns' ? (
+        <SweepPatterns data={data} opacity={opacity} />
       ) : view === 'chart' ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 12, flex: 1, minHeight: 280, opacity }}>
           <LineChart title={matched ? 'SWR（整合回路あり）' : 'SWR'} unit="" x={x} hover={hover} onHover={setHover} yMin={1} yMax={10} markerX={designFreq}

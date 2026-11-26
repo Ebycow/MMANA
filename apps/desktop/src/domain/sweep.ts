@@ -63,3 +63,39 @@ export function pointAt<P extends { frequencyMhz: number }>(points: P[], mhz: nu
 /** The middle point is one of the sweep's own, calculated with the outline. */
 export const centreIsAPoint = (r: SweepRange) => r.points % 2 === 1;
 
+// ------------------------------------------------------------ patterns ---
+
+/** Frequencies shown together on the pattern page (MMANA's dialog had five). */
+export const PATTERN_SLOTS = 5;
+
+/** The categorical colours the slots take, in order (--series-1 … --series-5). */
+export const SLOT_COLORS = Array.from({ length: PATTERN_SLOTS }, (_, i) => `var(--series-${i + 1})`);
+
+/**
+ * Indices of the points shown first: the outline (both ends, the quarters
+ * and the middle), like the five frequencies of the original's page.
+ */
+export function outlineIndices(points: number): number[] {
+  return sweepOrder(points).slice(0, Math.min(OUTLINE_POINTS, points)).sort((a, b) => a - b);
+}
+
+/** Shown frequencies (MHz) and the colour slot each keeps while it is shown. */
+export type ShownPatterns = Map<number, number>;
+
+/** The outline's frequencies of a sweep, in slots 1–5 by frequency. */
+export function initialPatterns(frequencies: number[]): ShownPatterns {
+  return new Map(outlineIndices(frequencies.length).map((i, slot) => [frequencies[i], slot]));
+}
+
+/**
+ * Shows or hides a frequency. One shown takes the first free slot, so the
+ * others keep their colours; with every slot taken nothing is added.
+ */
+export function togglePattern(shown: ShownPatterns, mhz: number): ShownPatterns {
+  const next = new Map(shown);
+  if (next.delete(mhz)) return next;
+  const used = new Set(next.values());
+  const free = Array.from({ length: PATTERN_SLOTS }, (_, i) => i).find((i) => !used.has(i));
+  if (free != null) next.set(mhz, free);
+  return next;
+}
