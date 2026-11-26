@@ -1,4 +1,33 @@
-# MMANA — Rust 移植
+<div align="center">
+
+<img src="apps/desktop/app-icon.svg" alt="MMANA のアプリアイコン" width="128" height="128">
+
+# MMANA
+
+**MININEC3 ベースのアンテナ解析ソフト MMANA — Rust 移植**
+
+[![CI](https://github.com/Ebycow/MMANA/actions/workflows/ci.yml/badge.svg)](https://github.com/Ebycow/MMANA/actions/workflows/ci.yml)
+[![Quality](https://github.com/Ebycow/MMANA/actions/workflows/quality.yml/badge.svg)](https://github.com/Ebycow/MMANA/actions/workflows/quality.yml)
+[![Audit](https://github.com/Ebycow/MMANA/actions/workflows/audit.yml/badge.svg)](https://github.com/Ebycow/MMANA/actions/workflows/audit.yml)
+[![Pages](https://github.com/Ebycow/MMANA/actions/workflows/pages.yml/badge.svg)](https://github.com/Ebycow/MMANA/actions/workflows/pages.yml)
+<br>
+[![Release](https://img.shields.io/github/v/release/Ebycow/MMANA?label=release&sort=semver)](https://github.com/Ebycow/MMANA/releases/latest)
+[![License: LGPL v3+](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue.svg)](LICENSE)
+[![Rust 1.88+](https://img.shields.io/badge/rust-1.88%2B-orange.svg?logo=rust)](https://www.rust-lang.org)
+[![Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB.svg?logo=tauri&logoColor=white)](https://tauri.app)
+[![WebAssembly](https://img.shields.io/badge/WebAssembly-ready-654FF0.svg?logo=webassembly&logoColor=white)](https://ebycow.github.io/MMANA/)
+
+[**ブラウザ版を開く**](https://ebycow.github.io/MMANA/) ・
+[**デスクトップ版をダウンロード**](https://github.com/Ebycow/MMANA/releases/latest) ・
+[設計資料](docs/architecture.md) ・
+[移植メモ](docs/porting-notes.md)
+
+</div>
+
+> [!TIP]
+> **インストールせずに試すなら [ブラウザ版](https://ebycow.github.io/MMANA/)** — 計算はすべてブラウザの中で行い、結果はデスクトップ版と同じです。
+> ただしブラウザ版は並列計算ができないため、大きなアンテナの計算や最適化では時間がかかります。
+> **普段使いには [デスクトップ版](https://github.com/Ebycow/MMANA/releases/latest) をおすすめします。**
 
 JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）の計算エンジンを Rust に移植し、
 デスクトップアプリ・ブラウザ・HTTP API・CLI から使えるようにしたものです。
@@ -41,8 +70,11 @@ npm run tauri dev
 
 ### ブラウザ版
 
-同じ画面を、計算エンジンごとブラウザで動かせます（GitHub Pages で公開。リリースのタグを打つと更新されます）。
+同じ画面を、計算エンジンごとブラウザで動かせます。**<https://ebycow.github.io/MMANA/>** で公開しています（GitHub Pages。リリースのタグを打つと更新されます）。
 計算は WebAssembly でブラウザの中だけで行い、結果はデスクトップ版と同じです。並列計算をしないので、大きなアンテナや最適化はデスクトップ版より遅くなります。
+手軽に試すにはブラウザ版、本格的に使うにはデスクトップ版をおすすめします。
+
+手元でブラウザ版を動かすには:
 
 ```sh
 cargo install wasm-bindgen-cli --version 0.2.129   # Cargo.lock の wasm-bindgen と同じ版
