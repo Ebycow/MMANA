@@ -1417,6 +1417,11 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
     /// - an element size moves only the outermost points past other points
     ///   of the element, which then lie over other wires and move with the
     ///   ends afterwards;
+    /// - an element size brings its bounds onto other points of the element,
+    ///   or a rounding past them (a hexagon narrowed to the width of its
+    ///   sides), which the check of the sizes above lets through: those
+    ///   points then move with the ends afterwards, while the values set on
+    ///   the starting antenna leave them where they were;
     /// - wire ends that did not meet come to meet (or a wire shrinks to
     ///   nothing, or to a billionth of the antenna), or ends that met part:
     ///   ends that meet move together, so writing the values back from there
@@ -1475,8 +1480,14 @@ impl<F: FnMut(&Progress) -> bool> Search<'_, F> {
         }
         if moved.iter().any(|&i| matches!(self.vars[i].target, T::Element { .. })) {
             let (described, now) = (self.model.list.described(), m.list.described());
+            let (was_inside, now_inside) = (self.model.list.inside_bounds(), m.list.inside_bounds());
+            let reached = |was: &[bool; 3], now: &[bool; 3]| (0..3).any(|axis| was[axis] && !now[axis]);
             if described.iter().zip(&now).any(|(was, now)| was.iter().zip(now).any(|(was, now)| *was && !now))
                 || self.model.list.bound_rules() != m.list.bound_rules()
+                || was_inside
+                    .iter()
+                    .zip(&now_inside)
+                    .any(|(was, now)| was.iter().zip(now).any(|(was, now)| reached(was, now)))
             {
                 return true;
             }
@@ -2946,6 +2957,25 @@ mod tests {
         }
         let list = ElementList::new(&out.project.antenna.wires, SPEED_OF_LIGHT_MMANA / project.antenna.frequency_mhz);
         assert!(list.described().iter().all(|d| d[1]), "the widths are not those of the wires");
+    }
+
+    #[test]
+    fn an_element_size_turns_before_reaching_its_inner_points() {
+        // element 1 is a hexagon 0.9 m wide whose short sides are 0.3 m:
+        // at 0.3 m its outermost points come onto them (to a rounding), and
+        // from there on they would move with the ends, while the best value
+        // written back on the starting antenna leaves them where they are
+        let project = sample("MAGLOOP2.MAA");
+        let opts = CalcOptions::default();
+        let base = OptimizerSetup { sweep_only: true, ..Default::default() };
+        let op =
+            SetupOp::SetTarget { index: 0, target: VariableTarget::Element { element: 1, part: ElementPart::Width } };
+        let mut setup = edit_setup(&project, &opts, &base, &[op]).setup;
+        setup.variables[0].pitch = 0.05;
+        // with its bound just above, the sweep runs down from the start
+        setup.variables[0].max = 0.95;
+        let values = swept(&project, &setup);
+        assert!(values.iter().all(|&w| w > 0.3 + 1e-9), "{values:?}");
     }
 
     #[test]
