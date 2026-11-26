@@ -7,6 +7,7 @@ JE3HHT 森 誠氏の MMANA（MININEC3 ベースのアンテナ解析ソフト）
 （サンプル 81 ファイル、計算の経路のためのモデル 12 ファイルとその派生、計 169 ケースで検証済み。詳細は [docs/architecture.md](docs/architecture.md)）。
 エレメント編集も、オリジナルの `CWGroup` / `CWGroupList` とビット単位で同じワイヤを書き出します（81 ファイル × 8 種の編集手順、計 648 ケース）。
 最適化も、オリジナルの `CACal` と同じ値を同じ順に試し、同じアンテナで終わります（26 ケースで、計算ごとの値・評価値・試行の記録・最終形状を検証）。
+LC 共振・コイル・整合回路・スタブなどの計算ツールも、オリジナルの「共振条件」ダイアログとビット単位で同じ値を返します（949 ケース）。
 
 画面・ファイル入出力を含む [移植状況と残作業](docs/architecture.md#移植状況と残作業) と、
 互換性の例外をまとめた [移植メモ](docs/porting-notes.md) も参照してください。
@@ -60,6 +61,7 @@ cargo test --release
 cargo run --release -p mmana-cli -- calc testdata/maa/3EL20.MAA
 cargo run --release -p mmana-cli -- sweep testdata/maa/3EL20.MAA --start 13.9 --stop 14.4 --points 6
 cargo run --release -p mmana-cli -- resonance testdata/maa/3EL20.MAA
+cargo run --release -p mmana-cli -- circuit '{"tool":"lcMatch","input":{"frequencyMhz":7.05,"lineOhm":50,"antenna":{"re":12.5,"im":-30}}}'
 
 # 計算結果を信用できない形の測定（docs/measurements の表を作り直す）
 cargo run --release -p mmana-measure -- run --all --out docs/measurements
@@ -80,6 +82,7 @@ cargo run --release -p mmana-api
 | POST | `/v1/calculations` | インピーダンス・SWR・利得・F/B・パターン・電流分布 |
 | POST | `/v1/sweeps` | 周波数特性 |
 | POST | `/v1/resonance` | 共振周波数（給電点のリアクタンスが増えながら 0 になる周波数）と、そこでの直列 RLC の等価回路（L・C・Q・帯域幅） |
+| POST | `/v1/circuits` | 計算ツール（LC 共振、空芯コイル、L 形回路の整合、スタブ、分布定数線路、Q マッチ、スタブ整合、ヘアピンマッチの jX）。`tool` で種類を選ぶ |
 | POST | `/v1/far-field` | 任意方向の遠方界 |
 | POST | `/v1/near-field` | 近傍界（電界・磁界） |
 | POST | `/v1/elements` | エレメント編集（つながったワイヤをエレメントとして、幅・全周・間隔などを変更） |

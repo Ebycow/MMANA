@@ -179,8 +179,10 @@ Feeder TEST では計算 850 回で \|Z\| の 0.015 % になります。許容�
 
 ## 旧版との一致
 
-[golden.rs](../crates/mmana-core/tests/golden.rs)（計算 169 件）、[elements.rs](../crates/mmana-core/tests/elements.rs)、[optimize.rs](../crates/mmana-core/tests/optimize.rs) が
-オリジナルの C++ と比べます。比べ方は [アーキテクチャ](architecture.md#検証の仕組みoracle-テスト) を、意図的な違いは [移植メモ](porting-notes.md) を参照してください。
+[golden.rs](../crates/mmana-core/tests/golden.rs)（計算 169 件）、[elements.rs](../crates/mmana-core/tests/elements.rs)、[optimize.rs](../crates/mmana-core/tests/optimize.rs)、
+[circuits.rs](../crates/mmana-core/tests/circuits.rs)（計算ツール 949 件、全値をビット単位で）がオリジナルの C++ と比べます。
+計算ツールは、旧版と一致するだけでなく、L 形回路が両方の回路・R の大小で実際に整合すること（整合後のインピーダンスが 50 Ω から 1e-6 以内）、
+λ/4 線路がインピーダンスを反転すること、LC の共振周波数が往復で戻ることを `circuits.rs` の単体テストで確かめます。比べ方は [アーキテクチャ](architecture.md#検証の仕組みoracle-テスト) を、意図的な違いは [移植メモ](porting-notes.md) を参照してください。
 
 ## 検証コードのテスト
 
