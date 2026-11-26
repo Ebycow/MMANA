@@ -1,9 +1,17 @@
-import { Alert, Badge, Button, Group, NumberInput, SegmentedControl, Stack, Table, Text, Tooltip } from '@mantine/core';
+import { Alert, Badge, Button, Checkbox, Group, Loader, NumberInput, SegmentedControl, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconAlertTriangle, IconPlayerPlay, IconPlayerStop, IconTarget } from '@tabler/icons-react';
 import { useState } from 'react';
 import { LineChart } from '../charts/LineChart';
-import type { ResonanceSearch } from '../api/types';
-import { sweepAround, useApp } from '../state/store';
+import type { Lumped, ResonanceSearch, SweepPoint } from '../api/types';
+import { sig } from '../domain/circuits';
+import { swrBandwidth } from '../domain/print';
+import type { MatchMode } from '../domain/sweep';
+import { sweepAround, useApp, type SweepMatchState } from '../state/store';
+import { FieldNumber } from './Fields';
+
+type View = 'chart' | 'table';
+
+const swrText = (v: number) => (v >= 99999 ? '∞' : v.toFixed(2));
 
 export function SweepPanel() {
   const sweep = useApp((s) => s.sweep);
@@ -15,10 +23,12 @@ export function SweepPanel() {
   const resonance = useApp((s) => s.resonance);
   const findResonance = useApp((s) => s.findResonance);
   const [hover, setHover] = useState<number | null>(null);
-  const [view, setView] = useState<'chart' | 'table'>('chart');
+  const [view, setView] = useState<View>('chart');
   const data = sweep.data;
   const opacity = sweep.stale ? 0.55 : 1;
   const x = data?.map((p) => p.frequencyMhz) ?? [];
+  const mode = sweep.matching.mode;
+  const matched = matchedAt(data, sweep.match);
 
   return (
     <Stack gap="xs" p="sm" pt={6} h="100%" style={{ boxSizing: 'border-box' }}>
@@ -59,7 +69,7 @@ export function SweepPanel() {
               { value: 'table', label: '表' },
             ]}
             value={view}
-            onChange={(v) => setView(v as 'chart' | 'table')}
+            onChange={(v) => setView(v as View)}
           />
         )}
       </Group>
@@ -73,19 +83,35 @@ export function SweepPanel() {
           }}
         />
       )}
+      {data && <MatchRow data={data} stale={sweep.stale} />}
       {!data ? (
         <Text size="sm" c="dimmed" mt="md" ta="center">
           範囲を指定して「計算」を押すと、SWR・インピーダンス・利得・F/B 比の周波数特性を表示します（2° 分解能で計算）。
         </Text>
       ) : view === 'chart' ? (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: 12, flex: 1, minHeight: 280, opacity }}>
-          <LineChart title="SWR" unit="" x={x} hover={hover} onHover={setHover} yMin={1} yMax={10} markerX={designFreq}
-            series={[{ label: 'SWR', values: data.map((p) => p.swr), color: 'var(--series-1)' }]} />
-          <LineChart title="インピーダンス" unit="Ω" x={x} hover={hover} onHover={setHover} markerX={designFreq}
-            series={[
-              { label: 'R', values: data.map((p) => p.impedance.re), color: 'var(--series-1)' },
-              { label: 'jX', values: data.map((p) => p.impedance.im), color: 'var(--series-2)', dash: '5 3' },
-            ]} />
+          <LineChart title={matched ? 'SWR（整合回路あり）' : 'SWR'} unit="" x={x} hover={hover} onHover={setHover} yMin={1} yMax={10} markerX={designFreq}
+            series={
+              matched
+                ? [
+                    { label: '整合後', values: matched.map((m) => m?.swr ?? NaN), color: 'var(--series-1)' },
+                    { label: '整合前', values: data.map((p) => p.swr), color: 'var(--series-2)', dash: '5 3' },
+                  ]
+                : [{ label: 'SWR', values: data.map((p) => p.swr), color: 'var(--series-1)' }]
+            } />
+          {matched && mode === 'swrZ' ? (
+            <LineChart title="インピーダンス（整合後）" unit="Ω" x={x} hover={hover} onHover={setHover} markerX={designFreq}
+              series={[
+                { label: 'R', values: matched.map((m) => m?.impedance?.re ?? NaN), color: 'var(--series-1)' },
+                { label: 'jX', values: matched.map((m) => m?.impedance?.im ?? NaN), color: 'var(--series-2)', dash: '5 3' },
+              ]} />
+          ) : (
+            <LineChart title="インピーダンス" unit="Ω" x={x} hover={hover} onHover={setHover} markerX={designFreq}
+              series={[
+                { label: 'R', values: data.map((p) => p.impedance.re), color: 'var(--series-1)' },
+                { label: 'jX', values: data.map((p) => p.impedance.im), color: 'var(--series-2)', dash: '5 3' },
+              ]} />
+          )}
           <LineChart title="利得" unit="dBi" x={x} hover={hover} onHover={setHover} markerX={designFreq}
             series={[{ label: '利得', values: data.map((p) => p.gainDbi), color: 'var(--series-1)' }]} />
           <LineChart title="F/B 比" unit="dB" x={x} hover={hover} onHover={setHover} markerX={designFreq}
@@ -102,18 +128,32 @@ export function SweepPanel() {
               <Table.Th ta="right">利得 (dBi)</Table.Th>
               <Table.Th ta="right">F/B (dB)</Table.Th>
               <Table.Th ta="right">打ち上げ角 (°)</Table.Th>
+              {matched && (
+                <>
+                  <Table.Th ta="right">整合後 R (Ω)</Table.Th>
+                  <Table.Th ta="right">整合後 jX (Ω)</Table.Th>
+                  <Table.Th ta="right">整合後 SWR</Table.Th>
+                </>
+              )}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {data.map((p) => (
+            {data.map((p, i) => (
               <Table.Tr key={p.frequencyMhz}>
                 <Table.Td ta="right">{p.frequencyMhz.toFixed(4)}</Table.Td>
                 <Table.Td ta="right">{p.impedance.re.toFixed(2)}</Table.Td>
                 <Table.Td ta="right">{p.impedance.im.toFixed(2)}</Table.Td>
-                <Table.Td ta="right">{p.swr >= 99999 ? '∞' : p.swr.toFixed(2)}</Table.Td>
+                <Table.Td ta="right">{swrText(p.swr)}</Table.Td>
                 <Table.Td ta="right">{p.gainDbi.toFixed(2)}</Table.Td>
                 <Table.Td ta="right">{p.fbDb.toFixed(2)}</Table.Td>
                 <Table.Td ta="right">{p.elevationDeg.toFixed(1)}</Table.Td>
+                {matched && (
+                  <>
+                    <Table.Td ta="right">{matched[i]?.impedance?.re.toFixed(2) ?? ''}</Table.Td>
+                    <Table.Td ta="right">{matched[i]?.impedance?.im.toFixed(2) ?? ''}</Table.Td>
+                    <Table.Td ta="right">{matched[i] ? swrText(matched[i]!.swr) : ''}</Table.Td>
+                  </>
+                )}
               </Table.Tr>
             ))}
           </Table.Tbody>
@@ -164,6 +204,99 @@ function ResonanceRow({ search, stale, onCenter }: { search: ResonanceSearch; st
           <Text size="xs">リアクタンスがここで 0 をまたいで跳んでいます。周波数で自動分割の分割数が変わるためで、共振周波数はこの付近です。</Text>
         </Alert>
       )}
+    </Stack>
+  );
+}
+
+type Matched = NonNullable<SweepMatchState['result']>['points'][number];
+
+/** The matched point of each sweep point (by frequency: points still arriving have none yet); null with no matching. */
+function matchedAt(data: SweepPoint[] | null, match: SweepMatchState | null): (Matched | undefined)[] | null {
+  if (!data || !match?.result) return null;
+  const by = new Map(match.result.points.map((p) => [p.frequencyMhz, p]));
+  return data.map((p) => by.get(p.frequencyMhz));
+}
+
+const MATCH_MODES: { value: MatchMode; label: string }[] = [
+  { value: 'off', label: 'なし' },
+  { value: 'swr', label: 'SWR' },
+  { value: 'swrZ', label: 'SWR と Z' },
+];
+
+const element = (e: Lumped) => (e.kind === 'L' ? `L ${sig(e.value, 4)} µH` : `C ${sig(e.value, 4)} pF`);
+
+/** The SWR bandwidths under 1.5 and 2 (MMANA's ⇔ … KHz(SWR<1.5) on the SWR chart). */
+function bandText(points: { frequencyMhz: number; swr: number }[]): string {
+  const band = (limit: number) => {
+    const b = swrBandwidth(points, limit);
+    return `< ${limit}：${b ? `${b.open ? '≥ ' : ''}${b.khz.toFixed(1)} kHz` : 'なし'}`;
+  };
+  return `${band(1.5)}・${band(2)}`;
+}
+
+/** 整合回路 (the マッチング of the 周波数特性 dialog) and the SWR bandwidths with and without it. */
+function MatchRow({ data, stale }: { data: SweepPoint[]; stale: boolean }) {
+  const matching = useApp((s) => s.sweep.matching);
+  const match = useApp((s) => s.sweep.match);
+  const lineOhm = useApp((s) => s.sweep.basis?.project.environment.swrReference.r);
+  const set = useApp((s) => s.setSweepMatching);
+  const net = match?.result?.network;
+  const matchedPoints = match?.result?.points.filter((p) => data.some((d) => d.frequencyMhz === p.frequencyMhz));
+  return (
+    <Stack gap={4} style={{ opacity: stale ? 0.55 : 1 }}>
+      <Group gap="xs" wrap="wrap" align="center">
+        <Tooltip
+          label="整合周波数のインピーダンスから L 形の整合回路（2 素子）を求め、その L・C の値のまま周波数特性に入れます。素子の損失は含みません"
+          multiline
+          w={280}
+        >
+          <Text size="sm">整合回路</Text>
+        </Tooltip>
+        <SegmentedControl size="xs" value={matching.mode} data={MATCH_MODES} onChange={(v) => set({ mode: v as MatchMode })} aria-label="整合回路を入れるグラフ" />
+        {matching.mode !== 'off' && (
+          <>
+            <Checkbox size="xs" label="中心周波数で整合" checked={matching.atCentre} onChange={(e) => set({ atCentre: e.currentTarget.checked })} />
+            {!matching.atCentre && (
+              <FieldNumber
+                size="xs"
+                w={120}
+                aria-label="整合周波数"
+                value={matching.frequencyMhz}
+                decimalScale={4}
+                rightSection={<Text size="xs" c="dimmed">MHz</Text>}
+                rightSectionWidth={40}
+                onCommit={(v) => set({ frequencyMhz: v })}
+              />
+            )}
+            {match?.running && <Loader size="xs" />}
+            {net && match && (
+              <Text size="xs" className="num">
+                {match.frequencyMhz.toFixed(4)} MHz で {sig(lineOhm, 4)} Ω に整合：
+                {!net.shunt && !net.series
+                  ? '整合済み（素子なし）'
+                  : net.shuntSide === 'line'
+                    ? [net.series && `アンテナに直列 ${element(net.series)}`, net.shunt && `給電線側に並列 ${element(net.shunt)}`].filter(Boolean).join('、')
+                    : [net.shunt && `アンテナに並列 ${element(net.shunt)}`, net.series && `給電線へ直列 ${element(net.series)}`].filter(Boolean).join('、')}
+              </Text>
+            )}
+          </>
+        )}
+      </Group>
+      {matching.mode !== 'off' && match?.error && (
+        <Text size="xs" c="var(--diag-error)">
+          {match.error}
+        </Text>
+      )}
+      <Group gap="md" wrap="wrap" className="num">
+        <Text size="xs" c="dimmed">
+          SWR 帯域幅{matchedPoints ? '（整合前）' : ''} {bandText(data)}
+        </Text>
+        {matchedPoints && (
+          <Text size="xs" fw={600}>
+            整合後 {bandText(matchedPoints)}
+          </Text>
+        )}
+      </Group>
     </Stack>
   );
 }

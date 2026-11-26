@@ -1,7 +1,7 @@
 // The printed sheets (印刷): which sections there are, how they fall onto A4
 // pages, and the figures MMANA printed that the screen does not show (the
 // SWR against 600 Ω, the SWR bandwidths of the 周波数特性 sheet).
-import type { Complex, Point3, SweepPoint } from '../api/types';
+import type { Complex, Point3 } from '../api/types';
 
 export type SectionId = 'summary' | 'patterns' | 'shape' | 'warnings' | 'elements' | 'wires' | 'feed' | 'sweep' | 'memo';
 
@@ -113,7 +113,7 @@ export interface Bandwidth {
  * `GetSWRWidth`), with its edges interpolated between sweep points; null
  * when no point is under it.
  */
-export function swrBandwidth(points: SweepPoint[], limit: number): Bandwidth | null {
+export function swrBandwidth(points: { frequencyMhz: number; swr: number }[], limit: number): Bandwidth | null {
   if (points.length === 0) return null;
   let best = 0;
   points.forEach((p, i) => p.swr < points[best].swr && (best = i));
