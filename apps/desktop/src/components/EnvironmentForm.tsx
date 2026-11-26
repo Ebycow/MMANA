@@ -234,7 +234,7 @@ function HairpinButton({ resistance, onSet }: { resistance: number; onSet: (x: n
   return (
     <Popover opened={opened} onChange={setOpened} position="bottom-end" withArrow shadow="md">
       <Popover.Target>
-        <Button variant="default" size="sm" onClick={open}>
+        <Button variant="default" size="compact-md" mb={3} onClick={open}>
           ヘアピン…
         </Button>
       </Popover.Target>
