@@ -735,6 +735,23 @@ impl Group {
     /// Whether the bounds the table shows are the extent of the wires (to
     /// 10 ppm, at least 0.01 mm): the size along X, Y and Z, and the centre
     /// along X.
+    /// For each wire end of the element, whether it lies strictly inside
+    /// the bounds along X, Y and Z: the points that an edit moving only the
+    /// outermost points (`move_ends`) leaves where they are.
+    fn inside_bounds(&self, slots: &[Slot]) -> Vec<[bool; 3]> {
+        self.refs
+            .iter()
+            .flat_map(|r| {
+                let w = &slots[r.slot].wire;
+                [w.start, w.end]
+            })
+            .map(|p| {
+                let c = [p.x, p.y, p.z];
+                [X, Y, Z].map(|axis| self.lo[axis] < c[axis] && c[axis] < self.hi[axis])
+            })
+            .collect()
+    }
+
     fn describes_wires(&self, slots: &[Slot]) -> [bool; 4] {
         let ((lo, hi), near) = self.extent(slots);
         let size = |axis: usize| near(self.hi[axis] - self.lo[axis], hi[axis] - lo[axis]);
@@ -1703,6 +1720,12 @@ impl ElementList {
     /// (see [`ElementList::apply`]).
     pub(crate) fn described(&self) -> Vec<[bool; 4]> {
         self.groups.iter().map(|g| g.describes_wires(&self.slots)).collect()
+    }
+
+    /// For each element, which of its wire ends lie strictly inside its
+    /// bounds along X, Y and Z (see `Group::inside_bounds`).
+    pub(crate) fn inside_bounds(&self) -> Vec<Vec<[bool; 3]>> {
+        self.groups.iter().map(|g| g.inside_bounds(&self.slots)).collect()
     }
 
     /// For each element, which rule `new_bounds` takes along Y and Z: from
