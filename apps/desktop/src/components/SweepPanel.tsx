@@ -2,10 +2,10 @@ import { Alert, Badge, Button, Checkbox, Group, Loader, NumberInput, SegmentedCo
 import { IconAlertTriangle, IconPlayerPlay, IconPlayerStop, IconTarget } from '@tabler/icons-react';
 import { useState } from 'react';
 import { LineChart } from '../charts/LineChart';
-import type { Lumped, ResonanceSearch, SweepPoint } from '../api/types';
+import type { ResonanceSearch, SweepPoint } from '../api/types';
 import { sig } from '../domain/circuits';
 import { swrBandwidth } from '../domain/print';
-import type { MatchMode } from '../domain/sweep';
+import { networkText, type MatchMode } from '../domain/sweep';
 import { sweepAround, useApp, type SweepMatchState } from '../state/store';
 import { FieldNumber } from './Fields';
 import { SweepPatterns } from './SweepPatterns';
@@ -227,8 +227,6 @@ const MATCH_MODES: { value: MatchMode; label: string }[] = [
   { value: 'swrZ', label: 'SWR と Z' },
 ];
 
-const element = (e: Lumped) => (e.kind === 'L' ? `L ${sig(e.value, 4)} µH` : `C ${sig(e.value, 4)} pF`);
-
 /** The SWR bandwidths under 1.5 and 2 (MMANA's ⇔ … KHz(SWR<1.5) on the SWR chart). */
 function bandText(points: { frequencyMhz: number; swr: number }[]): string {
   const band = (limit: number) => {
@@ -275,12 +273,7 @@ function MatchRow({ data, stale }: { data: SweepPoint[]; stale: boolean }) {
             {match?.running && <Loader size="xs" />}
             {net && match && (
               <Text size="xs" className="num">
-                {match.frequencyMhz.toFixed(4)} MHz で {sig(lineOhm, 4)} Ω に整合：
-                {!net.shunt && !net.series
-                  ? '整合済み（素子なし）'
-                  : net.shuntSide === 'line'
-                    ? [net.series && `アンテナに直列 ${element(net.series)}`, net.shunt && `給電線側に並列 ${element(net.shunt)}`].filter(Boolean).join('、')
-                    : [net.shunt && `アンテナに並列 ${element(net.shunt)}`, net.series && `給電線へ直列 ${element(net.series)}`].filter(Boolean).join('、')}
+                {match.frequencyMhz.toFixed(4)} MHz で {sig(lineOhm, 4)} Ω に整合：{networkText(net)}
               </Text>
             )}
           </>

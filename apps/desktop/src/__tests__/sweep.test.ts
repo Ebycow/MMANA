@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PATTERN_SLOTS, initialPatterns, matchFrequency, outlineIndices, pointAt, sweepFrequency, togglePattern } from '../domain/sweep';
+import { PATTERN_SLOTS, initialPatterns, matchFrequency, networkText, outlineIndices, pointAt, sweepFrequency, togglePattern } from '../domain/sweep';
 
 const range = { startMhz: 13.8, stopMhz: 14.4, points: 21 };
 
@@ -20,6 +20,17 @@ describe('the matching frequency', () => {
 
   it('is the frequency entered when not at the centre', () => {
     expect(matchFrequency(range, { mode: 'swrZ', atCentre: false, frequencyMhz: 14.2 })).toBe(14.2);
+  });
+});
+
+describe('the network as the panel names it', () => {
+  it('goes from the antenna to the line', () => {
+    const c = { kind: 'C' as const, value: 457.53962, reactanceOhm: -24.76 };
+    const l = { kind: 'L' as const, value: 0.5373162, reactanceOhm: 47.43 };
+    expect(networkText({ shuntSide: 'line', series: c, shunt: l })).toBe('アンテナに直列 C 457.5 pF、給電線側に並列 L 0.5373 µH');
+    expect(networkText({ shuntSide: 'antenna', shunt: c, series: l })).toBe('アンテナに並列 C 457.5 pF、給電線へ直列 L 0.5373 µH');
+    expect(networkText({ shuntSide: 'line', series: c })).toBe('アンテナに直列 C 457.5 pF');
+    expect(networkText({ shuntSide: 'line' })).toBe('整合済み（素子なし）');
   });
 });
 

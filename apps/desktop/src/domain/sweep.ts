@@ -1,3 +1,8 @@
+import type { CircuitResult, Lumped } from '../api/types';
+import { sig } from './circuits';
+
+type LcMatch = CircuitResult<'lcMatch'>;
+
 // Order in which a sweep's points are calculated: a coarse outline first
 // (both ends, the quarters and the centre, like MMANA's five-point 周波数特性),
 // then the midpoint of the widest remaining gap, so a large model shows the
@@ -62,6 +67,18 @@ export function pointAt<P extends { frequencyMhz: number }>(points: P[], mhz: nu
 
 /** The middle point is one of the sweep's own, calculated with the outline. */
 export const centreIsAPoint = (r: SweepRange) => r.points % 2 === 1;
+
+const elementText = (e: Lumped) => (e.kind === 'L' ? `L ${sig(e.value, 4)} µH` : `C ${sig(e.value, 4)} pF`);
+
+/** The network's elements, from the antenna to the line. */
+export function networkText(net: LcMatch): string {
+  if (!net.shunt && !net.series) return '整合済み（素子なし）';
+  const parts =
+    net.shuntSide === 'line'
+      ? [net.series && `アンテナに直列 ${elementText(net.series)}`, net.shunt && `給電線側に並列 ${elementText(net.shunt)}`]
+      : [net.shunt && `アンテナに並列 ${elementText(net.shunt)}`, net.series && `給電線へ直列 ${elementText(net.series)}`];
+  return parts.filter(Boolean).join('、');
+}
 
 // ------------------------------------------------------------ patterns ---
 
