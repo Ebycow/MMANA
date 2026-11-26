@@ -271,6 +271,8 @@ async fn runs_every_calculator() {
         json!({ "tool": "twoSectionTune", "input": { "load": z(75.0, 0.0), "referenceOhm": 50.0, "feedImpedanceOhm": 75.0, "loadImpedanceOhm": 50.0 } }),
         json!({ "tool": "stubMatch", "input": { "frequencyMhz": 14.05, "load": z(25.0, 0.0), "referenceOhm": 50.0, "cable": cable } }),
         json!({ "tool": "hairpin", "input": { "resistanceOhm": 25.0, "targetOhm": 50.0 } }),
+        json!({ "tool": "sweepMatch", "input": { "frequencyMhz": 14.15, "lineOhm": 50.0, "antenna": z(25.0, 10.0),
+            "points": [{ "frequencyMhz": 14.0, "impedance": z(22.0, -5.0) }, { "frequencyMhz": 14.15, "impedance": z(25.0, 10.0) }] } }),
     ];
     for req in requests {
         let (status, _, v) = post_json("/v1/circuits", req.clone()).await;
@@ -287,6 +289,15 @@ async fn runs_every_calculator() {
         post_json("/v1/circuits", json!({ "tool": "hairpin", "input": { "resistanceOhm": 25.0, "targetOhm": 50.0 } }))
             .await;
     assert_eq!(v["result"]["reactanceOhm"], -25.0);
+    let (_, _, v) = post_json(
+        "/v1/circuits",
+        json!({ "tool": "sweepMatch", "input": { "frequencyMhz": 14.15, "lineOhm": 50.0, "antenna": z(25.0, 10.0),
+            "points": [{ "frequencyMhz": 14.15, "impedance": z(25.0, 10.0) }] } }),
+    )
+    .await;
+    let p = &v["result"]["points"][0];
+    assert!((p["swr"].as_f64().unwrap() - 1.0).abs() < 1e-9, "{v}");
+    assert_eq!(v["result"]["network"]["shuntSide"], "line", "{v}");
     let (status, _, v) =
         post_json("/v1/circuits", json!({ "tool": "hairpin", "input": { "resistanceOhm": 0.0, "targetOhm": 50.0 } }))
             .await;

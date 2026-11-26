@@ -435,7 +435,10 @@ export interface components {
             options?: components["schemas"]["CalcOptions"];
             project: components["schemas"]["Project"];
         };
-        /** @description One of the calculators of the 共振条件 dialog ([`crate::circuits`]). */
+        /**
+         * @description One of the calculators of the 共振条件 dialog, or the matching of the
+         *     周波数特性 dialog ([`crate::circuits`]).
+         */
         CircuitRequest: {
             input: components["schemas"]["TankInput"];
             /** @enum {string} */
@@ -472,6 +475,10 @@ export interface components {
             input: components["schemas"]["HairpinInput"];
             /** @enum {string} */
             tool: "hairpin";
+        } | {
+            input: components["schemas"]["SweepMatchInput"];
+            /** @enum {string} */
+            tool: "sweepMatch";
         };
         /** @description The result of a [`CircuitRequest`], tagged with the same tool. */
         CircuitResponse: {
@@ -510,6 +517,10 @@ export interface components {
             result: components["schemas"]["Hairpin"];
             /** @enum {string} */
             tool: "hairpin";
+        } | {
+            result: components["schemas"]["SweepMatch"];
+            /** @enum {string} */
+            tool: "sweepMatch";
         };
         Coil: {
             /** Format: double */
@@ -1032,6 +1043,17 @@ export interface components {
         };
         /** @enum {string} */
         LumpedKind: "L" | "C";
+        /** @description A sweep point seen through the network. */
+        MatchedPoint: {
+            /** Format: double */
+            frequencyMhz: number;
+            impedance?: components["schemas"]["Complex"] | null;
+            /**
+             * Format: double
+             * @description Against `lineOhm`; 99999.9 where the impedance is None.
+             */
+            swr: number;
+        };
         /** @description The matching network scored by the `matching` goal (マッチング回路). */
         Matching: {
             /** @enum {string} */
@@ -1677,6 +1699,37 @@ export interface components {
              * @description Against the reference.
              */
             swr: number;
+        };
+        /** @description A frequency of a sweep and the antenna's impedance there. */
+        SweepImpedance: {
+            /** Format: double */
+            frequencyMhz: number;
+            impedance: components["schemas"]["Complex"];
+        };
+        SweepMatch: {
+            /**
+             * @description The L network at `frequencyMhz`: a series C when the antenna's R is
+             *     at most the line's, a shunt C when it is above (the networks of the
+             *     周波数特性 dialog). A missing shunt element is open, a missing series
+             *     element a short; both are missing when the antenna already matches.
+             */
+            network: components["schemas"]["LcMatch"];
+            points: components["schemas"]["MatchedPoint"][];
+        };
+        SweepMatchInput: {
+            /** @description The antenna's impedance at `frequency_mhz`. */
+            antenna: components["schemas"]["Complex"];
+            /**
+             * Format: double
+             * @description The frequency the network is designed at.
+             */
+            frequencyMhz: number;
+            /**
+             * Format: double
+             * @description The feed line's impedance (the SWR reference R).
+             */
+            lineOhm: number;
+            points: components["schemas"]["SweepImpedance"][];
         };
         /** @description One point of a frequency sweep. */
         SweepPoint: {

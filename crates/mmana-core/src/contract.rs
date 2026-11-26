@@ -10,7 +10,7 @@ use utoipa::ToSchema;
 
 use crate::circuits::{
     self, Coil, CoilInput, Hairpin, HairpinInput, LcMatch, LcMatchInput, Line, LineInput, Stub, StubInput, StubMatch,
-    StubMatchInput, Tank, TankInput, TwoSection, TwoSectionInput, TwoSectionTuneInput,
+    StubMatchInput, SweepMatch, SweepMatchInput, Tank, TankInput, TwoSection, TwoSectionInput, TwoSectionTuneInput,
 };
 use crate::elements::{ElementEdit, ElementOp};
 use crate::optimize::{OptimizeError, OptimizeOutcome, OptimizerSetup, Progress, SetupEdit, SetupOp};
@@ -104,8 +104,9 @@ pub struct ResonanceRequest {
     pub range: ResonanceRange,
 }
 
-/// One of the calculators of the 共振条件 dialog ([`crate::circuits`]).
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+/// One of the calculators of the 共振条件 dialog, or the matching of the
+/// 周波数特性 dialog ([`crate::circuits`]).
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(ToSchema))]
 #[serde(tag = "tool", content = "input", rename_all = "camelCase")]
 pub enum CircuitRequest {
@@ -118,6 +119,7 @@ pub enum CircuitRequest {
     TwoSectionTune(TwoSectionTuneInput),
     StubMatch(StubMatchInput),
     Hairpin(HairpinInput),
+    SweepMatch(SweepMatchInput),
 }
 
 /// The result of a [`CircuitRequest`], tagged with the same tool.
@@ -134,6 +136,7 @@ pub enum CircuitResponse {
     TwoSectionTune(TwoSection),
     StubMatch(StubMatch),
     Hairpin(Hairpin),
+    SweepMatch(SweepMatch),
 }
 
 /// Element editing: the edits so far, replayed on the antenna as it was when
@@ -262,6 +265,7 @@ pub fn circuit(req: &CircuitRequest) -> Result<CircuitResponse, CalcError> {
         CircuitRequest::TwoSectionTune(i) => CircuitResponse::TwoSectionTune(circuits::tune_two_section(i)?),
         CircuitRequest::StubMatch(i) => CircuitResponse::StubMatch(circuits::stub_match(i)?),
         CircuitRequest::Hairpin(i) => CircuitResponse::Hairpin(circuits::hairpin(i)?),
+        CircuitRequest::SweepMatch(i) => CircuitResponse::SweepMatch(circuits::sweep_match(i)?),
     })
 }
 
